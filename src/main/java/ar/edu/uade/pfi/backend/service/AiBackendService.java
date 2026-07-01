@@ -1,7 +1,12 @@
 package ar.edu.uade.pfi.backend.service;
 
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
+import ar.edu.uade.pfi.backend.dto.AuditEventDto;
+import ar.edu.uade.pfi.backend.dto.AuditEventRequestDto;
+import ar.edu.uade.pfi.backend.dto.MeasurementBatchDto;
+import ar.edu.uade.pfi.backend.dto.MeasurementSaveDto;
 import ar.edu.uade.pfi.backend.dto.PipelineRunRequestDto;
+import ar.edu.uade.pfi.backend.dto.ReviewSnapshotDto;
 import ar.edu.uade.pfi.backend.dto.ReviewStatusDto;
 import ar.edu.uade.pfi.backend.dto.ReviewUpdateRequestDto;
 import ar.edu.uade.pfi.backend.util.ResponseNormalizer;
@@ -137,6 +142,26 @@ public class AiBackendService {
 
     public ReviewStatusDto updateReview(String runId, ReviewUpdateRequestDto request) {
         return reviewStoreService.updateReview(runId, request);
+    }
+
+    public ReviewSnapshotDto reviewHistory() {
+        return reviewStoreService.snapshot();
+    }
+
+    public List<MeasurementSaveDto> getMeasurements(String runId) {
+        return reviewStoreService.findMeasurements(runId);
+    }
+
+    public List<MeasurementSaveDto> saveMeasurements(String runId, MeasurementBatchDto request) {
+        return reviewStoreService.saveMeasurements(runId, request);
+    }
+
+    public AuditEventDto appendAudit(AuditEventRequestDto request) {
+        return reviewStoreService.appendAudit(request);
+    }
+
+    public List<AuditEventDto> auditTrail() {
+        return reviewStoreService.auditTrail();
     }
 
     private Map<String, Object> normalizeForFrontend(Map<String, Object> response) {
