@@ -81,30 +81,30 @@ public class AiBackendService {
             return response;
         } catch (RuntimeException ex) {
             String runId = "degraded-" + Math.abs((request.caseId() + "|" + request.plane() + "|" + request.modelKey()).hashCode());
-            return normalizeForFrontend(Map.of(
-                "runId", runId,
-                "caseId", request.caseId(),
-                "plane", request.plane(),
-                "modelKey", request.modelKey() == null ? "unknown" : request.modelKey(),
-                "status", "pipeline_degraded_fallback",
-                "aiModuleAvailable", false,
-                "degradedMode", true,
-                "agentDecision", Map.of(
+            return normalizeForFrontend(Map.ofEntries(
+                Map.entry("runId", runId),
+                Map.entry("caseId", request.caseId()),
+                Map.entry("plane", request.plane()),
+                Map.entry("modelKey", request.modelKey() == null ? "unknown" : request.modelKey()),
+                Map.entry("status", "pipeline_degraded_fallback"),
+                Map.entry("aiModuleAvailable", false),
+                Map.entry("degradedMode", true),
+                Map.entry("agentDecision", Map.of(
                     "priority", "media",
                     "status", "requiere_revision",
                     "flags", List.of("ai_module_unavailable", "revision_profesional_requerida"),
                     "reasons", List.of("El backend no pudo completar la llamada al AI Module. Se mantiene la salida asistiva en modo degradado para validar arquitectura."),
                     "humanReviewRequired", true
-                ),
-                "measurements", List.of(Map.of(
+                )),
+                Map.entry("measurements", List.of(Map.of(
                     "id", "pipeline-status",
                     "label", "Estado del pipeline tecnico",
                     "value", "ai_module_unavailable",
                     "unit", ""
-                )),
-                "overlayPath", "",
-                "review", reviewStoreService.findOrDefault(runId),
-                "message", ex.getMessage()
+                ))),
+                Map.entry("overlayPath", ""),
+                Map.entry("review", reviewStoreService.findOrDefault(runId)),
+                Map.entry("message", ex.getMessage())
             ));
         }
     }
