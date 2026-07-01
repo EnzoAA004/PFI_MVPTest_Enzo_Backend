@@ -15,7 +15,7 @@ public class AuthFilter extends OncePerRequestFilter {
     private final TokenService tokenService;
     private final boolean authEnabled;
 
-    public AuthFilter(TokenService tokenService, @Value("${pfi.auth.enabled}") boolean authEnabled) {
+    public AuthFilter(TokenService tokenService, @Value("${pfi.auth.enabled:true}") boolean authEnabled) {
         this.tokenService = tokenService;
         this.authEnabled = authEnabled;
     }
