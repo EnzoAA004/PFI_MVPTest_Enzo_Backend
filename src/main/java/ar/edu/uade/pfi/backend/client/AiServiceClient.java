@@ -14,7 +14,7 @@ import org.springframework.web.server.ResponseStatusException;
 import reactor.core.Exceptions;
 
 @Component
-public class AiServiceClient {
+public class AiServiceClient implements AiServiceOperations {
     private static final ParameterizedTypeReference<Map<String, Object>> MAP_RESPONSE =
         new ParameterizedTypeReference<>() {};
 
@@ -26,6 +26,7 @@ public class AiServiceClient {
         this.timeout = Duration.ofSeconds(properties.resolvedTimeoutSeconds());
     }
 
+    @Override
     public Map<String, Object> health() {
         return execute(() -> aiWebClient.get()
             .uri("/health")
@@ -34,6 +35,7 @@ public class AiServiceClient {
             .block(timeout));
     }
 
+    @Override
     public Object models() {
         return execute(() -> aiWebClient.get()
             .uri("/models")
@@ -42,6 +44,7 @@ public class AiServiceClient {
             .block(timeout));
     }
 
+    @Override
     public Map<String, Object> runPipeline(PipelineRunRequestDto request) {
         return execute(() -> aiWebClient.post()
             .uri("/pipeline/run")
@@ -51,6 +54,7 @@ public class AiServiceClient {
             .block(timeout));
     }
 
+    @Override
     public Map<String, Object> getAgentReport(String runId) {
         return execute(() -> aiWebClient.get()
             .uri("/agent/report/{runId}", runId)

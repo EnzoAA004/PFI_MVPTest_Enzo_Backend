@@ -1,42 +1,46 @@
 package ar.edu.uade.pfi.backend.service;
 
-import ar.edu.uade.pfi.backend.client.AiServiceClient;
+import ar.edu.uade.pfi.backend.client.AiServiceOperations;
 import ar.edu.uade.pfi.backend.dto.PipelineRunRequestDto;
 import ar.edu.uade.pfi.backend.dto.ReviewStatusDto;
 import ar.edu.uade.pfi.backend.dto.ReviewUpdateRequestDto;
-import java.util.LinkedHashMap;
+import ar.edu.uade.pfi.backend.util.ResponseNormalizer;
 import java.util.Map;
 import org.springframework.stereotype.Service;
 
 @Service
 public class AiBackendService {
-    private final AiServiceClient aiServiceClient;
+    private final AiServiceOperations aiServiceClient;
     private final ReviewStoreService reviewStoreService;
 
-    public AiBackendService(AiServiceClient aiServiceClient, ReviewStoreService reviewStoreService) {
+    public AiBackendService(AiServiceOperations aiServiceClient, ReviewStoreService reviewStoreService) {
         this.aiServiceClient = aiServiceClient;
         this.reviewStoreService = reviewStoreService;
     }
 
     public Map<String, Object> health() {
         try {
-            return withHumanReview(aiServiceClient.health());
+            Map<String, Object> response = normalizeForFrontend(aiServiceClient.health());
+            response.put("backendStatus", "up");
+            response.put("aiModuleAvailable", true);
+            return response;
         } catch (RuntimeException ex) {
             return Map.of(
-                "status", "down",
+                "backendStatus", "up",
                 "aiModuleAvailable", false,
                 "humanReviewRequired", true,
+                "notClinicalDiagnosis", true,
                 "message", ex.getMessage()
             );
         }
     }
 
     public Object models() {
-        return aiServiceClient.models();
+        return ResponseNormalizer.normalizeObject(aiServiceClient.models());
     }
 
     public Map<String, Object> runPipeline(PipelineRunRequestDto request) {
-        Map<String, Object> response = withHumanReview(aiServiceClient.runPipeline(request));
+        Map<String, Object> response = normalizeForFrontend(aiServiceClient.runPipeline(request));
         String runId = extractRunId(response);
         if (runId != null) {
             response.put("review", reviewStoreService.findOrDefault(runId));
@@ -45,7 +49,7 @@ public class AiBackendService {
     }
 
     public Map<String, Object> getAgentReport(String runId) {
-        Map<String, Object> response = withHumanReview(aiServiceClient.getAgentReport(runId));
+        Map<String, Object> response = normalizeForFrontend(aiServiceClient.getAgentReport(runId));
         response.put("review", reviewStoreService.findOrDefault(runId));
         return response;
     }
@@ -54,17 +58,15 @@ public class AiBackendService {
         return reviewStoreService.updateReview(runId, request);
     }
 
-    private Map<String, Object> withHumanReview(Map<String, Object> response) {
-        Map<String, Object> normalized = response == null ? new LinkedHashMap<>() : new LinkedHashMap<>(response);
+    private Map<String, Object> normalizeForFrontend(Map<String, Object> response) {
+        Map<String, Object> normalized = ResponseNormalizer.normalizeMap(response);
         normalized.put("humanReviewRequired", true);
+        normalized.put("notClinicalDiagnosis", true);
         return normalized;
     }
 
     private String extractRunId(Map<String, Object> response) {
         Object runId = response.get("runId");
-        if (runId == null) {
-            runId = response.get("run_id");
-        }
         return runId == null ? null : runId.toString();
     }
 }
