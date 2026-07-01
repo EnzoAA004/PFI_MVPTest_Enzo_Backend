@@ -31,7 +31,7 @@ public class AuthService {
     public AuthService(
         PasswordHasher passwordHasher,
         TokenService tokenService,
-        @Value("${pfi.auth.expose-dev-codes}") boolean exposeCodes
+        @Value("${pfi.auth.expose-dev-codes:true}") boolean exposeCodes
     ) {
         this.passwordHasher = passwordHasher;
         this.tokenService = tokenService;
