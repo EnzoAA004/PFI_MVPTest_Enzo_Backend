@@ -9,6 +9,7 @@ import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.UserResponse;
 import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.VerifyRequest;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import java.util.List;
 import java.util.Map;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -64,6 +65,9 @@ public class AuthController {
     @GetMapping("/me")
     public UserResponse me(HttpServletRequest request) {
         TokenService.Claims claims = (TokenService.Claims) request.getAttribute(AuthFilter.AUTH_CLAIMS_ATTRIBUTE);
+        if (claims == null) {
+            return new UserResponse("anonymous", "Reviewer", "", "", "", "", List.of("REVIEWER"), false);
+        }
         return authService.currentUser(claims);
     }
 }
