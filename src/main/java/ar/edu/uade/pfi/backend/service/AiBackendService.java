@@ -5,6 +5,7 @@ import ar.edu.uade.pfi.backend.dto.PipelineRunRequestDto;
 import ar.edu.uade.pfi.backend.dto.ReviewStatusDto;
 import ar.edu.uade.pfi.backend.dto.ReviewUpdateRequestDto;
 import ar.edu.uade.pfi.backend.util.ResponseNormalizer;
+import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
 
@@ -49,9 +50,27 @@ public class AiBackendService {
     }
 
     public Map<String, Object> getAgentReport(String runId) {
-        Map<String, Object> response = normalizeForFrontend(aiServiceClient.getAgentReport(runId));
-        response.put("review", reviewStoreService.findOrDefault(runId));
-        return response;
+        try {
+            Map<String, Object> response = normalizeForFrontend(aiServiceClient.getAgentReport(runId));
+            response.put("review", reviewStoreService.findOrDefault(runId));
+            return response;
+        } catch (RuntimeException ex) {
+            return normalizeForFrontend(Map.of(
+                "runId", runId,
+                "caseId", "unknown",
+                "status", "agent_report_unavailable",
+                "agentDecision", Map.of(
+                    "priority", "media",
+                    "status", "requiere_revision",
+                    "flags", List.of("agent_report_unavailable", "revision_profesional_requerida"),
+                    "reasons", List.of("El AI Module no devolvio un reporte persistido para este runId; se conserva revision profesional obligatoria."),
+                    "humanReviewRequired", true
+                ),
+                "measurements", List.of(),
+                "review", reviewStoreService.findOrDefault(runId),
+                "message", ex.getMessage()
+            ));
+        }
     }
 
     public ReviewStatusDto updateReview(String runId, ReviewUpdateRequestDto request) {
