@@ -16,16 +16,16 @@ import org.springframework.stereotype.Service;
 @Service
 public class TokenService {
     private final ObjectMapper objectMapper;
-    private final String secret;
+    private final String signingKey;
     private final long accessTokenSeconds;
 
     public TokenService(
         ObjectMapper objectMapper,
-        @Value("${pfi.auth.jwt-secret}") String secret,
-        @Value("${pfi.auth.access-token-seconds}") long accessTokenSeconds
+        @Value("${pfi.auth.jwt-secret:pfi-demo-change-me-2026}") String signingKey,
+        @Value("${pfi.auth.access-token-seconds:3600}") long accessTokenSeconds
     ) {
         this.objectMapper = objectMapper;
-        this.secret = secret;
+        this.signingKey = signingKey;
         this.accessTokenSeconds = accessTokenSeconds;
     }
 
@@ -91,7 +91,7 @@ public class TokenService {
     private String sign(String value) {
         try {
             Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            mac.init(new SecretKeySpec(signingKey.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
             return Base64.getUrlEncoder().withoutPadding().encodeToString(mac.doFinal(value.getBytes(StandardCharsets.UTF_8)));
         } catch (Exception ex) {
             throw new IllegalStateException("Could not sign token", ex);
