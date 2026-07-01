@@ -74,12 +74,16 @@ public class AiServiceClient implements AiServiceOperations {
     public ResponseStatusException translateException(RuntimeException ex) {
         Throwable unwrapped = Exceptions.unwrap(ex);
         if (unwrapped instanceof WebClientResponseException responseException) {
+            String responseBody = responseException.getResponseBodyAsString();
+            String detail = responseBody == null || responseBody.isBlank()
+                ? "AI Module responded with status " + responseException.getStatusCode().value()
+                : "AI Module responded with status " + responseException.getStatusCode().value() + ": " + responseBody;
             return new ResponseStatusException(
                 HttpStatus.BAD_GATEWAY,
-                "AI Module responded with status " + responseException.getStatusCode().value(),
+                detail,
                 responseException
             );
         }
-        return new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI Module is not available", unwrapped);
+        return new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI Module is not available: " + unwrapped.getMessage(), unwrapped);
     }
 }
