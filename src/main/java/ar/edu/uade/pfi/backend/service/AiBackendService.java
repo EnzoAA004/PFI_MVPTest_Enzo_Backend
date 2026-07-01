@@ -22,13 +22,17 @@ public class AiBackendService {
     public Map<String, Object> health() {
         try {
             Map<String, Object> response = normalizeForFrontend(aiServiceClient.health());
+            response.put("status", response.getOrDefault("status", "ok"));
             response.put("backendStatus", "up");
             response.put("aiModuleAvailable", true);
+            response.put("degradedMode", false);
             return response;
         } catch (RuntimeException ex) {
             return Map.of(
+                "status", "degraded",
                 "backendStatus", "up",
                 "aiModuleAvailable", false,
+                "degradedMode", true,
                 "humanReviewRequired", true,
                 "notClinicalDiagnosis", true,
                 "message", ex.getMessage()
@@ -37,16 +41,72 @@ public class AiBackendService {
     }
 
     public Object models() {
-        return ResponseNormalizer.normalizeObject(aiServiceClient.models());
+        try {
+            return ResponseNormalizer.normalizeObject(aiServiceClient.models());
+        } catch (RuntimeException ex) {
+            return Map.of(
+                "status", "degraded",
+                "aiModuleAvailable", false,
+                "degradedMode", true,
+                "humanReviewRequired", true,
+                "notClinicalDiagnosis", true,
+                "message", ex.getMessage(),
+                "models", Map.of(
+                    "sagittal_spider", Map.of(
+                        "plane", "sagittal",
+                        "numClasses", 4,
+                        "enabled", true,
+                        "source", "backend_degraded_fallback"
+                    ),
+                    "axial_t2_alkafri", Map.of(
+                        "plane", "axial",
+                        "numClasses", 6,
+                        "enabled", true,
+                        "source", "backend_degraded_fallback"
+                    )
+                )
+            );
+        }
     }
 
     public Map<String, Object> runPipeline(PipelineRunRequestDto request) {
-        Map<String, Object> response = normalizeForFrontend(aiServiceClient.runPipeline(request));
-        String runId = extractRunId(response);
-        if (runId != null) {
-            response.put("review", reviewStoreService.findOrDefault(runId));
+        try {
+            Map<String, Object> response = normalizeForFrontend(aiServiceClient.runPipeline(request));
+            String runId = extractRunId(response);
+            if (runId != null) {
+                response.put("review", reviewStoreService.findOrDefault(runId));
+            }
+            response.put("aiModuleAvailable", true);
+            response.put("degradedMode", false);
+            return response;
+        } catch (RuntimeException ex) {
+            String runId = "degraded-" + Math.abs((request.caseId() + "|" + request.plane() + "|" + request.modelKey()).hashCode());
+            return normalizeForFrontend(Map.of(
+                "runId", runId,
+                "caseId", request.caseId(),
+                "plane", request.plane(),
+                "modelKey", request.modelKey() == null ? "unknown" : request.modelKey(),
+                "status", "pipeline_degraded_fallback",
+                "aiModuleAvailable", false,
+                "degradedMode", true,
+                "agentDecision", Map.of(
+                    "priority", "media",
+                    "status", "requiere_revision",
+                    "flags", List.of("ai_module_unavailable", "revision_profesional_requerida"),
+                    "reasons", List.of("El backend no pudo completar la llamada al AI Module. Se mantiene la salida asistiva en modo degradado para validar arquitectura."),
+                    "humanReviewRequired", true
+                ),
+                "measurements", List.of(Map.of(
+                    "id", "pipeline-status",
+                    "label", "Estado del pipeline tecnico",
+                    "value", "ai_module_unavailable",
+                    "unit", ""
+                )),
+                "overlayPath", "",
+                "review", reviewStoreService.findOrDefault(runId),
+                "message", ex.getMessage()
+            ));
         }
-        return response;
     }
 
     public Map<String, Object> getAgentReport(String runId) {
@@ -59,6 +119,8 @@ public class AiBackendService {
                 "runId", runId,
                 "caseId", "unknown",
                 "status", "agent_report_unavailable",
+                "aiModuleAvailable", false,
+                "degradedMode", true,
                 "agentDecision", Map.of(
                     "priority", "media",
                     "status", "requiere_revision",
