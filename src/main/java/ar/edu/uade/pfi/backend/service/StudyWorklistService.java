@@ -28,29 +28,32 @@ public class StudyWorklistService {
             "status", "ok",
             "source", "backend-demo-worklist",
             "items", rows,
-            "summary", Map.of(
-                "total", rows.size(),
-                "pending", pending,
-                "completed", completed,
-                "flagged", flagged
-            ),
+            "summary", Map.of("total", rows.size(), "pending", pending, "completed", completed, "flagged", flagged),
             "humanReviewRequired", true,
             "notClinicalDiagnosis", true
         );
     }
 
     public Map<String, Object> getStudy(String caseId) {
-        StudyRowDto row = demoRows().stream()
-            .filter(item -> item.caseId().equalsIgnoreCase(caseId))
-            .findFirst()
-            .map(this::withPersistedReview)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Study not found"));
+        StudyRowDto row = findStudy(caseId);
         return Map.of(
             "status", "ok",
             "study", row,
             "review", reviewStoreService.findOrDefault(row.runId()),
             "measurements", reviewStoreService.findMeasurements(row.runId()),
+            "runs", runsFor(row),
             "auditTrail", reviewStoreService.auditTrail(),
+            "humanReviewRequired", true,
+            "notClinicalDiagnosis", true
+        );
+    }
+
+    public Map<String, Object> getStudyRuns(String caseId) {
+        StudyRowDto row = findStudy(caseId);
+        return Map.of(
+            "status", "ok",
+            "caseId", row.caseId(),
+            "runs", runsFor(row),
             "humanReviewRequired", true,
             "notClinicalDiagnosis", true
         );
@@ -60,21 +63,32 @@ public class StudyWorklistService {
         return getStudy("CASE-DEMO-0142");
     }
 
+    private StudyRowDto findStudy(String caseId) {
+        return demoRows().stream()
+            .filter(item -> item.caseId().equalsIgnoreCase(caseId))
+            .findFirst()
+            .map(this::withPersistedReview)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Study not found"));
+    }
+
+    private List<Map<String, Object>> runsFor(StudyRowDto row) {
+        ReviewStatusDto review = reviewStoreService.findOrDefault(row.runId());
+        return List.of(Map.of(
+            "runId", row.runId(),
+            "caseId", row.caseId(),
+            "plane", row.plane(),
+            "modelKey", row.modelKey(),
+            "modelStatus", row.modelStatus(),
+            "reviewStatus", review.status(),
+            "measurementCount", reviewStoreService.findMeasurements(row.runId()).size()
+        ));
+    }
+
     private StudyRowDto withPersistedReview(StudyRowDto row) {
         Optional<ReviewStatusDto> persisted = findPersistedReview(row.runId());
         if (persisted.isEmpty()) return row;
         ReviewStatusDto review = persisted.get();
-        return new StudyRowDto(
-            row.caseId(),
-            row.subjectRef(),
-            row.plane(),
-            row.studyDate(),
-            row.modelKey(),
-            row.modelStatus(),
-            review.status(),
-            row.priority(),
-            row.runId()
-        );
+        return new StudyRowDto(row.caseId(), row.subjectRef(), row.plane(), row.studyDate(), row.modelKey(), row.modelStatus(), review.status(), row.priority(), row.runId());
     }
 
     private Optional<ReviewStatusDto> findPersistedReview(String runId) {
