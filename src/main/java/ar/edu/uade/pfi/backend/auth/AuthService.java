@@ -2,11 +2,13 @@ package ar.edu.uade.pfi.backend.auth;
 
 import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.PendingAuthResponse;
 import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.RegisterRequest;
+import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.SettingsRequest;
 import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.TokenResponse;
 import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.UserResponse;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -58,25 +60,34 @@ public class AuthService {
             defaultString(request.licenseNumber()),
             defaultString(request.specialty()),
             defaultString(request.institution()),
-            List.of("DOCTOR", "REVIEWER"),
+            List.of("PENDING_APPROVAL"),
             Instant.now(),
+            false,
+            false,
+            false,
             false
         );
         accountsByEmail.put(email, account);
         postgresAuthStore.saveAccount(account);
-        return createChallenge("REGISTER", email, "Código de verificación enviado para completar el registro profesional.");
+        return createChallenge("REGISTER", email, "Código enviado para verificar el email profesional. Luego la cuenta queda pendiente de aprobación institucional.");
     }
 
-    public PendingAuthResponse login(String emailValue, String password) {
+    public Object login(String emailValue, String password) {
         String email = normalizeEmail(emailValue);
         DoctorAccount account = findAccount(email).orElse(null);
         if (account == null || !passwordHasher.verify(password, account.passwordHash())) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Credenciales inválidas");
         }
         if (!account.verified()) {
-            return createChallenge("REGISTER", email, "La cuenta todavía requiere verificación de registro profesional.");
+            return createChallenge("REGISTER", email, "La cuenta todavía requiere verificación del email profesional.");
         }
-        return createChallenge("LOGIN", email, "Código de doble verificación enviado para iniciar sesión.");
+        if (!account.approved()) {
+            return issueTokens(account);
+        }
+        if (account.twoFactorEnabled()) {
+            return createChallenge("LOGIN", email, "Código de doble verificación enviado para iniciar sesión.");
+        }
+        return issueTokens(account);
     }
 
     public TokenResponse verify(String challengeId, String code) {
@@ -121,8 +132,39 @@ public class AuthService {
     public UserResponse currentUser(TokenService.Claims claims) {
         DoctorAccount account = findAccount(normalizeEmail(claims.email())).orElse(null);
         if (account == null) {
-            return new UserResponse(claims.subject(), claims.name(), claims.email(), "", "", "", claims.roles(), true);
+            return new UserResponse(claims.subject(), claims.name(), claims.email(), "", "", "", claims.roles(), true, true, false, true);
         }
+        return toUser(account);
+    }
+
+    public UserResponse updateSettings(TokenService.Claims claims, SettingsRequest request) {
+        DoctorAccount account = findAccount(normalizeEmail(claims.email()))
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Cuenta no encontrada"));
+        if (request.twoFactorEnabled() != null) account.setTwoFactorEnabled(request.twoFactorEnabled());
+        if (request.onboardingCompleted() != null) account.setOnboardingCompleted(request.onboardingCompleted());
+        accountsByEmail.put(account.email(), account);
+        postgresAuthStore.updateSettings(account.email(), request.twoFactorEnabled(), request.onboardingCompleted());
+        return toUser(account);
+    }
+
+    public List<UserResponse> listProfessionals(TokenService.Claims claims) {
+        requireAdmin(claims);
+        List<DoctorAccount> persisted = postgresAuthStore.listAccounts();
+        if (!persisted.isEmpty()) {
+            persisted.forEach(account -> accountsByEmail.put(account.email(), account));
+            return persisted.stream().map(this::toUser).toList();
+        }
+        return accountsByEmail.values().stream().map(this::toUser).toList();
+    }
+
+    public UserResponse approveProfessional(TokenService.Claims claims, String emailValue, boolean approved) {
+        requireAdmin(claims);
+        String email = normalizeEmail(emailValue);
+        DoctorAccount account = findAccount(email)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Profesional no encontrado"));
+        account.approve(approved);
+        accountsByEmail.put(email, account);
+        postgresAuthStore.updateApproval(email, approved, account.roles());
         return toUser(account);
     }
 
@@ -130,11 +172,12 @@ public class AuthService {
         String email = "doctor.demo@pfi.local";
         DoctorAccount existing = findAccount(email).orElse(null);
         if (existing != null) {
-            if (!existing.verified()) {
-                existing.verify();
-                accountsByEmail.put(email, existing);
-                postgresAuthStore.markVerified(email);
-            }
+            existing.verify();
+            existing.setRoles(List.of("ADMIN", "DOCTOR", "REVIEWER"));
+            existing.setTwoFactorEnabled(false);
+            existing.approve(true);
+            accountsByEmail.put(email, existing);
+            postgresAuthStore.saveAccount(existing);
             return issueTokens(existing);
         }
         DoctorAccount account = new DoctorAccount(
@@ -145,8 +188,11 @@ public class AuthService {
             "MN-DEMO-2026",
             "Radiología / Columna lumbar",
             "PFI Academic Lab",
-            List.of("DOCTOR", "REVIEWER"),
+            List.of("ADMIN", "DOCTOR", "REVIEWER"),
             Instant.now(),
+            true,
+            true,
+            false,
             true
         );
         accountsByEmail.put(email, account);
@@ -159,6 +205,8 @@ public class AuthService {
             "enabled", true,
             "mode", postgresAuthStore.enabled() ? "jwt-postgres" : "jwt-memory",
             "professionalAccountsPersisted", postgresAuthStore.enabled(),
+            "professionalApprovalRequired", true,
+            "twoFactorConfigurable", true,
             "refreshTokensRevocable", true,
             "status", "enabled"
         );
@@ -170,6 +218,12 @@ public class AuthService {
         Optional<DoctorAccount> persisted = postgresAuthStore.findByEmail(email);
         persisted.ifPresent(account -> accountsByEmail.put(email, account));
         return persisted;
+    }
+
+    private void requireAdmin(TokenService.Claims claims) {
+        if (claims == null || claims.roles() == null || !claims.roles().contains("ADMIN")) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Requiere rol ADMIN");
+        }
     }
 
     private PendingAuthResponse createChallenge(String type, String email, String message) {
@@ -209,7 +263,10 @@ public class AuthService {
             account.specialty(),
             account.institution(),
             account.roles(),
-            account.verified()
+            account.verified(),
+            account.approved(),
+            account.twoFactorEnabled(),
+            account.onboardingCompleted()
         );
     }
 
