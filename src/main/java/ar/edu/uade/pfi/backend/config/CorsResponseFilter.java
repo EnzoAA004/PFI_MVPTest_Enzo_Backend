@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 @Component
-@Order(Ordered.HIGHEST_PRECEDENCE)
+@Order(Ordered.HIGHEST_PRECEDENCE + 1)
 public class CorsResponseFilter extends OncePerRequestFilter {
     private final Set<String> allowedOrigins;
 
@@ -37,8 +37,8 @@ public class CorsResponseFilter extends OncePerRequestFilter {
             response.setHeader("Vary", "Origin");
             response.setHeader("Access-Control-Allow-Credentials", "true");
             response.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
-            response.setHeader("Access-Control-Allow-Headers", "Authorization,Content-Type,Accept,Origin,X-Requested-With");
-            response.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+            response.setHeader("Access-Control-Allow-Headers", "Authorization,Content-Type,Accept,Origin,X-Requested-With,X-Trace-Id");
+            response.setHeader("Access-Control-Expose-Headers", "Content-Disposition,X-Trace-Id");
             response.setHeader("Access-Control-Max-Age", "3600");
         }
 
