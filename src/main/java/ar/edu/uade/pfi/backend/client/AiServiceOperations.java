@@ -8,6 +8,8 @@ public interface AiServiceOperations {
 
     Object models();
 
+    Map<String, Object> verifyModels();
+
     Map<String, Object> warmup();
 
     Map<String, Object> runPipeline(PipelineRunRequestDto request);
