@@ -45,6 +45,25 @@ public class AiContractController {
         }
     }
 
+    @GetMapping("/schema/verify")
+    public Map<String, Object> pipelineSchemaVerification() {
+        try {
+            Map<String, Object> response = aiWebClient.get()
+                .uri("/pipeline/schema/verify")
+                .retrieve()
+                .bodyToMono(MAP_RESPONSE)
+                .block(timeout);
+            Map<String, Object> normalized = ResponseNormalizer.normalizeMap(response);
+            normalized.put("proxiedByBackend", true);
+            normalized.put("aiModuleAvailable", true);
+            normalized.put("humanReviewRequired", true);
+            normalized.put("notClinicalDiagnosis", true);
+            return normalized;
+        } catch (RuntimeException ex) {
+            return fallbackVerification(ex);
+        }
+    }
+
     private Map<String, Object> fallbackSchema(RuntimeException ex) {
         Throwable unwrapped = Exceptions.unwrap(ex);
         String message = unwrapped.getMessage() == null ? "unknown error" : compactMessage(unwrapped.getMessage());
@@ -96,6 +115,27 @@ public class AiContractController {
                 "La inferencia real no se declara disponible si falta el artifact .pt.",
                 "El fallback backend conserva la forma principal del contrato si el AI Module no responde."
             ))
+        );
+    }
+
+    private Map<String, Object> fallbackVerification(RuntimeException ex) {
+        Throwable unwrapped = Exceptions.unwrap(ex);
+        String message = unwrapped.getMessage() == null ? "unknown error" : compactMessage(unwrapped.getMessage());
+        return Map.ofEntries(
+            Map.entry("schemaVersion", "visual-review-contract-v1"),
+            Map.entry("schemaHash", "backend-fallback-visual-review-contract-v1"),
+            Map.entry("recomputedHash", "unavailable"),
+            Map.entry("hashValid", false),
+            Map.entry("governanceValid", true),
+            Map.entry("valid", false),
+            Map.entry("generatedBy", "pfi-backend.ai-contract-fallback"),
+            Map.entry("proxiedByBackend", true),
+            Map.entry("aiModuleAvailable", false),
+            Map.entry("degradedMode", true),
+            Map.entry("humanReviewRequired", true),
+            Map.entry("notClinicalDiagnosis", true),
+            Map.entry("missingRootFields", List.of()),
+            Map.entry("message", "AI Module contract verification is not available: " + message)
         );
     }
 
