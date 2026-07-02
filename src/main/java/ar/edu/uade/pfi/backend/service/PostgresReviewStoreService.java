@@ -19,7 +19,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -44,6 +43,33 @@ public class PostgresReviewStoreService {
 
     public boolean enabled() {
         return enabled;
+    }
+
+    public Map<String, Object> diagnostics() {
+        if (!enabled) {
+            return Map.of(
+                "mode", "memory",
+                "available", true,
+                "connected", false,
+                "message", "Postgres persistence is not enabled; using in-memory fallback"
+            );
+        }
+        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("SELECT 1")) {
+            statement.execute();
+            return Map.of(
+                "mode", "postgres",
+                "available", true,
+                "connected", true,
+                "message", "Postgres connection OK"
+            );
+        } catch (Exception ex) {
+            return Map.of(
+                "mode", "postgres",
+                "available", false,
+                "connected", false,
+                "message", ex.getClass().getSimpleName()
+            );
+        }
     }
 
     public ReviewSnapshotDto snapshot() {
