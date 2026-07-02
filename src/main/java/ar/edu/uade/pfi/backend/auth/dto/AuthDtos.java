@@ -30,6 +30,16 @@ public final class AuthDtos {
         @NotBlank String refreshToken
     ) {}
 
+    public record SettingsRequest(
+        Boolean twoFactorEnabled,
+        Boolean onboardingCompleted
+    ) {}
+
+    public record ApprovalRequest(
+        @Email @NotBlank String email,
+        boolean approved
+    ) {}
+
     public record PendingAuthResponse(
         String challengeId,
         String channel,
@@ -46,7 +56,10 @@ public final class AuthDtos {
         String specialty,
         String institution,
         List<String> roles,
-        boolean verified
+        boolean verified,
+        boolean approved,
+        boolean twoFactorEnabled,
+        boolean onboardingCompleted
     ) {}
 
     public record TokenResponse(
