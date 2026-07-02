@@ -30,11 +30,15 @@ public class AuthFilter extends OncePerRequestFilter {
         String header = request.getHeader("Authorization");
         if (header == null || !header.startsWith("Bearer ")) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType("application/json");
+            response.getWriter().write("{\"status\":\"unauthorized\",\"message\":\"JWT requerido para acceder a recursos de revision profesional\"}");
             return;
         }
         TokenService.Claims claims = tokenService.verify(header.substring(7).trim());
         if (claims == null) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType("application/json");
+            response.getWriter().write("{\"status\":\"unauthorized\",\"message\":\"Token invalido o expirado\"}");
             return;
         }
         request.setAttribute(AUTH_CLAIMS_ATTRIBUTE, claims);
@@ -47,6 +51,7 @@ public class AuthFilter extends OncePerRequestFilter {
         if ("OPTIONS".equalsIgnoreCase(method)) return true;
         if (path.startsWith("/api/auth/")) return true;
         if (path.equals("/api/ai/health") || path.equals("/api/ai/models")) return true;
-        return !path.startsWith("/api/ai/");
+        if (path.equals("/api/system/diagnostics") || path.equals("/api/system/warmup")) return true;
+        return !path.startsWith("/api/");
     }
 }
