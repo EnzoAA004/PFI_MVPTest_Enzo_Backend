@@ -8,6 +8,8 @@ public interface AiServiceOperations {
 
     Object models();
 
+    Map<String, Object> warmup();
+
     Map<String, Object> runPipeline(PipelineRunRequestDto request);
 
     Map<String, Object> getAgentReport(String runId);
