@@ -1,6 +1,7 @@
 package ar.edu.uade.pfi.backend.controller;
 
 import ar.edu.uade.pfi.backend.dto.StudyReviewResponseDto;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -15,7 +16,7 @@ public class AiStudyController {
     }
 
     @GetMapping("/demo-review")
-    public StudyReviewResponseDto demoReview() {
-        return studyController.demoReview();
+    public StudyReviewResponseDto demoReview(HttpServletRequest request) {
+        return studyController.demoReview(request);
     }
 }
