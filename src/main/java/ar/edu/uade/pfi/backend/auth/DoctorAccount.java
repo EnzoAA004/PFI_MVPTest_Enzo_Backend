@@ -11,9 +11,12 @@ public class DoctorAccount {
     private final String licenseNumber;
     private final String specialty;
     private final String institution;
-    private final List<String> roles;
+    private List<String> roles;
     private final Instant createdAt;
     private boolean verified;
+    private boolean approved;
+    private boolean twoFactorEnabled;
+    private boolean onboardingCompleted;
 
     public DoctorAccount(
         String id,
@@ -25,7 +28,10 @@ public class DoctorAccount {
         String institution,
         List<String> roles,
         Instant createdAt,
-        boolean verified
+        boolean verified,
+        boolean approved,
+        boolean twoFactorEnabled,
+        boolean onboardingCompleted
     ) {
         this.id = id;
         this.fullName = fullName;
@@ -37,6 +43,9 @@ public class DoctorAccount {
         this.roles = roles;
         this.createdAt = createdAt;
         this.verified = verified;
+        this.approved = approved;
+        this.twoFactorEnabled = twoFactorEnabled;
+        this.onboardingCompleted = onboardingCompleted;
     }
 
     public String id() { return id; }
@@ -49,5 +58,26 @@ public class DoctorAccount {
     public List<String> roles() { return roles; }
     public Instant createdAt() { return createdAt; }
     public boolean verified() { return verified; }
+    public boolean approved() { return approved; }
+    public boolean twoFactorEnabled() { return twoFactorEnabled; }
+    public boolean onboardingCompleted() { return onboardingCompleted; }
+
     public void verify() { this.verified = true; }
+
+    public void approve(boolean approved) {
+        this.approved = approved;
+        this.roles = approved ? List.of("DOCTOR", "REVIEWER") : List.of("PENDING_APPROVAL");
+    }
+
+    public void setRoles(List<String> roles) {
+        this.roles = roles;
+    }
+
+    public void setTwoFactorEnabled(boolean enabled) {
+        this.twoFactorEnabled = enabled;
+    }
+
+    public void setOnboardingCompleted(boolean completed) {
+        this.onboardingCompleted = completed;
+    }
 }
