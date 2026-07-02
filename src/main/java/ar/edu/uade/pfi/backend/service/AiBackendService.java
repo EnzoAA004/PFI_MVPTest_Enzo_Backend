@@ -148,6 +148,25 @@ public class AiBackendService {
         }
     }
 
+    public Map<String, Object> getAgentReportSummary(String runId) {
+        try {
+            Map<String, Object> response = normalizeForFrontend(aiServiceClient.getAgentReportSummary(runId));
+            response.put("review", reviewStoreService.findOrDefault(runId));
+            response.put("summaryOnly", true);
+            return response;
+        } catch (RuntimeException ex) {
+            return normalizeForFrontend(Map.of(
+                "runId", runId,
+                "status", "agent_report_summary_unavailable",
+                "aiModuleAvailable", false,
+                "degradedMode", true,
+                "summaryOnly", true,
+                "review", reviewStoreService.findOrDefault(runId),
+                "message", ex.getMessage()
+            ));
+        }
+    }
+
     public ReviewStatusDto updateReview(String runId, ReviewUpdateRequestDto request) {
         ReviewUpdateRequestDto normalizedRequest = validateReviewDecision(request);
         return reviewStoreService.updateReview(runId, normalizedRequest);
