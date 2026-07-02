@@ -8,7 +8,9 @@ import ar.edu.uade.pfi.backend.dto.StudyReviewResponseDto.MaskDto;
 import ar.edu.uade.pfi.backend.dto.StudyReviewResponseDto.MeasurementDto;
 import ar.edu.uade.pfi.backend.dto.StudyReviewResponseDto.PointDto;
 import ar.edu.uade.pfi.backend.dto.StudyReviewResponseDto.SeriesDto;
+import ar.edu.uade.pfi.backend.service.ProfessionalAccessAuditService;
 import ar.edu.uade.pfi.backend.service.StudyWorklistService;
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,33 +23,40 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/studies")
 public class StudyController {
     private final StudyWorklistService studyWorklistService;
+    private final ProfessionalAccessAuditService accessAuditService;
 
-    public StudyController(StudyWorklistService studyWorklistService) {
+    public StudyController(StudyWorklistService studyWorklistService, ProfessionalAccessAuditService accessAuditService) {
         this.studyWorklistService = studyWorklistService;
+        this.accessAuditService = accessAuditService;
     }
 
     @GetMapping
-    public Map<String, Object> listStudies() {
+    public Map<String, Object> listStudies(HttpServletRequest request) {
+        accessAuditService.record(request, "access_worklist", "Worklist de-identificada consultada");
         return studyWorklistService.listStudies();
     }
 
     @GetMapping("/{caseId}")
-    public Map<String, Object> getStudy(@PathVariable String caseId) {
+    public Map<String, Object> getStudy(@PathVariable String caseId, HttpServletRequest request) {
+        accessAuditService.record(request, "access_study_detail", "Detalle de estudio de-identificado consultado caseId=" + caseId);
         return studyWorklistService.getStudy(caseId);
     }
 
     @GetMapping("/{caseId}/runs")
-    public Map<String, Object> getStudyRuns(@PathVariable String caseId) {
+    public Map<String, Object> getStudyRuns(@PathVariable String caseId, HttpServletRequest request) {
+        accessAuditService.record(request, "access_study_runs", "Corridas de estudio consultadas caseId=" + caseId);
         return studyWorklistService.getStudyRuns(caseId);
     }
 
     @PostMapping("/demo")
-    public Map<String, Object> createDemoStudy() {
+    public Map<String, Object> createDemoStudy(HttpServletRequest request) {
+        accessAuditService.record(request, "access_demo_study", "Caso demo generado desde endpoint protegido");
         return studyWorklistService.createDemoStudy();
     }
 
     @GetMapping("/demo-review")
-    public StudyReviewResponseDto demoReview() {
+    public StudyReviewResponseDto demoReview(HttpServletRequest request) {
+        accessAuditService.record(request, "access_demo_review_contract", "Contrato demo de review workspace consultado");
         return new StudyReviewResponseDto(
             "STUDY-DEMO-0142",
             "CASE-DEMO-0142",
