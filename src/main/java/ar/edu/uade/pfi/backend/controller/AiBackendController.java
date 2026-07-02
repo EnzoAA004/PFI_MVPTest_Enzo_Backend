@@ -47,6 +47,11 @@ public class AiBackendController {
         return aiBackendService.runPipeline(request);
     }
 
+    @GetMapping("/agent/report/{runId}/summary")
+    public Map<String, Object> getAgentReportSummary(@PathVariable String runId) {
+        return aiBackendService.getAgentReportSummary(runId);
+    }
+
     @GetMapping("/agent/report/{runId}")
     public Map<String, Object> getAgentReport(@PathVariable String runId) {
         return aiBackendService.getAgentReport(runId);
