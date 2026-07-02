@@ -85,6 +85,16 @@ public class AiServiceClient implements AiServiceOperations {
             .block(timeout));
     }
 
+    @Override
+    public Map<String, Object> getRecentAgentReports(int limit) {
+        int safeLimit = Math.max(1, Math.min(limit, 100));
+        return execute(() -> aiWebClient.get()
+            .uri(uriBuilder -> uriBuilder.path("/agent/reports").queryParam("limit", safeLimit).build())
+            .retrieve()
+            .bodyToMono(MAP_RESPONSE)
+            .block(timeout));
+    }
+
     private PipelineRunRequestDto withTraceMetadata(PipelineRunRequestDto request) {
         String traceId = MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY);
         if (traceId == null || traceId.isBlank()) {
