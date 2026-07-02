@@ -48,6 +48,15 @@ public class AiServiceClient implements AiServiceOperations {
     }
 
     @Override
+    public Map<String, Object> verifyModels() {
+        return execute(() -> aiWebClient.get()
+            .uri("/models/verify")
+            .retrieve()
+            .bodyToMono(MAP_RESPONSE)
+            .block(timeout));
+    }
+
+    @Override
     public Map<String, Object> warmup() {
         return execute(() -> aiWebClient.get()
             .uri("/warmup")
