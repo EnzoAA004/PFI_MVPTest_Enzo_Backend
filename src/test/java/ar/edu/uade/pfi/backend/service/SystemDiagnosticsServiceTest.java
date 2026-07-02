@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.lang.reflect.Proxy;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
@@ -72,6 +73,7 @@ class SystemDiagnosticsServiceTest {
                 case "runPipeline" -> Map.of("runId", "run-test");
                 case "getAgentReport" -> Map.of("runId", args == null ? "run-test" : String.valueOf(args[0]));
                 case "getAgentReportSummary" -> Map.of("runId", args == null ? "run-test" : String.valueOf(args[0]), "summaryOnly", true);
+                case "getRecentAgentReports" -> Map.of("status", "ok", "count", 0, "items", List.of());
                 default -> throw new UnsupportedOperationException(method.getName());
             }
         );
