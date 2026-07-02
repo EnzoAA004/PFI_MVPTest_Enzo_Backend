@@ -12,11 +12,17 @@ import org.junit.jupiter.api.Test;
 class SystemDiagnosticsServiceTest {
 
     @Test
-    void diagnosticsExposeAiContractFingerprintFromHealth() {
+    void diagnosticsExposeAiContractFingerprintAndArtifactSummaryFromHealth() {
         AiServiceOperations aiClient = aiClient(Map.of(
             "status", "ok",
             "defaultInferenceMode", "contract",
-            "artifactSummary", Map.of("readyForRealInference", false),
+            "artifactSummary", Map.of(
+                "readyForRealInference", false,
+                "artifactsAvailable", 1,
+                "artifactsMissing", 1,
+                "artifactsHashed", 1,
+                "hashAlgorithm", "sha256"
+            ),
             "contract", Map.of(
                 "schemaVersion", "visual-review-contract-v1",
                 "schemaHash", "abc123",
@@ -42,8 +48,16 @@ class SystemDiagnosticsServiceTest {
         assertEquals("stable", contract.get("status"));
 
         @SuppressWarnings("unchecked")
+        Map<String, Object> modelArtifacts = (Map<String, Object>) diagnostics.get("modelArtifacts");
+        assertEquals(1, modelArtifacts.get("artifactsAvailable"));
+        assertEquals(1, modelArtifacts.get("artifactsMissing"));
+        assertEquals(1, modelArtifacts.get("artifactsHashed"));
+        assertEquals("sha256", modelArtifacts.get("hashAlgorithm"));
+
+        @SuppressWarnings("unchecked")
         Map<String, Object> aiModule = (Map<String, Object>) diagnostics.get("aiModule");
         assertTrue(aiModule.containsKey("contract"));
+        assertTrue(aiModule.containsKey("artifactSummary"));
     }
 
     private AiServiceOperations aiClient(Map<String, Object> healthResponse) {
