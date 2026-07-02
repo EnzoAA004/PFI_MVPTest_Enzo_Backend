@@ -50,6 +50,7 @@ public class SystemDiagnosticsService {
                 "mode", persistenceMode,
                 "postgresEnabled", postgresReviewStoreService.enabled()
             ),
+            "contract", aiModule.getOrDefault("contract", Map.of("status", "unavailable")),
             "humanReviewRequired", true,
             "notClinicalDiagnosis", true
         );
@@ -63,6 +64,7 @@ public class SystemDiagnosticsService {
             result.put("checkedAt", Instant.now().toString());
             result.put("aiModule", response);
             result.put("artifactSummary", response.get("artifactSummary"));
+            result.put("contract", response.getOrDefault("contract", Map.of("status", "unavailable")));
             result.put("defaultInferenceMode", response.get("defaultInferenceMode"));
             result.put("message", "AI Module warmup completed");
             return result;
@@ -71,6 +73,7 @@ public class SystemDiagnosticsService {
                 "status", "degraded",
                 "checkedAt", Instant.now().toString(),
                 "aiModule", Map.of("available", false, "message", compact(ex.getMessage())),
+                "contract", Map.of("status", "unavailable"),
                 "message", "AI Module warmup failed"
             );
         }
@@ -86,6 +89,7 @@ public class SystemDiagnosticsService {
             result.put("service", "pfi-ai-module");
             result.put("defaultInferenceMode", response.get("defaultInferenceMode"));
             result.put("artifactSummary", response.get("artifactSummary"));
+            result.put("contract", response.getOrDefault("contract", Map.of("status", "unavailable")));
             result.put("models", models);
             result.put("response", response);
             return result;
@@ -94,6 +98,7 @@ public class SystemDiagnosticsService {
                 "available", false,
                 "status", "degraded",
                 "service", "pfi-ai-module",
+                "contract", Map.of("status", "unavailable"),
                 "message", compact(ex.getMessage())
             );
         }
