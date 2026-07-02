@@ -8,15 +8,39 @@ import ar.edu.uade.pfi.backend.dto.StudyReviewResponseDto.MaskDto;
 import ar.edu.uade.pfi.backend.dto.StudyReviewResponseDto.MeasurementDto;
 import ar.edu.uade.pfi.backend.dto.StudyReviewResponseDto.PointDto;
 import ar.edu.uade.pfi.backend.dto.StudyReviewResponseDto.SeriesDto;
+import ar.edu.uade.pfi.backend.service.StudyWorklistService;
 import java.util.List;
 import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/studies")
 public class StudyController {
+    private final StudyWorklistService studyWorklistService;
+
+    public StudyController(StudyWorklistService studyWorklistService) {
+        this.studyWorklistService = studyWorklistService;
+    }
+
+    @GetMapping
+    public Map<String, Object> listStudies() {
+        return studyWorklistService.listStudies();
+    }
+
+    @GetMapping("/{caseId}")
+    public Map<String, Object> getStudy(@PathVariable String caseId) {
+        return studyWorklistService.getStudy(caseId);
+    }
+
+    @PostMapping("/demo")
+    public Map<String, Object> createDemoStudy() {
+        return studyWorklistService.createDemoStudy();
+    }
+
     @GetMapping("/demo-review")
     public StudyReviewResponseDto demoReview() {
         return new StudyReviewResponseDto(
