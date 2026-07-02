@@ -36,6 +36,11 @@ public class StudyController {
         return studyWorklistService.getStudy(caseId);
     }
 
+    @GetMapping("/{caseId}/runs")
+    public Map<String, Object> getStudyRuns(@PathVariable String caseId) {
+        return studyWorklistService.getStudyRuns(caseId);
+    }
+
     @PostMapping("/demo")
     public Map<String, Object> createDemoStudy() {
         return studyWorklistService.createDemoStudy();
