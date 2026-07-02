@@ -71,6 +71,7 @@ class SystemDiagnosticsServiceTest {
                 case "pipelineSchema" -> Map.of("status", "stable");
                 case "runPipeline" -> Map.of("runId", "run-test");
                 case "getAgentReport" -> Map.of("runId", args == null ? "run-test" : String.valueOf(args[0]));
+                case "getAgentReportSummary" -> Map.of("runId", args == null ? "run-test" : String.valueOf(args[0]), "summaryOnly", true);
                 default -> throw new UnsupportedOperationException(method.getName());
             }
         );
