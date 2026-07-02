@@ -76,6 +76,15 @@ public class AiServiceClient implements AiServiceOperations {
             .block(timeout));
     }
 
+    @Override
+    public Map<String, Object> getAgentReportSummary(String runId) {
+        return execute(() -> aiWebClient.get()
+            .uri("/agent/report/{runId}/summary", runId)
+            .retrieve()
+            .bodyToMono(MAP_RESPONSE)
+            .block(timeout));
+    }
+
     private PipelineRunRequestDto withTraceMetadata(PipelineRunRequestDto request) {
         String traceId = MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY);
         if (traceId == null || traceId.isBlank()) {
