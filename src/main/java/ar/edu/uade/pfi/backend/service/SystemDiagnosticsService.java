@@ -51,6 +51,7 @@ public class SystemDiagnosticsService {
                 "postgresEnabled", postgresReviewStoreService.enabled()
             ),
             "contract", aiModule.getOrDefault("contract", Map.of("status", "unavailable")),
+            "modelArtifacts", aiModule.getOrDefault("artifactSummary", Map.of("status", "unavailable")),
             "humanReviewRequired", true,
             "notClinicalDiagnosis", true
         );
@@ -64,6 +65,7 @@ public class SystemDiagnosticsService {
             result.put("checkedAt", Instant.now().toString());
             result.put("aiModule", response);
             result.put("artifactSummary", response.get("artifactSummary"));
+            result.put("modelArtifacts", response.getOrDefault("artifactSummary", Map.of("status", "unavailable")));
             result.put("contract", response.getOrDefault("contract", Map.of("status", "unavailable")));
             result.put("defaultInferenceMode", response.get("defaultInferenceMode"));
             result.put("message", "AI Module warmup completed");
@@ -74,6 +76,7 @@ public class SystemDiagnosticsService {
                 "checkedAt", Instant.now().toString(),
                 "aiModule", Map.of("available", false, "message", compact(ex.getMessage())),
                 "contract", Map.of("status", "unavailable"),
+                "modelArtifacts", Map.of("status", "unavailable"),
                 "message", "AI Module warmup failed"
             );
         }
@@ -99,6 +102,7 @@ public class SystemDiagnosticsService {
                 "status", "degraded",
                 "service", "pfi-ai-module",
                 "contract", Map.of("status", "unavailable"),
+                "artifactSummary", Map.of("status", "unavailable"),
                 "message", compact(ex.getMessage())
             );
         }
