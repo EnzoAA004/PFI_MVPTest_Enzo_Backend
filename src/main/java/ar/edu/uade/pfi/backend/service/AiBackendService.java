@@ -82,6 +82,28 @@ public class AiBackendService {
         }
     }
 
+    public Map<String, Object> verifyModels() {
+        try {
+            Map<String, Object> response = normalizeForFrontend(aiServiceClient.verifyModels());
+            response.put("aiModuleAvailable", true);
+            response.put("degradedMode", false);
+            return response;
+        } catch (RuntimeException ex) {
+            return normalizeForFrontend(Map.of(
+                "status", "model_artifact_verification_unavailable",
+                "valid", false,
+                "readyForRealInference", false,
+                "defaultInferenceMode", "contract",
+                "aiModuleAvailable", false,
+                "degradedMode", true,
+                "missingArtifacts", List.of(),
+                "unverifiedArtifacts", List.of(),
+                "verifiedModels", List.of(),
+                "message", ex.getMessage()
+            ));
+        }
+    }
+
     public Map<String, Object> runPipeline(PipelineRunRequestDto request) {
         try {
             Map<String, Object> response = normalizeForFrontend(aiServiceClient.runPipeline(request));
