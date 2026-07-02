@@ -43,6 +43,11 @@ public class AiBackendController {
         return aiBackendService.models();
     }
 
+    @GetMapping("/models/verify")
+    public Map<String, Object> verifyModels() {
+        return aiBackendService.verifyModels();
+    }
+
     @PostMapping("/pipeline/run")
     public Map<String, Object> runPipeline(@Valid @RequestBody PipelineRunRequestDto request) {
         return aiBackendService.runPipeline(request);
