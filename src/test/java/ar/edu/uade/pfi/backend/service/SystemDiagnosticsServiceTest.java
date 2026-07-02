@@ -3,9 +3,8 @@ package ar.edu.uade.pfi.backend.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import ar.edu.uade.pfi.backend.auth.AuthService;
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
-import ar.edu.uade.pfi.backend.dto.PipelineRunRequestDto;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.lang.reflect.Proxy;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -27,8 +26,8 @@ class SystemDiagnosticsServiceTest {
         ));
         SystemDiagnosticsService service = new SystemDiagnosticsService(
             aiClient,
-            new PostgresReviewStoreService(false, null),
-            new AuthService(false, "test-secret"),
+            new PostgresReviewStoreService(new ObjectMapper(), "memory", ""),
+            null,
             false,
             "memory"
         );
