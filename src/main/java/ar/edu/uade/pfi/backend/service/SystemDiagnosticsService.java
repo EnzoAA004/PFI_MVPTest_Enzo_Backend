@@ -35,26 +35,26 @@ public class SystemDiagnosticsService {
         Map<String, Object> database = postgresReviewStoreService.diagnostics();
         boolean aiOk = Boolean.TRUE.equals(aiModule.get("available"));
         boolean dbOk = Boolean.TRUE.equals(database.get("available"));
-        return Map.of(
-            "status", aiOk && dbOk ? "ok" : "degraded",
-            "checkedAt", Instant.now().toString(),
-            "backend", Map.of(
-                "available", true,
-                "status", "ok",
-                "service", "pfi-backend"
-            ),
-            "aiModule", aiModule,
-            "database", database,
-            "auth", authEnabled ? authService.diagnostics() : Map.of("enabled", false, "status", "disabled"),
-            "persistence", Map.of(
-                "mode", persistenceMode,
-                "postgresEnabled", postgresReviewStoreService.enabled()
-            ),
-            "contract", aiModule.getOrDefault("contract", Map.of("status", "unavailable")),
-            "modelArtifacts", aiModule.getOrDefault("artifactSummary", Map.of("status", "unavailable")),
-            "humanReviewRequired", true,
-            "notClinicalDiagnosis", true
-        );
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("status", aiOk && dbOk ? "ok" : "degraded");
+        result.put("checkedAt", Instant.now().toString());
+        result.put("backend", Map.of(
+            "available", true,
+            "status", "ok",
+            "service", "pfi-backend"
+        ));
+        result.put("aiModule", aiModule);
+        result.put("database", database);
+        result.put("auth", authEnabled ? authService.diagnostics() : Map.of("enabled", false, "status", "disabled"));
+        result.put("persistence", Map.of(
+            "mode", persistenceMode,
+            "postgresEnabled", postgresReviewStoreService.enabled()
+        ));
+        result.put("contract", aiModule.getOrDefault("contract", Map.of("status", "unavailable")));
+        result.put("modelArtifacts", aiModule.getOrDefault("artifactSummary", Map.of("status", "unavailable")));
+        result.put("humanReviewRequired", true);
+        result.put("notClinicalDiagnosis", true);
+        return result;
     }
 
     public Map<String, Object> warmup() {
