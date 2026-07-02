@@ -13,11 +13,17 @@ import ar.edu.uade.pfi.backend.dto.ReviewStatusDto;
 import ar.edu.uade.pfi.backend.dto.ReviewUpdateRequestDto;
 import ar.edu.uade.pfi.backend.util.ResponseNormalizer;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class AiBackendService {
+    private static final Set<String> VALID_REVIEW_STATUSES = Set.of("pendiente", "aceptado", "observado", "descartado");
+    private static final Set<String> FINAL_REVIEW_STATUSES = Set.of("aceptado", "observado", "descartado");
     private final AiServiceOperations aiServiceClient;
     private final ReviewStoreService reviewStoreService;
 
@@ -143,7 +149,8 @@ public class AiBackendService {
     }
 
     public ReviewStatusDto updateReview(String runId, ReviewUpdateRequestDto request) {
-        return reviewStoreService.updateReview(runId, request);
+        ReviewUpdateRequestDto normalizedRequest = validateReviewDecision(request);
+        return reviewStoreService.updateReview(runId, normalizedRequest);
     }
 
     public ReviewSnapshotDto reviewHistory() {
@@ -168,6 +175,34 @@ public class AiBackendService {
 
     public List<AuditEventDto> auditTrail() {
         return reviewStoreService.auditTrail();
+    }
+
+    private ReviewUpdateRequestDto validateReviewDecision(ReviewUpdateRequestDto request) {
+        String status = normalized(request.status());
+        String notes = trimmed(request.notes());
+        String reviewer = trimmed(request.reviewer());
+        if (!VALID_REVIEW_STATUSES.contains(status)) {
+            throw badRequest("Estado de revision invalido. Valores permitidos: pendiente, aceptado, observado, descartado.");
+        }
+        if (FINAL_REVIEW_STATUSES.contains(status) && reviewer.isBlank()) {
+            throw badRequest("La decision profesional requiere reviewer identificado.");
+        }
+        if (("observado".equals(status) || "descartado".equals(status)) && notes.length() < 5) {
+            throw badRequest("Los estados observado o descartado requieren una nota profesional descriptiva.");
+        }
+        return new ReviewUpdateRequestDto(status, notes, reviewer);
+    }
+
+    private ResponseStatusException badRequest(String message) {
+        return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+    }
+
+    private String normalized(String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String trimmed(String value) {
+        return value == null ? "" : value.trim();
     }
 
     private Map<String, Object> normalizeForFrontend(Map<String, Object> response) {
