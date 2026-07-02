@@ -45,6 +45,15 @@ public class AiServiceClient implements AiServiceOperations {
     }
 
     @Override
+    public Map<String, Object> warmup() {
+        return execute(() -> aiWebClient.get()
+            .uri("/warmup")
+            .retrieve()
+            .bodyToMono(MAP_RESPONSE)
+            .block(timeout));
+    }
+
+    @Override
     public Map<String, Object> runPipeline(PipelineRunRequestDto request) {
         return execute(() -> aiWebClient.post()
             .uri("/pipeline/run")
@@ -74,16 +83,18 @@ public class AiServiceClient implements AiServiceOperations {
     public ResponseStatusException translateException(RuntimeException ex) {
         Throwable unwrapped = Exceptions.unwrap(ex);
         if (unwrapped instanceof WebClientResponseException responseException) {
-            String responseBody = responseException.getResponseBodyAsString();
-            String detail = responseBody == null || responseBody.isBlank()
-                ? "AI Module responded with status " + responseException.getStatusCode().value()
-                : "AI Module responded with status " + responseException.getStatusCode().value() + ": " + responseBody;
             return new ResponseStatusException(
                 HttpStatus.BAD_GATEWAY,
-                detail,
+                "AI Module responded with status " + responseException.getStatusCode().value(),
                 responseException
             );
         }
-        return new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI Module is not available: " + unwrapped.getMessage(), unwrapped);
+        String message = unwrapped.getMessage() == null ? "unknown error" : compactMessage(unwrapped.getMessage());
+        return new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI Module is not available: " + message, unwrapped);
+    }
+
+    private String compactMessage(String value) {
+        String oneLine = value.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ').trim();
+        return oneLine.length() > 180 ? oneLine.substring(0, 180) + "..." : oneLine;
     }
 }
