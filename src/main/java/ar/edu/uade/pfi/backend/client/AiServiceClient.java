@@ -1,10 +1,13 @@
 package ar.edu.uade.pfi.backend.client;
 
 import ar.edu.uade.pfi.backend.config.AiServiceProperties;
+import ar.edu.uade.pfi.backend.config.TraceIdFilter;
 import ar.edu.uade.pfi.backend.dto.PipelineRunRequestDto;
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Supplier;
+import org.slf4j.MDC;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -55,9 +58,10 @@ public class AiServiceClient implements AiServiceOperations {
 
     @Override
     public Map<String, Object> runPipeline(PipelineRunRequestDto request) {
+        PipelineRunRequestDto tracedRequest = withTraceMetadata(request);
         return execute(() -> aiWebClient.post()
             .uri("/pipeline/run")
-            .bodyValue(request)
+            .bodyValue(tracedRequest)
             .retrieve()
             .bodyToMono(MAP_RESPONSE)
             .block(timeout));
@@ -70,6 +74,27 @@ public class AiServiceClient implements AiServiceOperations {
             .retrieve()
             .bodyToMono(MAP_RESPONSE)
             .block(timeout));
+    }
+
+    private PipelineRunRequestDto withTraceMetadata(PipelineRunRequestDto request) {
+        String traceId = MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY);
+        if (traceId == null || traceId.isBlank()) {
+            return request;
+        }
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        if (request.metadata() != null) {
+            metadata.putAll(request.metadata());
+        }
+        metadata.putIfAbsent("traceId", traceId);
+        metadata.putIfAbsent("backendTraceId", traceId);
+        metadata.putIfAbsent("correlationId", traceId);
+        return new PipelineRunRequestDto(
+            request.caseId(),
+            request.plane(),
+            request.modelKey(),
+            request.inputPath(),
+            metadata
+        );
     }
 
     private <T> T execute(Supplier<T> supplier) {
