@@ -5,6 +5,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -12,6 +13,15 @@ import org.springframework.web.filter.OncePerRequestFilter;
 @Component
 public class AuthFilter extends OncePerRequestFilter {
     public static final String AUTH_CLAIMS_ATTRIBUTE = "pfi.auth.claims";
+    private static final Set<String> PUBLIC_AUTH_PATHS = Set.of(
+        "/api/auth/register",
+        "/api/auth/verify-registration",
+        "/api/auth/login",
+        "/api/auth/verify-login",
+        "/api/auth/refresh",
+        "/api/auth/demo-doctor",
+        "/api/auth/logout"
+    );
     private final TokenService tokenService;
     private final boolean authEnabled;
 
@@ -49,7 +59,7 @@ public class AuthFilter extends OncePerRequestFilter {
         String method = request.getMethod();
         String path = request.getRequestURI();
         if ("OPTIONS".equalsIgnoreCase(method)) return true;
-        if (path.startsWith("/api/auth/")) return true;
+        if (PUBLIC_AUTH_PATHS.contains(path)) return true;
         if (path.equals("/api/ai/health") || path.equals("/api/ai/models")) return true;
         if (path.equals("/api/system/diagnostics") || path.equals("/api/system/warmup")) return true;
         return !path.startsWith("/api/");
