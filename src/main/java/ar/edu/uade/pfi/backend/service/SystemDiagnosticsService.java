@@ -1,0 +1,100 @@
+package ar.edu.uade.pfi.backend.service;
+
+import ar.edu.uade.pfi.backend.client.AiServiceOperations;
+import java.time.Instant;
+import java.util.Map;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+@Service
+public class SystemDiagnosticsService {
+    private final AiServiceOperations aiServiceClient;
+    private final PostgresReviewStoreService postgresReviewStoreService;
+    private final boolean authEnabled;
+    private final String persistenceMode;
+
+    public SystemDiagnosticsService(
+        AiServiceOperations aiServiceClient,
+        PostgresReviewStoreService postgresReviewStoreService,
+        @Value("${pfi.auth.enabled:true}") boolean authEnabled,
+        @Value("${pfi.persistence.mode:memory}") String persistenceMode
+    ) {
+        this.aiServiceClient = aiServiceClient;
+        this.postgresReviewStoreService = postgresReviewStoreService;
+        this.authEnabled = authEnabled;
+        this.persistenceMode = persistenceMode;
+    }
+
+    public Map<String, Object> diagnostics() {
+        Map<String, Object> aiModule = checkAiModule();
+        Map<String, Object> database = postgresReviewStoreService.diagnostics();
+        boolean aiOk = Boolean.TRUE.equals(aiModule.get("available"));
+        boolean dbOk = Boolean.TRUE.equals(database.get("available"));
+        return Map.of(
+            "status", aiOk && dbOk ? "ok" : "degraded",
+            "checkedAt", Instant.now().toString(),
+            "backend", Map.of(
+                "available", true,
+                "status", "ok",
+                "service", "pfi-backend"
+            ),
+            "aiModule", aiModule,
+            "database", database,
+            "auth", Map.of(
+                "enabled", authEnabled,
+                "mode", "jwt-demo",
+                "status", authEnabled ? "enabled" : "disabled"
+            ),
+            "persistence", Map.of(
+                "mode", persistenceMode,
+                "postgresEnabled", postgresReviewStoreService.enabled()
+            ),
+            "humanReviewRequired", true,
+            "notClinicalDiagnosis", true
+        );
+    }
+
+    public Map<String, Object> warmup() {
+        try {
+            Map<String, Object> response = aiServiceClient.warmup();
+            return Map.of(
+                "status", "ok",
+                "checkedAt", Instant.now().toString(),
+                "aiModule", response,
+                "message", "AI Module warmup completed"
+            );
+        } catch (RuntimeException ex) {
+            return Map.of(
+                "status", "degraded",
+                "checkedAt", Instant.now().toString(),
+                "aiModule", Map.of("available", false, "message", compact(ex.getMessage())),
+                "message", "AI Module warmup failed"
+            );
+        }
+    }
+
+    private Map<String, Object> checkAiModule() {
+        try {
+            Map<String, Object> response = aiServiceClient.health();
+            return Map.of(
+                "available", true,
+                "status", response.getOrDefault("status", "ok"),
+                "service", "pfi-ai-module",
+                "response", response
+            );
+        } catch (RuntimeException ex) {
+            return Map.of(
+                "available", false,
+                "status", "degraded",
+                "service", "pfi-ai-module",
+                "message", compact(ex.getMessage())
+            );
+        }
+    }
+
+    private String compact(String value) {
+        if (value == null || value.isBlank()) return "unavailable";
+        String oneLine = value.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ').trim();
+        return oneLine.length() > 180 ? oneLine.substring(0, 180) + "..." : oneLine;
+    }
+}
