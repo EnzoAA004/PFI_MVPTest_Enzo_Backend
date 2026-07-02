@@ -22,6 +22,7 @@ public class AuthFilter extends OncePerRequestFilter {
         "/api/auth/demo-doctor",
         "/api/auth/logout"
     );
+    private static final Set<String> PENDING_ALLOWED_PATHS = Set.of("/api/auth/me", "/api/auth/settings");
     private final TokenService tokenService;
     private final boolean authEnabled;
 
@@ -49,6 +50,12 @@ public class AuthFilter extends OncePerRequestFilter {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.setContentType("application/json");
             response.getWriter().write("{\"status\":\"unauthorized\",\"message\":\"Token invalido o expirado\"}");
+            return;
+        }
+        if (claims.roles().contains("PENDING_APPROVAL") && !PENDING_ALLOWED_PATHS.contains(request.getRequestURI())) {
+            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+            response.setContentType("application/json");
+            response.getWriter().write("{\"status\":\"pending_approval\",\"message\":\"Cuenta profesional pendiente de aprobacion institucional\"}");
             return;
         }
         request.setAttribute(AUTH_CLAIMS_ATTRIBUTE, claims);
