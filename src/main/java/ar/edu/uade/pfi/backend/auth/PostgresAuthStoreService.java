@@ -10,6 +10,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -37,7 +38,7 @@ public class PostgresAuthStoreService {
     public Optional<DoctorAccount> findByEmail(String email) {
         if (!enabled) return Optional.empty();
         try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
-            SELECT id, full_name, email, password_hash, license_number, specialty, institution, roles, created_at, verified
+            SELECT id, full_name, email, password_hash, license_number, specialty, institution, roles, created_at, verified, approved, two_factor_enabled, onboarding_completed
             FROM doctor_accounts
             WHERE email = ?
             """)) {
@@ -51,11 +52,28 @@ public class PostgresAuthStoreService {
         }
     }
 
+    public List<DoctorAccount> listAccounts() {
+        if (!enabled) return List.of();
+        List<DoctorAccount> accounts = new ArrayList<>();
+        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+            SELECT id, full_name, email, password_hash, license_number, specialty, institution, roles, created_at, verified, approved, two_factor_enabled, onboarding_completed
+            FROM doctor_accounts
+            ORDER BY created_at DESC
+            """)) {
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) accounts.add(readAccount(rs));
+            }
+        } catch (Exception ignored) {
+            return List.of();
+        }
+        return accounts;
+    }
+
     public DoctorAccount saveAccount(DoctorAccount account) {
         if (!enabled) return account;
         try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
-            INSERT INTO doctor_accounts(id, full_name, email, password_hash, license_number, specialty, institution, roles, created_at, verified, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now())
+            INSERT INTO doctor_accounts(id, full_name, email, password_hash, license_number, specialty, institution, roles, created_at, verified, approved, two_factor_enabled, onboarding_completed, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now())
             ON CONFLICT (email) DO UPDATE SET
               full_name = EXCLUDED.full_name,
               password_hash = EXCLUDED.password_hash,
@@ -64,6 +82,9 @@ public class PostgresAuthStoreService {
               institution = EXCLUDED.institution,
               roles = EXCLUDED.roles,
               verified = EXCLUDED.verified,
+              approved = EXCLUDED.approved,
+              two_factor_enabled = EXCLUDED.two_factor_enabled,
+              onboarding_completed = EXCLUDED.onboarding_completed,
               updated_at = now()
             """)) {
             statement.setString(1, account.id());
@@ -76,6 +97,9 @@ public class PostgresAuthStoreService {
             statement.setString(8, String.join(",", account.roles()));
             statement.setTimestamp(9, Timestamp.from(account.createdAt()));
             statement.setBoolean(10, account.verified());
+            statement.setBoolean(11, account.approved());
+            statement.setBoolean(12, account.twoFactorEnabled());
+            statement.setBoolean(13, account.onboardingCompleted());
             statement.executeUpdate();
         } catch (Exception ignored) {
             // Auth remains available through in-memory fallback.
@@ -92,6 +116,44 @@ public class PostgresAuthStoreService {
             statement.executeUpdate();
         } catch (Exception ignored) {
             // In-memory account is still verified by AuthService.
+        }
+    }
+
+    public void updateApproval(String email, boolean approved, List<String> roles) {
+        if (!enabled) return;
+        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+            UPDATE doctor_accounts
+            SET approved = ?, roles = ?, updated_at = now()
+            WHERE email = ?
+            """)) {
+            statement.setBoolean(1, approved);
+            statement.setString(2, String.join(",", roles));
+            statement.setString(3, email);
+            statement.executeUpdate();
+        } catch (Exception ignored) {
+            // In-memory account remains authoritative for this request.
+        }
+    }
+
+    public void updateSettings(String email, Boolean twoFactorEnabled, Boolean onboardingCompleted) {
+        if (!enabled) return;
+        try (Connection connection = connection()) {
+            if (twoFactorEnabled != null) {
+                try (PreparedStatement statement = connection.prepareStatement("UPDATE doctor_accounts SET two_factor_enabled = ?, updated_at = now() WHERE email = ?")) {
+                    statement.setBoolean(1, twoFactorEnabled);
+                    statement.setString(2, email);
+                    statement.executeUpdate();
+                }
+            }
+            if (onboardingCompleted != null) {
+                try (PreparedStatement statement = connection.prepareStatement("UPDATE doctor_accounts SET onboarding_completed = ?, updated_at = now() WHERE email = ?")) {
+                    statement.setBoolean(1, onboardingCompleted);
+                    statement.setString(2, email);
+                    statement.executeUpdate();
+                }
+            }
+        } catch (Exception ignored) {
+            // In-memory update already happened in AuthService.
         }
     }
 
@@ -147,6 +209,7 @@ public class PostgresAuthStoreService {
             .map(String::trim)
             .filter(value -> !value.isBlank())
             .toList();
+        boolean approved = rs.getBoolean("approved");
         return new DoctorAccount(
             rs.getString("id"),
             rs.getString("full_name"),
@@ -155,9 +218,12 @@ public class PostgresAuthStoreService {
             rs.getString("license_number"),
             rs.getString("specialty"),
             rs.getString("institution"),
-            roles.isEmpty() ? List.of("DOCTOR", "REVIEWER") : roles,
+            roles.isEmpty() ? (approved ? List.of("DOCTOR", "REVIEWER") : List.of("PENDING_APPROVAL")) : roles,
             rs.getTimestamp("created_at").toInstant(),
-            rs.getBoolean("verified")
+            rs.getBoolean("verified"),
+            approved,
+            rs.getBoolean("two_factor_enabled"),
+            rs.getBoolean("onboarding_completed")
         );
     }
 
@@ -172,12 +238,20 @@ public class PostgresAuthStoreService {
                     license_number TEXT NOT NULL DEFAULT '',
                     specialty TEXT NOT NULL DEFAULT '',
                     institution TEXT NOT NULL DEFAULT '',
-                    roles TEXT NOT NULL DEFAULT 'DOCTOR,REVIEWER',
+                    roles TEXT NOT NULL DEFAULT 'PENDING_APPROVAL',
                     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                    verified BOOLEAN NOT NULL DEFAULT FALSE
+                    verified BOOLEAN NOT NULL DEFAULT FALSE,
+                    approved BOOLEAN NOT NULL DEFAULT FALSE,
+                    two_factor_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+                    onboarding_completed BOOLEAN NOT NULL DEFAULT FALSE
                 )
                 """);
+            connection.createStatement().execute("ALTER TABLE doctor_accounts ADD COLUMN IF NOT EXISTS approved BOOLEAN NOT NULL DEFAULT FALSE");
+            connection.createStatement().execute("ALTER TABLE doctor_accounts ADD COLUMN IF NOT EXISTS two_factor_enabled BOOLEAN NOT NULL DEFAULT FALSE");
+            connection.createStatement().execute("ALTER TABLE doctor_accounts ADD COLUMN IF NOT EXISTS onboarding_completed BOOLEAN NOT NULL DEFAULT FALSE");
+            connection.createStatement().execute("UPDATE doctor_accounts SET approved = TRUE WHERE verified = TRUE AND approved = FALSE AND roles NOT LIKE '%PENDING_APPROVAL%'");
+            connection.createStatement().execute("UPDATE doctor_accounts SET roles = 'DOCTOR,REVIEWER' WHERE approved = TRUE AND roles = 'PENDING_APPROVAL'");
             connection.createStatement().execute("""
                 CREATE TABLE IF NOT EXISTS auth_refresh_tokens (
                     token_hash TEXT PRIMARY KEY,
