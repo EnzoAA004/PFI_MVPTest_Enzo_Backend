@@ -8,7 +8,6 @@ import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.UserResponse;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -173,9 +172,9 @@ public class AuthService {
         DoctorAccount existing = findAccount(email).orElse(null);
         if (existing != null) {
             existing.verify();
+            existing.approve(true);
             existing.setRoles(List.of("ADMIN", "DOCTOR", "REVIEWER"));
             existing.setTwoFactorEnabled(false);
-            existing.approve(true);
             accountsByEmail.put(email, existing);
             postgresAuthStore.saveAccount(existing);
             return issueTokens(existing);
