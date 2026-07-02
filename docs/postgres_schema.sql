@@ -9,10 +9,13 @@ CREATE TABLE IF NOT EXISTS doctor_accounts (
     license_number TEXT NOT NULL DEFAULT '',
     specialty TEXT NOT NULL DEFAULT '',
     institution TEXT NOT NULL DEFAULT '',
-    roles TEXT NOT NULL DEFAULT 'DOCTOR,REVIEWER',
+    roles TEXT NOT NULL DEFAULT 'PENDING_APPROVAL',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    verified BOOLEAN NOT NULL DEFAULT FALSE
+    verified BOOLEAN NOT NULL DEFAULT FALSE,
+    approved BOOLEAN NOT NULL DEFAULT FALSE,
+    two_factor_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    onboarding_completed BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 CREATE TABLE IF NOT EXISTS auth_refresh_tokens (
