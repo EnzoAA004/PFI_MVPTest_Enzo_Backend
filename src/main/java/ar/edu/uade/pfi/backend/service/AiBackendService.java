@@ -167,6 +167,24 @@ public class AiBackendService {
         }
     }
 
+    public Map<String, Object> getRecentAgentReports(int limit) {
+        try {
+            Map<String, Object> response = normalizeForFrontend(aiServiceClient.getRecentAgentReports(limit));
+            response.put("summaryOnly", true);
+            return response;
+        } catch (RuntimeException ex) {
+            return normalizeForFrontend(Map.of(
+                "status", "agent_reports_unavailable",
+                "aiModuleAvailable", false,
+                "degradedMode", true,
+                "summaryOnly", true,
+                "count", 0,
+                "items", List.of(),
+                "message", ex.getMessage()
+            ));
+        }
+    }
+
     public ReviewStatusDto updateReview(String runId, ReviewUpdateRequestDto request) {
         ReviewUpdateRequestDto normalizedRequest = validateReviewDecision(request);
         return reviewStoreService.updateReview(runId, normalizedRequest);
