@@ -1,5 +1,6 @@
 package ar.edu.uade.pfi.backend.service;
 
+import ar.edu.uade.pfi.backend.auth.AuthService;
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -11,17 +12,20 @@ import org.springframework.stereotype.Service;
 public class SystemDiagnosticsService {
     private final AiServiceOperations aiServiceClient;
     private final PostgresReviewStoreService postgresReviewStoreService;
+    private final AuthService authService;
     private final boolean authEnabled;
     private final String persistenceMode;
 
     public SystemDiagnosticsService(
         AiServiceOperations aiServiceClient,
         PostgresReviewStoreService postgresReviewStoreService,
+        AuthService authService,
         @Value("${pfi.auth.enabled:true}") boolean authEnabled,
         @Value("${pfi.persistence.mode:memory}") String persistenceMode
     ) {
         this.aiServiceClient = aiServiceClient;
         this.postgresReviewStoreService = postgresReviewStoreService;
+        this.authService = authService;
         this.authEnabled = authEnabled;
         this.persistenceMode = persistenceMode;
     }
@@ -41,11 +45,7 @@ public class SystemDiagnosticsService {
             ),
             "aiModule", aiModule,
             "database", database,
-            "auth", Map.of(
-                "enabled", authEnabled,
-                "mode", "jwt-demo",
-                "status", authEnabled ? "enabled" : "disabled"
-            ),
+            "auth", authEnabled ? authService.diagnostics() : Map.of("enabled", false, "status", "disabled"),
             "persistence", Map.of(
                 "mode", persistenceMode,
                 "postgresEnabled", postgresReviewStoreService.enabled()
