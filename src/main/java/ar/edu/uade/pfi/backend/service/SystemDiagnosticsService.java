@@ -2,6 +2,7 @@ package ar.edu.uade.pfi.backend.service;
 
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -57,12 +58,14 @@ public class SystemDiagnosticsService {
     public Map<String, Object> warmup() {
         try {
             Map<String, Object> response = aiServiceClient.warmup();
-            return Map.of(
-                "status", "ok",
-                "checkedAt", Instant.now().toString(),
-                "aiModule", response,
-                "message", "AI Module warmup completed"
-            );
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("status", "ok");
+            result.put("checkedAt", Instant.now().toString());
+            result.put("aiModule", response);
+            result.put("artifactSummary", response.get("artifactSummary"));
+            result.put("defaultInferenceMode", response.get("defaultInferenceMode"));
+            result.put("message", "AI Module warmup completed");
+            return result;
         } catch (RuntimeException ex) {
             return Map.of(
                 "status", "degraded",
@@ -76,17 +79,32 @@ public class SystemDiagnosticsService {
     private Map<String, Object> checkAiModule() {
         try {
             Map<String, Object> response = aiServiceClient.health();
-            return Map.of(
-                "available", true,
-                "status", response.getOrDefault("status", "ok"),
-                "service", "pfi-ai-module",
-                "response", response
-            );
+            Object models = safeModels();
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("available", true);
+            result.put("status", response.getOrDefault("status", "ok"));
+            result.put("service", "pfi-ai-module");
+            result.put("defaultInferenceMode", response.get("defaultInferenceMode"));
+            result.put("artifactSummary", response.get("artifactSummary"));
+            result.put("models", models);
+            result.put("response", response);
+            return result;
         } catch (RuntimeException ex) {
             return Map.of(
                 "available", false,
                 "status", "degraded",
                 "service", "pfi-ai-module",
+                "message", compact(ex.getMessage())
+            );
+        }
+    }
+
+    private Object safeModels() {
+        try {
+            return aiServiceClient.models();
+        } catch (RuntimeException ex) {
+            return Map.of(
+                "status", "degraded",
                 "message", compact(ex.getMessage())
             );
         }
