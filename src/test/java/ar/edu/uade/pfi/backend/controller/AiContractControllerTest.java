@@ -55,6 +55,8 @@ class AiContractControllerTest {
 
         assertEquals("visual-review-contract-v1", response.get("schemaVersion"));
         assertEquals("degraded_fallback", response.get("status"));
+        assertEquals("pfi-backend.ai-contract-fallback", response.get("generatedBy"));
+        assertEquals("backend-fallback-visual-review-contract-v1", response.get("schemaHash"));
         assertEquals(true, response.get("proxiedByBackend"));
         assertEquals(false, response.get("aiModuleAvailable"));
         assertEquals(true, response.get("degradedMode"));
