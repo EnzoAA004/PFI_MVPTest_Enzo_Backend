@@ -68,6 +68,7 @@ class SystemDiagnosticsServiceTest {
             (proxy, method, args) -> switch (method.getName()) {
                 case "health" -> healthResponse;
                 case "models" -> Map.of("status", "ok");
+                case "verifyModels" -> Map.of("status", "degraded_contract_mode", "valid", false);
                 case "warmup" -> healthResponse;
                 case "pipelineSchema" -> Map.of("status", "stable");
                 case "runPipeline" -> Map.of("runId", "run-test");
