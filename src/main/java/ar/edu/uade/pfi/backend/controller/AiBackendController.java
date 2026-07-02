@@ -5,6 +5,8 @@ import ar.edu.uade.pfi.backend.dto.AuditEventRequestDto;
 import ar.edu.uade.pfi.backend.dto.MeasurementBatchDto;
 import ar.edu.uade.pfi.backend.dto.MeasurementSaveDto;
 import ar.edu.uade.pfi.backend.dto.PipelineRunRequestDto;
+import ar.edu.uade.pfi.backend.dto.ReviewExportRequestDto;
+import ar.edu.uade.pfi.backend.dto.ReviewExportResponseDto;
 import ar.edu.uade.pfi.backend.dto.ReviewSnapshotDto;
 import ar.edu.uade.pfi.backend.dto.ReviewStatusDto;
 import ar.edu.uade.pfi.backend.dto.ReviewUpdateRequestDto;
@@ -74,6 +76,14 @@ public class AiBackendController {
         @RequestBody MeasurementBatchDto request
     ) {
         return aiBackendService.saveMeasurements(runId, request);
+    }
+
+    @PostMapping("/review/{runId}/export")
+    public ReviewExportResponseDto exportReview(
+        @PathVariable String runId,
+        @RequestBody ReviewExportRequestDto request
+    ) {
+        return aiBackendService.exportReview(runId, request);
     }
 
     @PostMapping("/audit")
