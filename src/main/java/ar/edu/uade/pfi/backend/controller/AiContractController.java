@@ -3,15 +3,13 @@ package ar.edu.uade.pfi.backend.controller;
 import ar.edu.uade.pfi.backend.config.AiServiceProperties;
 import ar.edu.uade.pfi.backend.util.ResponseNormalizer;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.reactive.function.client.WebClientResponseException;
-import org.springframework.web.server.ResponseStatusException;
 import reactor.core.Exceptions;
 
 @RestController
@@ -38,25 +36,65 @@ public class AiContractController {
                 .block(timeout);
             Map<String, Object> normalized = ResponseNormalizer.normalizeMap(response);
             normalized.put("proxiedByBackend", true);
+            normalized.put("aiModuleAvailable", true);
             normalized.put("humanReviewRequired", true);
             normalized.put("notClinicalDiagnosis", true);
             return normalized;
         } catch (RuntimeException ex) {
-            throw translateException(ex);
+            return fallbackSchema(ex);
         }
     }
 
-    private ResponseStatusException translateException(RuntimeException ex) {
+    private Map<String, Object> fallbackSchema(RuntimeException ex) {
         Throwable unwrapped = Exceptions.unwrap(ex);
-        if (unwrapped instanceof WebClientResponseException responseException) {
-            return new ResponseStatusException(
-                HttpStatus.BAD_GATEWAY,
-                "AI Module responded with status " + responseException.getStatusCode().value(),
-                responseException
-            );
-        }
         String message = unwrapped.getMessage() == null ? "unknown error" : compactMessage(unwrapped.getMessage());
-        return new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI Module is not available: " + message, unwrapped);
+        return Map.ofEntries(
+            Map.entry("schemaVersion", "visual-review-contract-v1"),
+            Map.entry("status", "degraded_fallback"),
+            Map.entry("purpose", "Contrato minimo servido por backend cuando el AI Module no esta disponible."),
+            Map.entry("proxiedByBackend", true),
+            Map.entry("aiModuleAvailable", false),
+            Map.entry("degradedMode", true),
+            Map.entry("humanReviewRequired", true),
+            Map.entry("notClinicalDiagnosis", true),
+            Map.entry("message", "AI Module is not available: " + message),
+            Map.entry("rootFields", Map.ofEntries(
+                Map.entry("runId", "Identificador estable de la corrida tecnica."),
+                Map.entry("caseId", "Identificador de caso de-identificado."),
+                Map.entry("patientId", "Referencia de-identificada del sujeto."),
+                Map.entry("studyDate", "Fecha del estudio usada en la demo."),
+                Map.entry("plane", "Plano principal solicitado: sagittal o axial."),
+                Map.entry("modelKey", "Clave del modelo registrado."),
+                Map.entry("series", "Lista de series disponibles para el viewer."),
+                Map.entry("masks", "Mascaras editables con contornos por serie y slice."),
+                Map.entry("landmarks", "Puntos de referencia derivados del contrato visual."),
+                Map.entry("measurementValues", "Mediciones normalizadas para IA vs Reviewer."),
+                Map.entry("aiOutput", "Estado explicable de la salida IA/contrato."),
+                Map.entry("modelArtifact", "Estado del artifact .pt esperado para inferencia real."),
+                Map.entry("quality", "Resumen cuantitativo del contrato visual."),
+                Map.entry("metadata", "Trazabilidad extendida de frontend/backend/AI Module."),
+                Map.entry("review", "Estado de revision profesional cuando backend lo adjunta.")
+            )),
+            Map.entry("aiOutput", Map.of(
+                "status", "contract_ready|real_inference|degraded",
+                "inferenceMode", "contract|mock|real",
+                "humanReviewRequired", true,
+                "notClinicalDiagnosis", true
+            )),
+            Map.entry("quality", Map.of(
+                "maskCount", "number",
+                "landmarkCount", "number",
+                "measurementCount", "number",
+                "measurementsDerivedFromContours", "boolean"
+            )),
+            Map.entry("guarantees", List.of(
+                "El contrato siempre declara humanReviewRequired=true.",
+                "El contrato siempre declara notClinicalDiagnosis=true.",
+                "Las mediciones son editables por Reviewer.",
+                "La inferencia real no se declara disponible si falta el artifact .pt.",
+                "El fallback backend conserva la forma principal del contrato si el AI Module no responde."
+            ))
+        );
     }
 
     private String compactMessage(String value) {
