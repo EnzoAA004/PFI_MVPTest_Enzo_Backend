@@ -52,6 +52,8 @@ public class AiContractController {
             Map.entry("schemaVersion", "visual-review-contract-v1"),
             Map.entry("status", "degraded_fallback"),
             Map.entry("purpose", "Contrato minimo servido por backend cuando el AI Module no esta disponible."),
+            Map.entry("generatedBy", "pfi-backend.ai-contract-fallback"),
+            Map.entry("schemaHash", "backend-fallback-visual-review-contract-v1"),
             Map.entry("proxiedByBackend", true),
             Map.entry("aiModuleAvailable", false),
             Map.entry("degradedMode", true),
