@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -45,6 +46,11 @@ public class AiBackendController {
     @PostMapping("/pipeline/run")
     public Map<String, Object> runPipeline(@Valid @RequestBody PipelineRunRequestDto request) {
         return aiBackendService.runPipeline(request);
+    }
+
+    @GetMapping("/agent/reports")
+    public Map<String, Object> getRecentAgentReports(@RequestParam(defaultValue = "20") int limit) {
+        return aiBackendService.getRecentAgentReports(limit);
     }
 
     @GetMapping("/agent/report/{runId}/summary")
