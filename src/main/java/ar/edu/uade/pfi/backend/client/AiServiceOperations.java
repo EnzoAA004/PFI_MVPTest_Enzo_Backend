@@ -13,4 +13,6 @@ public interface AiServiceOperations {
     Map<String, Object> runPipeline(PipelineRunRequestDto request);
 
     Map<String, Object> getAgentReport(String runId);
+
+    Map<String, Object> getAgentReportSummary(String runId);
 }
