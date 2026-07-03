@@ -2,6 +2,7 @@ package ar.edu.uade.pfi.backend.client;
 
 import ar.edu.uade.pfi.backend.config.AiServiceProperties;
 import ar.edu.uade.pfi.backend.config.TraceIdFilter;
+import ar.edu.uade.pfi.backend.dto.MultiplanarRunRequestDto;
 import ar.edu.uade.pfi.backend.dto.PipelineRunRequestDto;
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -74,6 +75,17 @@ public class AiServiceClient implements AiServiceOperations {
     }
 
     @Override
+    public Map<String, Object> runMultiplanar(MultiplanarRunRequestDto request) {
+        MultiplanarRunRequestDto tracedRequest = withTraceMetadata(request);
+        return execute(() -> aiWebClient.post()
+            .uri("/multiplanar/run")
+            .bodyValue(tracedRequest)
+            .retrieve()
+            .bodyToMono(MAP_RESPONSE)
+            .block(timeout));
+    }
+
+    @Override
     public Map<String, Object> getAgentReport(String runId) {
         return execute(() -> aiWebClient.get().uri("/agent/report/{runId}", runId).retrieve().bodyToMono(MAP_RESPONSE).block(timeout));
     }
@@ -117,14 +129,35 @@ public class AiServiceClient implements AiServiceOperations {
         if (traceId == null || traceId.isBlank()) {
             return request;
         }
+        Map<String, Object> metadata = mergedTraceMetadata(request.metadata(), traceId);
+        return new PipelineRunRequestDto(request.caseId(), request.plane(), request.modelKey(), request.inputPath(), metadata);
+    }
+
+    private MultiplanarRunRequestDto withTraceMetadata(MultiplanarRunRequestDto request) {
+        String traceId = MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY);
+        if (traceId == null || traceId.isBlank()) {
+            return request;
+        }
+        Map<String, Object> metadata = mergedTraceMetadata(request.metadata(), traceId);
+        return new MultiplanarRunRequestDto(
+            request.caseId(),
+            request.sagittalInputPath(),
+            request.axialInputPath(),
+            request.sagittalModelKey(),
+            request.axialModelKey(),
+            metadata
+        );
+    }
+
+    private Map<String, Object> mergedTraceMetadata(Map<String, Object> source, String traceId) {
         Map<String, Object> metadata = new LinkedHashMap<>();
-        if (request.metadata() != null) {
-            metadata.putAll(request.metadata());
+        if (source != null) {
+            metadata.putAll(source);
         }
         metadata.putIfAbsent("traceId", traceId);
         metadata.putIfAbsent("backendTraceId", traceId);
         metadata.putIfAbsent("correlationId", traceId);
-        return new PipelineRunRequestDto(request.caseId(), request.plane(), request.modelKey(), request.inputPath(), metadata);
+        return metadata;
     }
 
     private <T> T execute(Supplier<T> supplier) {
