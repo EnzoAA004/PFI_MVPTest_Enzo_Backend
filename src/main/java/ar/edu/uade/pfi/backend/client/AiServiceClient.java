@@ -49,6 +49,10 @@ public class AiServiceClient implements AiServiceOperations {
         return getMap("/models/verify");
     }
 
+    public Map<String, Object> getModelRuntime() {
+        return getMap("/models/runtime");
+    }
+
     @Override
     public Map<String, Object> syncModels(boolean force) {
         return execute(() -> aiWebClient.post()
