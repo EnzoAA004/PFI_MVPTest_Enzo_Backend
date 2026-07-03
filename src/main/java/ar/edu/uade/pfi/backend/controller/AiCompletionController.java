@@ -1,6 +1,7 @@
 package ar.edu.uade.pfi.backend.controller;
 
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
+import ar.edu.uade.pfi.backend.util.AiReportEvidence;
 import java.util.List;
 import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,7 +22,7 @@ public class AiCompletionController {
         Map<String, Object> readiness = safeReadiness();
         Map<String, Object> reports = safeReports();
         boolean readyForDemo = Boolean.TRUE.equals(readiness.get("readyForDemo"));
-        boolean hasReports = intValue(reports.get("count")) > 0;
+        boolean hasReports = AiReportEvidence.hasReports(reports);
         int complete = 4 + (readyForDemo ? 1 : 0) + (hasReports ? 1 : 0);
         return Map.of(
             "status", "mvp_completion_ready",
@@ -29,7 +30,7 @@ public class AiCompletionController {
             "items", List.of("backend", "ai_module", "traceability", "human_review", "readiness", "reports"),
             "aiMvpCompletion", readiness.getOrDefault("mvpCompletion", Map.of()),
             "roadmap", roadmapSummary(),
-            "latestRunId", latestRunId(reports),
+            "latestRunId", AiReportEvidence.latestRunId(reports),
             "readiness", readiness,
             "reports", reports,
             "humanReviewRequired", true,
@@ -46,17 +47,6 @@ public class AiCompletionController {
         );
     }
 
-    private String latestRunId(Map<String, Object> reports) {
-        Object items = reports.get("items");
-        if (!(items instanceof List<?>)) return "";
-        List<?> list = (List<?>) items;
-        if (list.isEmpty()) return "";
-        Object first = list.get(0);
-        if (!(first instanceof Map<?, ?>)) return "";
-        Object runId = ((Map<?, ?>) first).get("runId");
-        return runId == null ? "" : String.valueOf(runId);
-    }
-
     private Map<String, Object> safeReadiness() {
         try {
             return aiServiceClient.readiness();
@@ -70,14 +60,6 @@ public class AiCompletionController {
             return aiServiceClient.getRecentAgentReports(20);
         } catch (RuntimeException ex) {
             return Map.of("status", "unavailable", "count", 0);
-        }
-    }
-
-    private int intValue(Object value) {
-        try {
-            return Integer.parseInt(String.valueOf(value));
-        } catch (RuntimeException ex) {
-            return 0;
         }
     }
 }
