@@ -23,4 +23,12 @@ public interface AiServiceOperations {
     Map<String, Object> getAgentReportSummary(String runId);
 
     Map<String, Object> getRecentAgentReports(int limit);
+
+    default Map<String, Object> getEvaluationSummary() {
+        return getRecentAgentReports(100);
+    }
+
+    default Map<String, Object> getEvaluationEvidence() {
+        return getEvaluationSummary();
+    }
 }
