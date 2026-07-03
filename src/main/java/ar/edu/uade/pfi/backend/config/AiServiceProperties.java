@@ -9,6 +9,6 @@ public record AiServiceProperties(String baseUrl, Integer timeoutSeconds) {
     }
 
     public int resolvedTimeoutSeconds() {
-        return timeoutSeconds == null ? 60 : timeoutSeconds;
+        return timeoutSeconds == null ? 180 : Math.max(timeoutSeconds, 30);
     }
 }
