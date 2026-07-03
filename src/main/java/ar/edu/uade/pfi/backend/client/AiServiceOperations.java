@@ -1,5 +1,6 @@
 package ar.edu.uade.pfi.backend.client;
 
+import ar.edu.uade.pfi.backend.dto.MultiplanarRunRequestDto;
 import ar.edu.uade.pfi.backend.dto.PipelineRunRequestDto;
 import java.util.Map;
 
@@ -21,6 +22,10 @@ public interface AiServiceOperations {
     Map<String, Object> warmup();
 
     Map<String, Object> runPipeline(PipelineRunRequestDto request);
+
+    default Map<String, Object> runMultiplanar(MultiplanarRunRequestDto request) {
+        return Map.of("status", "multiplanar_run_unavailable", "caseId", request.caseId(), "humanReviewRequired", true, "notClinicalDiagnosis", true);
+    }
 
     Map<String, Object> getAgentReport(String runId);
 
