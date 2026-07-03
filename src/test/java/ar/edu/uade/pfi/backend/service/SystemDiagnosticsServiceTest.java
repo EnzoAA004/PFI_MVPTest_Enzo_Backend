@@ -63,7 +63,7 @@ class SystemDiagnosticsServiceTest {
 
         @SuppressWarnings("unchecked")
         Map<String, Object> evidence = (Map<String, Object>) diagnostics.get("evaluationEvidence");
-        assertEquals("evaluation_evidence_ready", evidence.get("status"));
+        assertEquals("evidence_summary_ready", evidence.get("status"));
         assertEquals(1, evidence.get("reportCount"));
         assertEquals("run-test", evidence.get("latestRunId"));
 
@@ -90,6 +90,8 @@ class SystemDiagnosticsServiceTest {
                 case "getAgentReport" -> Map.of("runId", args == null ? "run-test" : String.valueOf(args[0]));
                 case "getAgentReportSummary" -> Map.of("runId", args == null ? "run-test" : String.valueOf(args[0]), "summaryOnly", true);
                 case "getRecentAgentReports" -> Map.of("status", "ok", "count", 1, "items", List.of(Map.of("runId", "run-test")));
+                case "getEvaluationSummary" -> Map.of("status", "evaluation_evidence_available", "reportCount", 1, "latestRunId", "run-test");
+                case "getEvaluationEvidence" -> Map.of("status", "evidence_summary_ready", "reportCount", 1, "latestRunId", "run-test", "humanReviewRequired", true, "notClinicalDiagnosis", true);
                 default -> throw new UnsupportedOperationException(method.getName());
             }
         );
