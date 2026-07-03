@@ -50,6 +50,7 @@ public class SystemDiagnosticsService {
             "mode", persistenceMode,
             "postgresEnabled", postgresReviewStoreService.enabled()
         ));
+        result.put("readiness", aiModule.getOrDefault("readiness", readinessUnavailable("not_checked")));
         result.put("contract", aiModule.getOrDefault("contract", Map.of("status", "unavailable")));
         result.put("modelArtifacts", aiModule.getOrDefault("artifactSummary", Map.of("status", "unavailable")));
         result.put("humanReviewRequired", true);
@@ -60,10 +61,12 @@ public class SystemDiagnosticsService {
     public Map<String, Object> warmup() {
         try {
             Map<String, Object> response = aiServiceClient.warmup();
+            Map<String, Object> readiness = safeReadiness();
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("status", "ok");
             result.put("checkedAt", Instant.now().toString());
             result.put("aiModule", response);
+            result.put("readiness", readiness);
             result.put("artifactSummary", response.get("artifactSummary"));
             result.put("modelArtifacts", response.getOrDefault("artifactSummary", Map.of("status", "unavailable")));
             result.put("contract", response.getOrDefault("contract", Map.of("status", "unavailable")));
@@ -75,6 +78,7 @@ public class SystemDiagnosticsService {
                 "status", "degraded",
                 "checkedAt", Instant.now().toString(),
                 "aiModule", Map.of("available", false, "message", compact(ex.getMessage())),
+                "readiness", readinessUnavailable(compact(ex.getMessage())),
                 "contract", Map.of("status", "unavailable"),
                 "modelArtifacts", Map.of("status", "unavailable"),
                 "message", "AI Module warmup failed"
@@ -85,12 +89,14 @@ public class SystemDiagnosticsService {
     private Map<String, Object> checkAiModule() {
         try {
             Map<String, Object> response = aiServiceClient.health();
+            Map<String, Object> readiness = safeReadiness();
             Object models = safeModels();
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("available", true);
             result.put("status", response.getOrDefault("status", "ok"));
             result.put("service", "pfi-ai-module");
             result.put("defaultInferenceMode", response.get("defaultInferenceMode"));
+            result.put("readiness", readiness);
             result.put("artifactSummary", response.get("artifactSummary"));
             result.put("contract", response.getOrDefault("contract", Map.of("status", "unavailable")));
             result.put("models", models);
@@ -101,11 +107,32 @@ public class SystemDiagnosticsService {
                 "available", false,
                 "status", "degraded",
                 "service", "pfi-ai-module",
+                "readiness", readinessUnavailable(compact(ex.getMessage())),
                 "contract", Map.of("status", "unavailable"),
                 "artifactSummary", Map.of("status", "unavailable"),
                 "message", compact(ex.getMessage())
             );
         }
+    }
+
+    private Map<String, Object> safeReadiness() {
+        try {
+            return aiServiceClient.readiness();
+        } catch (RuntimeException ex) {
+            return readinessUnavailable(compact(ex.getMessage()));
+        }
+    }
+
+    private Map<String, Object> readinessUnavailable(String message) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("status", "unavailable");
+        result.put("readyForDemo", false);
+        result.put("readyForRealInference", false);
+        result.put("recommendedInferenceMode", "contract");
+        result.put("message", message);
+        result.put("humanReviewRequired", true);
+        result.put("notClinicalDiagnosis", true);
+        return result;
     }
 
     private Object safeModels() {
