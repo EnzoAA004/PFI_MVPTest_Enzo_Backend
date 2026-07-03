@@ -65,9 +65,13 @@ public class AiEvaluationController {
 
     private Object latestRunId(Map<String, Object> reports) {
         Object items = reports.get("items");
-        if (!(items instanceof List<?> list) || list.isEmpty()) return null;
+        if (!(items instanceof List<?>)) return "";
+        List<?> list = (List<?>) items;
+        if (list.isEmpty()) return "";
         Object first = list.get(0);
-        return first instanceof Map<?, ?> item ? item.get("runId") : null;
+        if (!(first instanceof Map<?, ?>)) return "";
+        Object runId = ((Map<?, ?>) first).get("runId");
+        return runId == null ? "" : runId;
     }
 
     private Map<String, Object> safeReadiness() {
