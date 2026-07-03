@@ -38,6 +38,11 @@ public class AiBackendController {
         return aiBackendService.health();
     }
 
+    @GetMapping("/readiness")
+    public Map<String, Object> readiness() {
+        return aiBackendService.readiness();
+    }
+
     @GetMapping("/models")
     public Object models() {
         return aiBackendService.models();
