@@ -18,8 +18,7 @@ import reactor.core.Exceptions;
 
 @Component
 public class AiServiceClient implements AiServiceOperations {
-    private static final ParameterizedTypeReference<Map<String, Object>> MAP_RESPONSE =
-        new ParameterizedTypeReference<>() {};
+    private static final ParameterizedTypeReference<Map<String, Object>> MAP_RESPONSE = new ParameterizedTypeReference<>() {};
 
     private final WebClient aiWebClient;
     private final Duration timeout;
@@ -31,38 +30,27 @@ public class AiServiceClient implements AiServiceOperations {
 
     @Override
     public Map<String, Object> health() {
-        return execute(() -> aiWebClient.get()
-            .uri("/health")
-            .retrieve()
-            .bodyToMono(MAP_RESPONSE)
-            .block(timeout));
+        return getMap("/health");
+    }
+
+    @Override
+    public Map<String, Object> readiness() {
+        return getMap("/readiness");
     }
 
     @Override
     public Object models() {
-        return execute(() -> aiWebClient.get()
-            .uri("/models")
-            .retrieve()
-            .bodyToMono(Object.class)
-            .block(timeout));
+        return execute(() -> aiWebClient.get().uri("/models").retrieve().bodyToMono(Object.class).block(timeout));
     }
 
     @Override
     public Map<String, Object> verifyModels() {
-        return execute(() -> aiWebClient.get()
-            .uri("/models/verify")
-            .retrieve()
-            .bodyToMono(MAP_RESPONSE)
-            .block(timeout));
+        return getMap("/models/verify");
     }
 
     @Override
     public Map<String, Object> warmup() {
-        return execute(() -> aiWebClient.get()
-            .uri("/warmup")
-            .retrieve()
-            .bodyToMono(MAP_RESPONSE)
-            .block(timeout));
+        return getMap("/warmup");
     }
 
     @Override
@@ -78,20 +66,12 @@ public class AiServiceClient implements AiServiceOperations {
 
     @Override
     public Map<String, Object> getAgentReport(String runId) {
-        return execute(() -> aiWebClient.get()
-            .uri("/agent/report/{runId}", runId)
-            .retrieve()
-            .bodyToMono(MAP_RESPONSE)
-            .block(timeout));
+        return execute(() -> aiWebClient.get().uri("/agent/report/{runId}", runId).retrieve().bodyToMono(MAP_RESPONSE).block(timeout));
     }
 
     @Override
     public Map<String, Object> getAgentReportSummary(String runId) {
-        return execute(() -> aiWebClient.get()
-            .uri("/agent/report/{runId}/summary", runId)
-            .retrieve()
-            .bodyToMono(MAP_RESPONSE)
-            .block(timeout));
+        return execute(() -> aiWebClient.get().uri("/agent/report/{runId}/summary", runId).retrieve().bodyToMono(MAP_RESPONSE).block(timeout));
     }
 
     @Override
@@ -102,6 +82,10 @@ public class AiServiceClient implements AiServiceOperations {
             .retrieve()
             .bodyToMono(MAP_RESPONSE)
             .block(timeout));
+    }
+
+    private Map<String, Object> getMap(String path) {
+        return execute(() -> aiWebClient.get().uri(path).retrieve().bodyToMono(MAP_RESPONSE).block(timeout));
     }
 
     private PipelineRunRequestDto withTraceMetadata(PipelineRunRequestDto request) {
@@ -116,13 +100,7 @@ public class AiServiceClient implements AiServiceOperations {
         metadata.putIfAbsent("traceId", traceId);
         metadata.putIfAbsent("backendTraceId", traceId);
         metadata.putIfAbsent("correlationId", traceId);
-        return new PipelineRunRequestDto(
-            request.caseId(),
-            request.plane(),
-            request.modelKey(),
-            request.inputPath(),
-            metadata
-        );
+        return new PipelineRunRequestDto(request.caseId(), request.plane(), request.modelKey(), request.inputPath(), metadata);
     }
 
     private <T> T execute(Supplier<T> supplier) {
@@ -136,11 +114,7 @@ public class AiServiceClient implements AiServiceOperations {
     public ResponseStatusException translateException(RuntimeException ex) {
         Throwable unwrapped = Exceptions.unwrap(ex);
         if (unwrapped instanceof WebClientResponseException responseException) {
-            return new ResponseStatusException(
-                HttpStatus.BAD_GATEWAY,
-                "AI Module responded with status " + responseException.getStatusCode().value(),
-                responseException
-            );
+            return new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI Module responded with status " + responseException.getStatusCode().value(), responseException);
         }
         String message = unwrapped.getMessage() == null ? "unknown error" : compactMessage(unwrapped.getMessage());
         return new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI Module is not available: " + message, unwrapped);
