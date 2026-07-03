@@ -40,18 +40,11 @@ public class SystemDiagnosticsService {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("status", aiOk && dbOk ? "ok" : "degraded");
         result.put("checkedAt", Instant.now().toString());
-        result.put("backend", Map.of(
-            "available", true,
-            "status", "ok",
-            "service", "pfi-backend"
-        ));
+        result.put("backend", Map.of("available", true, "status", "ok", "service", "pfi-backend"));
         result.put("aiModule", aiModule);
         result.put("database", database);
         result.put("auth", authEnabled ? authService.diagnostics() : Map.of("enabled", false, "status", "disabled"));
-        result.put("persistence", Map.of(
-            "mode", persistenceMode,
-            "postgresEnabled", postgresReviewStoreService.enabled()
-        ));
+        result.put("persistence", Map.of("mode", persistenceMode, "postgresEnabled", postgresReviewStoreService.enabled()));
         result.put("readiness", aiModule.getOrDefault("readiness", readinessUnavailable("not_checked")));
         result.put("contract", aiModule.getOrDefault("contract", Map.of("status", "unavailable")));
         result.put("modelArtifacts", aiModule.getOrDefault("artifactSummary", Map.of("status", "unavailable")));
@@ -134,17 +127,29 @@ public class SystemDiagnosticsService {
 
     private Map<String, Object> safeEvidenceSummary() {
         try {
+            Map<String, Object> evidence = new LinkedHashMap<>(aiServiceClient.getEvaluationEvidence());
+            evidence.putIfAbsent("humanReviewRequired", true);
+            evidence.putIfAbsent("notClinicalDiagnosis", true);
+            return evidence;
+        } catch (RuntimeException ex) {
+            return localEvidenceFallback(compact(ex.getMessage()));
+        }
+    }
+
+    private Map<String, Object> localEvidenceFallback(String message) {
+        try {
             Map<String, Object> reports = aiServiceClient.getRecentAgentReports(20);
             Map<String, Object> result = new LinkedHashMap<>();
-            result.put("status", "evaluation_evidence_ready");
+            result.put("status", "evaluation_evidence_fallback");
             result.put("reportCount", reports.getOrDefault("count", 0));
             result.put("hasReports", AiReportEvidence.hasReports(reports));
             result.put("latestRunId", AiReportEvidence.latestRunId(reports));
+            result.put("message", message);
             result.put("humanReviewRequired", true);
             result.put("notClinicalDiagnosis", true);
             return result;
-        } catch (RuntimeException ex) {
-            return evidenceUnavailable(compact(ex.getMessage()));
+        } catch (RuntimeException ignored) {
+            return evidenceUnavailable(message);
         }
     }
 
@@ -176,10 +181,7 @@ public class SystemDiagnosticsService {
         try {
             return aiServiceClient.models();
         } catch (RuntimeException ex) {
-            return Map.of(
-                "status", "degraded",
-                "message", compact(ex.getMessage())
-            );
+            return Map.of("status", "degraded", "message", compact(ex.getMessage()));
         }
     }
 
