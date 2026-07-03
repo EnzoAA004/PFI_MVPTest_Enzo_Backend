@@ -19,6 +19,9 @@ class AiEvaluationControllerTest {
         mvc.perform(get("/api/ai/evaluation/contract"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.status").value("evaluation_contract_ready"))
+            .andExpect(jsonPath("$.metrics[0].key").value("dice"))
+            .andExpect(jsonPath("$.metrics[0].category").value("segmentation"))
+            .andExpect(jsonPath("$.requiredEvidence[0]").value("trace_id"))
             .andExpect(jsonPath("$.humanReviewRequired").value(true));
     }
 
