@@ -27,6 +27,7 @@ public class AiCompletionController {
             "status", "mvp_completion_ready",
             "completionPercent", Math.round(complete * 100.0 / 6.0),
             "items", List.of("backend", "ai_module", "traceability", "human_review", "readiness", "reports"),
+            "aiMvpCompletion", readiness.getOrDefault("mvpCompletion", Map.of()),
             "readiness", readiness,
             "reports", reports,
             "humanReviewRequired", true,
