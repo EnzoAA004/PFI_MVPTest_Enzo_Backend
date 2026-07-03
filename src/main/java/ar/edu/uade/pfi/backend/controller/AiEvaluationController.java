@@ -51,6 +51,21 @@ public class AiEvaluationController {
         );
     }
 
+    @GetMapping("/evidence")
+    public Map<String, Object> evidence() {
+        Map<String, Object> reports = safeReports();
+        return Map.of(
+            "status", "evaluation_evidence_ready",
+            "latestRunId", AiReportEvidence.latestRunId(reports),
+            "reportCount", reports.getOrDefault("count", 0),
+            "hasReports", AiReportEvidence.hasReports(reports),
+            "readiness", safeReadiness(),
+            "requiredEvidence", List.of("trace_id", "run_id", "model_artifact_hash", "pipeline_schema_hash", "professional_review"),
+            "humanReviewRequired", true,
+            "notClinicalDiagnosis", true
+        );
+    }
+
     private Map<String, Object> metric(String key, String category, String direction) {
         return Map.of("key", key, "category", category, "direction", direction, "required", true);
     }
