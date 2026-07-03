@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
 class SystemDiagnosticsServiceTest {
 
     @Test
-    void diagnosticsExposeAiContractFingerprintAndArtifactSummaryFromHealth() {
+    void diagnosticsExposeAiContractFingerprintArtifactSummaryAndReadinessFromHealth() {
         AiServiceOperations aiClient = aiClient(Map.of(
             "status", "ok",
             "defaultInferenceMode", "contract",
@@ -56,9 +56,16 @@ class SystemDiagnosticsServiceTest {
         assertEquals("sha256", modelArtifacts.get("hashAlgorithm"));
 
         @SuppressWarnings("unchecked")
+        Map<String, Object> readiness = (Map<String, Object>) diagnostics.get("readiness");
+        assertEquals("contract_ready", readiness.get("status"));
+        assertEquals(true, readiness.get("readyForDemo"));
+        assertEquals(false, readiness.get("readyForRealInference"));
+
+        @SuppressWarnings("unchecked")
         Map<String, Object> aiModule = (Map<String, Object>) diagnostics.get("aiModule");
         assertTrue(aiModule.containsKey("contract"));
         assertTrue(aiModule.containsKey("artifactSummary"));
+        assertTrue(aiModule.containsKey("readiness"));
     }
 
     private AiServiceOperations aiClient(Map<String, Object> healthResponse) {
