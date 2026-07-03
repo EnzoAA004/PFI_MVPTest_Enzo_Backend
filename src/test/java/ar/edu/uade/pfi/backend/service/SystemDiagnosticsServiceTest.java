@@ -67,6 +67,7 @@ class SystemDiagnosticsServiceTest {
             new Class<?>[] {AiServiceOperations.class},
             (proxy, method, args) -> switch (method.getName()) {
                 case "health" -> healthResponse;
+                case "readiness" -> Map.of("status", "contract_ready", "readyForDemo", true, "readyForRealInference", false);
                 case "models" -> Map.of("status", "ok");
                 case "verifyModels" -> Map.of("status", "degraded_contract_mode", "valid", false);
                 case "warmup" -> healthResponse;
