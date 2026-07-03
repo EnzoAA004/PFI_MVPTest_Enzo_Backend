@@ -53,6 +53,29 @@ public class AiBackendService {
         }
     }
 
+    public Map<String, Object> readiness() {
+        try {
+            Map<String, Object> response = normalizeForFrontend(aiServiceClient.readiness());
+            response.put("proxiedByBackend", true);
+            response.put("aiModuleAvailable", true);
+            response.put("degradedMode", false);
+            return response;
+        } catch (RuntimeException ex) {
+            return normalizeForFrontend(Map.ofEntries(
+                Map.entry("status", "ai_readiness_unavailable"),
+                Map.entry("service", "pfi-ai-module"),
+                Map.entry("readyForDemo", false),
+                Map.entry("readyForRealInference", false),
+                Map.entry("defaultInferenceMode", "contract"),
+                Map.entry("recommendedInferenceMode", "contract"),
+                Map.entry("proxiedByBackend", true),
+                Map.entry("aiModuleAvailable", false),
+                Map.entry("degradedMode", true),
+                Map.entry("message", ex.getMessage())
+            ));
+        }
+    }
+
     public Object models() {
         try {
             return ResponseNormalizer.normalizeObject(aiServiceClient.models());
