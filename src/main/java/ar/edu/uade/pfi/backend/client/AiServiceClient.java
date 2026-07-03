@@ -94,6 +94,11 @@ public class AiServiceClient implements AiServiceOperations {
         return getMap("/evaluation/evidence");
     }
 
+    @Override
+    public Map<String, Object> getMultiplanarContract() {
+        return getMap("/multiplanar/contract");
+    }
+
     private Map<String, Object> getMap(String path) {
         return execute(() -> aiWebClient.get().uri(path).retrieve().bodyToMono(MAP_RESPONSE).block(timeout));
     }
