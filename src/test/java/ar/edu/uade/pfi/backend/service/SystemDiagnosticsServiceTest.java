@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
 class SystemDiagnosticsServiceTest {
 
     @Test
-    void diagnosticsExposeAiContractFingerprintArtifactSummaryAndReadinessFromHealth() {
+    void diagnosticsExposeAiContractFingerprintArtifactSummaryReadinessAndEvidence() {
         AiServiceOperations aiClient = aiClient(Map.of(
             "status", "ok",
             "defaultInferenceMode", "contract",
@@ -62,10 +62,17 @@ class SystemDiagnosticsServiceTest {
         assertEquals(false, readiness.get("readyForRealInference"));
 
         @SuppressWarnings("unchecked")
+        Map<String, Object> evidence = (Map<String, Object>) diagnostics.get("evaluationEvidence");
+        assertEquals("evaluation_evidence_ready", evidence.get("status"));
+        assertEquals(1, evidence.get("reportCount"));
+        assertEquals("run-test", evidence.get("latestRunId"));
+
+        @SuppressWarnings("unchecked")
         Map<String, Object> aiModule = (Map<String, Object>) diagnostics.get("aiModule");
         assertTrue(aiModule.containsKey("contract"));
         assertTrue(aiModule.containsKey("artifactSummary"));
         assertTrue(aiModule.containsKey("readiness"));
+        assertTrue(aiModule.containsKey("evaluationEvidence"));
     }
 
     private AiServiceOperations aiClient(Map<String, Object> healthResponse) {
@@ -82,7 +89,7 @@ class SystemDiagnosticsServiceTest {
                 case "runPipeline" -> Map.of("runId", "run-test");
                 case "getAgentReport" -> Map.of("runId", args == null ? "run-test" : String.valueOf(args[0]));
                 case "getAgentReportSummary" -> Map.of("runId", args == null ? "run-test" : String.valueOf(args[0]), "summaryOnly", true);
-                case "getRecentAgentReports" -> Map.of("status", "ok", "count", 0, "items", List.of());
+                case "getRecentAgentReports" -> Map.of("status", "ok", "count", 1, "items", List.of(Map.of("runId", "run-test")));
                 default -> throw new UnsupportedOperationException(method.getName());
             }
         );
