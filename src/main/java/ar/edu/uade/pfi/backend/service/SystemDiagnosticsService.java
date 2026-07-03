@@ -2,8 +2,10 @@ package ar.edu.uade.pfi.backend.service;
 
 import ar.edu.uade.pfi.backend.auth.AuthService;
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
+import ar.edu.uade.pfi.backend.util.AiReportEvidence;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -53,6 +55,7 @@ public class SystemDiagnosticsService {
         result.put("readiness", aiModule.getOrDefault("readiness", readinessUnavailable("not_checked")));
         result.put("contract", aiModule.getOrDefault("contract", Map.of("status", "unavailable")));
         result.put("modelArtifacts", aiModule.getOrDefault("artifactSummary", Map.of("status", "unavailable")));
+        result.put("evaluationEvidence", aiModule.getOrDefault("evaluationEvidence", evidenceUnavailable("not_checked")));
         result.put("humanReviewRequired", true);
         result.put("notClinicalDiagnosis", true);
         return result;
@@ -62,11 +65,13 @@ public class SystemDiagnosticsService {
         try {
             Map<String, Object> response = aiServiceClient.warmup();
             Map<String, Object> readiness = safeReadiness();
+            Map<String, Object> evidence = safeEvidenceSummary();
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("status", "ok");
             result.put("checkedAt", Instant.now().toString());
             result.put("aiModule", response);
             result.put("readiness", readiness);
+            result.put("evaluationEvidence", evidence);
             result.put("artifactSummary", response.get("artifactSummary"));
             result.put("modelArtifacts", response.getOrDefault("artifactSummary", Map.of("status", "unavailable")));
             result.put("contract", response.getOrDefault("contract", Map.of("status", "unavailable")));
@@ -79,6 +84,7 @@ public class SystemDiagnosticsService {
                 "checkedAt", Instant.now().toString(),
                 "aiModule", Map.of("available", false, "message", compact(ex.getMessage())),
                 "readiness", readinessUnavailable(compact(ex.getMessage())),
+                "evaluationEvidence", evidenceUnavailable(compact(ex.getMessage())),
                 "contract", Map.of("status", "unavailable"),
                 "modelArtifacts", Map.of("status", "unavailable"),
                 "message", "AI Module warmup failed"
@@ -90,6 +96,7 @@ public class SystemDiagnosticsService {
         try {
             Map<String, Object> response = aiServiceClient.health();
             Map<String, Object> readiness = safeReadiness();
+            Map<String, Object> evidence = safeEvidenceSummary();
             Object models = safeModels();
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("available", true);
@@ -97,6 +104,7 @@ public class SystemDiagnosticsService {
             result.put("service", "pfi-ai-module");
             result.put("defaultInferenceMode", response.get("defaultInferenceMode"));
             result.put("readiness", readiness);
+            result.put("evaluationEvidence", evidence);
             result.put("artifactSummary", response.get("artifactSummary"));
             result.put("contract", response.getOrDefault("contract", Map.of("status", "unavailable")));
             result.put("models", models);
@@ -108,6 +116,7 @@ public class SystemDiagnosticsService {
                 "status", "degraded",
                 "service", "pfi-ai-module",
                 "readiness", readinessUnavailable(compact(ex.getMessage())),
+                "evaluationEvidence", evidenceUnavailable(compact(ex.getMessage())),
                 "contract", Map.of("status", "unavailable"),
                 "artifactSummary", Map.of("status", "unavailable"),
                 "message", compact(ex.getMessage())
@@ -123,12 +132,40 @@ public class SystemDiagnosticsService {
         }
     }
 
+    private Map<String, Object> safeEvidenceSummary() {
+        try {
+            Map<String, Object> reports = aiServiceClient.getRecentAgentReports(20);
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("status", "evaluation_evidence_ready");
+            result.put("reportCount", reports.getOrDefault("count", 0));
+            result.put("hasReports", AiReportEvidence.hasReports(reports));
+            result.put("latestRunId", AiReportEvidence.latestRunId(reports));
+            result.put("humanReviewRequired", true);
+            result.put("notClinicalDiagnosis", true);
+            return result;
+        } catch (RuntimeException ex) {
+            return evidenceUnavailable(compact(ex.getMessage()));
+        }
+    }
+
     private Map<String, Object> readinessUnavailable(String message) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("status", "unavailable");
         result.put("readyForDemo", false);
         result.put("readyForRealInference", false);
         result.put("recommendedInferenceMode", "contract");
+        result.put("message", message);
+        result.put("humanReviewRequired", true);
+        result.put("notClinicalDiagnosis", true);
+        return result;
+    }
+
+    private Map<String, Object> evidenceUnavailable(String message) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("status", "unavailable");
+        result.put("reportCount", 0);
+        result.put("hasReports", false);
+        result.put("latestRunId", "");
         result.put("message", message);
         result.put("humanReviewRequired", true);
         result.put("notClinicalDiagnosis", true);
