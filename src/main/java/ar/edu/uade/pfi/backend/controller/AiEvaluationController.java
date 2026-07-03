@@ -21,7 +21,14 @@ public class AiEvaluationController {
         return Map.of(
             "status", "evaluation_contract_ready",
             "schemaVersion", "evaluation-contract-v1",
-            "metrics", List.of("dice", "iou", "hausdorff95", "measurement_error", "review_agreement"),
+            "metrics", List.of(
+                metric("dice", "segmentation", "higher_is_better"),
+                metric("iou", "segmentation", "higher_is_better"),
+                metric("hausdorff95", "boundary", "lower_is_better"),
+                metric("measurement_error", "measurement", "lower_is_better"),
+                metric("review_agreement", "professional_review", "higher_is_better")
+            ),
+            "requiredEvidence", List.of("trace_id", "run_id", "model_artifact_hash", "pipeline_schema_hash", "professional_review"),
             "readiness", safeReadiness(),
             "humanReviewRequired", true,
             "notClinicalDiagnosis", true
@@ -39,6 +46,10 @@ public class AiEvaluationController {
             "humanReviewRequired", true,
             "notClinicalDiagnosis", true
         );
+    }
+
+    private Map<String, Object> metric(String key, String category, String direction) {
+        return Map.of("key", key, "category", category, "direction", direction, "required", true);
     }
 
     private Map<String, Object> safeReadiness() {
