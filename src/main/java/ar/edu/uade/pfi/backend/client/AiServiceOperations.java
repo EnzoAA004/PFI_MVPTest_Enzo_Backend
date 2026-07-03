@@ -14,6 +14,10 @@ public interface AiServiceOperations {
 
     Map<String, Object> verifyModels();
 
+    default Map<String, Object> syncModels(boolean force) {
+        return Map.of("status", "models_sync_unavailable", "force", force, "humanReviewRequired", true, "notClinicalDiagnosis", true);
+    }
+
     Map<String, Object> warmup();
 
     Map<String, Object> runPipeline(PipelineRunRequestDto request);
