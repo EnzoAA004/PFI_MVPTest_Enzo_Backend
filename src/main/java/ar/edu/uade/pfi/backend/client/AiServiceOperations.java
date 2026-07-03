@@ -6,7 +6,9 @@ import java.util.Map;
 public interface AiServiceOperations {
     Map<String, Object> health();
 
-    Map<String, Object> readiness();
+    default Map<String, Object> readiness() {
+        return health();
+    }
 
     Object models();
 
