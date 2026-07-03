@@ -1,6 +1,7 @@
 package ar.edu.uade.pfi.backend.controller;
 
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
+import ar.edu.uade.pfi.backend.util.AiReportEvidence;
 import java.util.List;
 import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -41,8 +42,8 @@ public class AiEvaluationController {
         return Map.of(
             "status", "evaluation_summary_ready",
             "reportCount", reports.getOrDefault("count", 0),
-            "hasReports", hasReports(reports),
-            "latestRunId", latestRunId(reports),
+            "hasReports", AiReportEvidence.hasReports(reports),
+            "latestRunId", AiReportEvidence.latestRunId(reports),
             "reports", reports,
             "readiness", safeReadiness(),
             "humanReviewRequired", true,
@@ -52,26 +53,6 @@ public class AiEvaluationController {
 
     private Map<String, Object> metric(String key, String category, String direction) {
         return Map.of("key", key, "category", category, "direction", direction, "required", true);
-    }
-
-    private boolean hasReports(Map<String, Object> reports) {
-        Object count = reports.get("count");
-        try {
-            return Integer.parseInt(String.valueOf(count)) > 0;
-        } catch (RuntimeException ex) {
-            return false;
-        }
-    }
-
-    private Object latestRunId(Map<String, Object> reports) {
-        Object items = reports.get("items");
-        if (!(items instanceof List<?>)) return "";
-        List<?> list = (List<?>) items;
-        if (list.isEmpty()) return "";
-        Object first = list.get(0);
-        if (!(first instanceof Map<?, ?>)) return "";
-        Object runId = ((Map<?, ?>) first).get("runId");
-        return runId == null ? "" : runId;
     }
 
     private Map<String, Object> safeReadiness() {
