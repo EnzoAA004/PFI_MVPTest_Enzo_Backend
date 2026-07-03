@@ -29,6 +29,7 @@ public class AiCompletionController {
             "items", List.of("backend", "ai_module", "traceability", "human_review", "readiness", "reports"),
             "aiMvpCompletion", readiness.getOrDefault("mvpCompletion", Map.of()),
             "roadmap", roadmapSummary(),
+            "latestRunId", latestRunId(reports),
             "readiness", readiness,
             "reports", reports,
             "humanReviewRequired", true,
@@ -43,6 +44,17 @@ public class AiCompletionController {
             "pending", List.of("real_model_artifact", "quantitative_dataset_evaluation", "professional_validation_round"),
             "acceptanceCriteria", List.of("contract_schema_valid", "professional_review_required", "not_clinical_diagnosis", "demo_ready", "trace_id_available")
         );
+    }
+
+    private String latestRunId(Map<String, Object> reports) {
+        Object items = reports.get("items");
+        if (!(items instanceof List<?>)) return "";
+        List<?> list = (List<?>) items;
+        if (list.isEmpty()) return "";
+        Object first = list.get(0);
+        if (!(first instanceof Map<?, ?>)) return "";
+        Object runId = ((Map<?, ?>) first).get("runId");
+        return runId == null ? "" : String.valueOf(runId);
     }
 
     private Map<String, Object> safeReadiness() {
