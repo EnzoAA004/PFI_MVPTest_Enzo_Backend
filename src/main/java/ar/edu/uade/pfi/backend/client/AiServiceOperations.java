@@ -31,4 +31,8 @@ public interface AiServiceOperations {
     default Map<String, Object> getEvaluationEvidence() {
         return getEvaluationSummary();
     }
+
+    default Map<String, Object> getMultiplanarContract() {
+        return Map.of("status", "multiplanar_unavailable", "humanReviewRequired", true, "notClinicalDiagnosis", true);
+    }
 }
