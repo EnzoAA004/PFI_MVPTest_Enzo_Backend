@@ -32,7 +32,9 @@ class AiEvaluationControllerTest {
         mvc.perform(get("/api/ai/evaluation/summary"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.status").value("evaluation_summary_ready"))
-            .andExpect(jsonPath("$.reportCount").value(1));
+            .andExpect(jsonPath("$.reportCount").value(1))
+            .andExpect(jsonPath("$.hasReports").value(true))
+            .andExpect(jsonPath("$.latestRunId").value("run-test"));
     }
 
     static class FakeAi implements AiServiceOperations {
