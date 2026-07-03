@@ -28,10 +28,19 @@ public class AiCompletionController {
             "completionPercent", Math.round(complete * 100.0 / 6.0),
             "items", List.of("backend", "ai_module", "traceability", "human_review", "readiness", "reports"),
             "aiMvpCompletion", readiness.getOrDefault("mvpCompletion", Map.of()),
+            "roadmap", roadmapSummary(),
             "readiness", readiness,
             "reports", reports,
             "humanReviewRequired", true,
             "notClinicalDiagnosis", true
+        );
+    }
+
+    private Map<String, Object> roadmapSummary() {
+        return Map.of(
+            "currentMode", "contract",
+            "completed", List.of("traceability", "readiness", "artifact_verification", "report_index", "human_review"),
+            "pending", List.of("real_model_artifact", "quantitative_dataset_evaluation", "professional_validation_round")
         );
     }
 
