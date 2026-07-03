@@ -84,6 +84,16 @@ public class AiServiceClient implements AiServiceOperations {
             .block(timeout));
     }
 
+    @Override
+    public Map<String, Object> getEvaluationSummary() {
+        return getMap("/evaluation/summary");
+    }
+
+    @Override
+    public Map<String, Object> getEvaluationEvidence() {
+        return getMap("/evaluation/evidence");
+    }
+
     private Map<String, Object> getMap(String path) {
         return execute(() -> aiWebClient.get().uri(path).retrieve().bodyToMono(MAP_RESPONSE).block(timeout));
     }
