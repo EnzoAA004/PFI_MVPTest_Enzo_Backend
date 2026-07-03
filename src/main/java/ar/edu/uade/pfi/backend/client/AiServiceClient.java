@@ -49,6 +49,15 @@ public class AiServiceClient implements AiServiceOperations {
     }
 
     @Override
+    public Map<String, Object> syncModels(boolean force) {
+        return execute(() -> aiWebClient.post()
+            .uri(uriBuilder -> uriBuilder.path("/models/sync").queryParam("force", force).build())
+            .retrieve()
+            .bodyToMono(MAP_RESPONSE)
+            .block(timeout));
+    }
+
+    @Override
     public Map<String, Object> warmup() {
         return getMap("/warmup");
     }
