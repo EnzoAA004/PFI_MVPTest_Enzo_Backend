@@ -16,6 +16,7 @@ public class AiRoadmapController {
             "currentMode", "contract",
             "completed", List.of("traceability", "readiness", "artifact_verification", "report_index", "human_review"),
             "pending", List.of("real_model_artifact", "quantitative_dataset_evaluation", "professional_validation_round"),
+            "acceptanceCriteria", List.of("contract_schema_valid", "professional_review_required", "not_clinical_diagnosis", "demo_ready", "trace_id_available"),
             "humanReviewRequired", true,
             "notClinicalDiagnosis", true
         );
