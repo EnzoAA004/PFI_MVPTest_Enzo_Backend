@@ -1,8 +1,10 @@
 package ar.edu.uade.pfi.backend.client;
 
+import ar.edu.uade.pfi.backend.dto.AiInputResponseDto;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunRequestDto;
 import ar.edu.uade.pfi.backend.dto.PipelineRunRequestDto;
 import java.util.Map;
+import org.springframework.web.multipart.MultipartFile;
 
 public interface AiServiceOperations {
     Map<String, Object> health();
@@ -22,6 +24,10 @@ public interface AiServiceOperations {
     Map<String, Object> warmup();
 
     Map<String, Object> runPipeline(PipelineRunRequestDto request);
+
+    default AiInputResponseDto uploadInput(MultipartFile file, String caseId, String plane) {
+        throw new UnsupportedOperationException("input_upload_unavailable");
+    }
 
     default Map<String, Object> runMultiplanar(MultiplanarRunRequestDto request) {
         return Map.of("status", "multiplanar_run_unavailable", "caseId", request.caseId(), "humanReviewRequired", true, "notClinicalDiagnosis", true);

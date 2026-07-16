@@ -79,6 +79,30 @@ Response esperada:
 }
 ```
 
+## POST /api/ai/inputs
+
+Reenvia un archivo de input al `POST /inputs` multipart del AI Module.
+
+Request multipart:
+
+- `file`: archivo `.npy`, `.png`, `.jpg`, `.jpeg`, `.bmp`, `.tif`, `.tiff`, `.mha`, `.mhd` o `.dcm`
+- `caseId`: identificador del caso
+- `plane`: `sagittal` o `axial`
+
+Response esperada:
+
+```json
+{
+  "inputId": "input-001",
+  "caseId": "case-001",
+  "plane": "sagittal",
+  "format": "npy",
+  "size": 123456
+}
+```
+
+El backend valida extension, plano y tamano antes de reenviar. La respuesta no expone paths internos.
+
 ## GET /api/ai/agent/report/{runId}
 
 Consulta `GET /agent/report/{runId}` del AI Module y agrega la revision local.

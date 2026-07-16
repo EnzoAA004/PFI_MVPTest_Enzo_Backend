@@ -2,6 +2,7 @@ package ar.edu.uade.pfi.backend.client;
 
 import ar.edu.uade.pfi.backend.config.AiServiceProperties;
 import ar.edu.uade.pfi.backend.config.TraceIdFilter;
+import ar.edu.uade.pfi.backend.dto.AiInputResponseDto;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunRequestDto;
 import ar.edu.uade.pfi.backend.dto.PipelineRunRequestDto;
 import java.time.Duration;
@@ -11,9 +12,12 @@ import java.util.function.Supplier;
 import org.slf4j.MDC;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.Exceptions;
 
@@ -75,6 +79,22 @@ public class AiServiceClient implements AiServiceOperations {
             .bodyValue(tracedRequest)
             .retrieve()
             .bodyToMono(MAP_RESPONSE)
+            .block(timeout));
+    }
+
+    @Override
+    public AiInputResponseDto uploadInput(MultipartFile file, String caseId, String plane) {
+        MultipartBodyBuilder body = new MultipartBodyBuilder();
+        body.part("file", file.getResource())
+            .filename(file.getOriginalFilename() == null ? "input" : file.getOriginalFilename());
+        body.part("caseId", caseId);
+        body.part("plane", plane);
+        return execute(() -> aiWebClient.post()
+            .uri("/inputs")
+            .contentType(MediaType.MULTIPART_FORM_DATA)
+            .bodyValue(body.build())
+            .retrieve()
+            .bodyToMono(AiInputResponseDto.class)
             .block(timeout));
     }
 

@@ -1,6 +1,7 @@
 package ar.edu.uade.pfi.backend.service;
 
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
+import ar.edu.uade.pfi.backend.dto.AiInputResponseDto;
 import ar.edu.uade.pfi.backend.dto.AuditEventDto;
 import ar.edu.uade.pfi.backend.dto.AuditEventRequestDto;
 import ar.edu.uade.pfi.backend.dto.MeasurementBatchDto;
@@ -18,10 +19,15 @@ import java.util.Map;
 import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class AiBackendService {
+    static final long MAX_INPUT_UPLOAD_BYTES = 200L * 1024L * 1024L;
+    private static final Set<String> ALLOWED_INPUT_EXTENSIONS = Set.of("npy", "png", "jpg", "jpeg", "bmp", "tif", "tiff", "mha", "mhd", "dcm");
+    private static final Set<String> ALLOWED_INPUT_PLANES = Set.of("sagittal", "axial");
     private static final Set<String> VALID_REVIEW_STATUSES = Set.of("pendiente", "aceptado", "observado", "descartado");
     private static final Set<String> FINAL_REVIEW_STATUSES = Set.of("aceptado", "observado", "descartado");
     private final AiServiceOperations aiServiceClient;
@@ -167,6 +173,13 @@ public class AiBackendService {
         }
     }
 
+    public AiInputResponseDto uploadInput(MultipartFile file, String caseId, String plane) {
+        String normalizedCaseId = trimmed(caseId);
+        String normalizedPlane = normalized(plane);
+        validateInputUpload(file, normalizedCaseId, normalizedPlane);
+        return aiServiceClient.uploadInput(file, normalizedCaseId, normalizedPlane);
+    }
+
     public Map<String, Object> getAgentReport(String runId) {
         try {
             Map<String, Object> response = normalizeForFrontend(aiServiceClient.getAgentReport(runId));
@@ -273,6 +286,31 @@ public class AiBackendService {
             throw badRequest("Los estados observado o descartado requieren una nota profesional descriptiva.");
         }
         return new ReviewUpdateRequestDto(status, notes, reviewer);
+    }
+
+    private void validateInputUpload(MultipartFile file, String caseId, String plane) {
+        if (file == null || file.isEmpty()) {
+            throw badRequest("El archivo de input es obligatorio y no puede estar vacio.");
+        }
+        if (caseId.isBlank()) {
+            throw badRequest("caseId es obligatorio.");
+        }
+        if (!ALLOWED_INPUT_PLANES.contains(plane)) {
+            throw badRequest("Plano invalido. Valores permitidos: sagittal, axial.");
+        }
+        if (file.getSize() > MAX_INPUT_UPLOAD_BYTES) {
+            throw badRequest("El archivo supera el tamano maximo permitido por el backend.");
+        }
+        String extension = inputExtension(file.getOriginalFilename());
+        if (!ALLOWED_INPUT_EXTENSIONS.contains(extension)) {
+            throw badRequest("Formato de input invalido. Extensiones permitidas: .npy,.png,.jpg,.jpeg,.bmp,.tif,.tiff,.mha,.mhd,.dcm.");
+        }
+    }
+
+    private String inputExtension(String originalFilename) {
+        String filename = StringUtils.getFilename(originalFilename == null ? "" : originalFilename);
+        int dotIndex = filename == null ? -1 : filename.lastIndexOf('.');
+        return dotIndex < 0 ? "" : filename.substring(dotIndex + 1).toLowerCase(Locale.ROOT);
     }
 
     private ResponseStatusException badRequest(String message) {
