@@ -1,7 +1,9 @@
 package ar.edu.uade.pfi.backend.repository;
 
 import ar.edu.uade.pfi.backend.domain.InputResource;
+import ar.edu.uade.pfi.backend.domain.MeasurementCorrection;
 import ar.edu.uade.pfi.backend.domain.RunArtifact;
+import ar.edu.uade.pfi.backend.domain.RunReview;
 import ar.edu.uade.pfi.backend.domain.Study;
 import ar.edu.uade.pfi.backend.domain.StudyRun;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -207,8 +209,74 @@ public class PostgresStudyRepository implements StudyRepository {
         }
     }
 
+    @Override
+    public RunReview saveReview(String multiplanarRunId, String reviewStatus, String reviewer, Instant reviewedAt, String comments, List<MeasurementCorrection> corrections) {
+        try (Connection connection = connection()) {
+            connection.setAutoCommit(false);
+            StudyRun run;
+            try {
+                try (PreparedStatement statement = connection.prepareStatement("""
+                    UPDATE domain_study_runs
+                    SET review_status = ?, reviewer = ?, reviewed_at = ?, comments = ?, updated_at = ?
+                    WHERE multiplanar_run_id = ?
+                    """)) {
+                    statement.setString(1, reviewStatus);
+                    statement.setString(2, reviewer);
+                    statement.setTimestamp(3, Timestamp.from(reviewedAt));
+                    statement.setString(4, comments);
+                    statement.setTimestamp(5, Timestamp.from(reviewedAt));
+                    statement.setString(6, multiplanarRunId);
+                    if (statement.executeUpdate() == 0) {
+                        throw new IllegalArgumentException("run_not_found");
+                    }
+                }
+                run = findRun(connection, "multiplanar_run_id", multiplanarRunId).orElseThrow();
+                replaceCorrections(connection, run.id(), corrections);
+                connection.commit();
+            } catch (Exception ex) {
+                connection.rollback();
+                throw ex;
+            } finally {
+                connection.setAutoCommit(true);
+            }
+            return new RunReview(multiplanarRunId, run.traceId(), reviewStatus, reviewer, reviewedAt, comments, findCorrections(connection, run.id()));
+        } catch (IllegalArgumentException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new IllegalStateException("Could not save run review", ex);
+        }
+    }
+
+    @Override
+    public Optional<RunReview> findReviewByMultiplanarRunId(String multiplanarRunId) {
+        try (Connection connection = connection()) {
+            Optional<StudyRun> run = findRun(connection, "multiplanar_run_id", multiplanarRunId);
+            if (run.isEmpty()) return Optional.empty();
+            StudyRun value = run.get();
+            return Optional.of(new RunReview(
+                value.multiplanarRunId(),
+                value.traceId(),
+                value.reviewStatus(),
+                value.reviewer(),
+                value.reviewedAt(),
+                value.comments(),
+                findCorrections(connection, value.id())
+            ));
+        } catch (Exception ex) {
+            throw new IllegalStateException("Could not find run review", ex);
+        }
+    }
+
     private Optional<StudyRun> findRun(String column, String value) {
-        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+        try (Connection connection = connection()) {
+            return findRun(connection, column, value);
+        } catch (Exception ex) {
+            throw new IllegalStateException("Could not find study run", ex);
+        }
+    }
+
+    private Optional<StudyRun> findRun(Connection connection, String column, String value) throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement("""
             SELECT id, study_id, multiplanar_run_id, trace_id, requested_inference_mode, effective_inference_mode,
                    sagittal_model_key, axial_model_key, sagittal_artifact_hash, axial_artifact_hash,
                    sagittal_run_id, axial_run_id, assets, metrics_snapshot, status,
@@ -220,8 +288,56 @@ public class PostgresStudyRepository implements StudyRepository {
                 if (!rs.next()) return Optional.empty();
                 return Optional.of(readRun(connection, rs));
             }
-        } catch (Exception ex) {
-            throw new IllegalStateException("Could not find study run", ex);
+        }
+    }
+
+    private void replaceCorrections(Connection connection, String studyRunId, List<MeasurementCorrection> corrections) throws Exception {
+        try (PreparedStatement delete = connection.prepareStatement("DELETE FROM domain_review_corrections WHERE study_run_id = ?::uuid")) {
+            delete.setString(1, studyRunId);
+            delete.executeUpdate();
+        }
+        for (MeasurementCorrection correction : corrections) {
+            try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO domain_review_corrections(id, study_run_id, measurement_id, label, before_value, after_value, comment, created_at)
+                VALUES (?::uuid, ?::uuid, ?, ?, ?::jsonb, ?::jsonb, ?, ?)
+                """)) {
+                statement.setString(1, correction.id());
+                statement.setString(2, studyRunId);
+                statement.setString(3, correction.measurementId());
+                statement.setString(4, correction.label());
+                statement.setString(5, objectMapper.writeValueAsString(correction.beforeValue()));
+                statement.setString(6, objectMapper.writeValueAsString(correction.afterValue()));
+                statement.setString(7, correction.comment());
+                statement.setTimestamp(8, Timestamp.from(correction.createdAt()));
+                statement.executeUpdate();
+            }
+        }
+    }
+
+    private List<MeasurementCorrection> findCorrections(Connection connection, String studyRunId) throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement("""
+            SELECT id, study_run_id, measurement_id, label, before_value, after_value, comment, created_at
+            FROM domain_review_corrections
+            WHERE study_run_id = ?::uuid
+            ORDER BY created_at, measurement_id
+            """)) {
+            statement.setString(1, studyRunId);
+            try (ResultSet rs = statement.executeQuery()) {
+                List<MeasurementCorrection> corrections = new ArrayList<>();
+                while (rs.next()) {
+                    corrections.add(new MeasurementCorrection(
+                        rs.getObject("id", UUID.class).toString(),
+                        rs.getObject("study_run_id", UUID.class).toString(),
+                        rs.getString("measurement_id"),
+                        rs.getString("label"),
+                        readJsonMap(rs.getString("before_value")),
+                        readJsonMap(rs.getString("after_value")),
+                        rs.getString("comment"),
+                        rs.getTimestamp("created_at").toInstant()
+                    ));
+                }
+                return corrections;
+            }
         }
     }
 

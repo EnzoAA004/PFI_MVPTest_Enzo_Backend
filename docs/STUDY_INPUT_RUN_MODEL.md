@@ -41,7 +41,8 @@ Testcontainers PostgreSQL is the acceptance gate for the real persistence path. 
 - `assets`: metadata/asset refs only; no image, mask, or model blobs.
 - `metricsSnapshot`: JSON quality/confidence snapshot captured for the run.
 - `artifacts`: generated output refs by `runId`, `plane`, and `assetName`; no blobs.
-- `reviewStatus`, `reviewer`, `reviewedAt`, `comments`: professional review state columns, without introducing review workflow in this ticket.
+- `reviewStatus`, `reviewer`, `reviewedAt`, `comments`: professional review state columns. Valid statuses are `pending`, `accepted`, `observed`, `rejected`, and `edited`.
+- `MeasurementCorrection`: minimal review correction snapshot with `measurementId`, `label`, `beforeValue`, `afterValue`, `comment`, and `createdAt`. Full measurement versioning remains scoped to BE-008.
 - `status`, `createdAt`, `updatedAt`: workflow state and timestamps.
 
 ## ERD Notes For DOC-002
@@ -55,3 +56,13 @@ Testcontainers PostgreSQL is the acceptance gate for the real persistence path. 
 - Applied files are tracked in `schema_migrations(version, applied_at)`.
 - Tests use Testcontainers PostgreSQL and assert that the BE-005b migration is applied before persistence checks.
 - No binary image, mask, checkpoint, or clinical output blobs are stored in database tables.
+
+## Multiplanar Run Persistence Flow
+
+BE-006 persists successful `POST /api/ai/multiplanar/run` responses after the AI Module returns the frozen multiplanar DTO and before the backend returns it to the frontend.
+
+- `Study` is found or created by de-identified `caseId`.
+- `InputResource` rows are registered from `sagittalInputId` and `axialInputId`.
+- `StudyRun` stores `multiplanarRunId`, `traceId`, requested/effective inference modes, model keys, checkpoint/artifact hashes, child run ids, asset refs, metrics snapshot, and initial review state.
+- `RunArtifact` rows store refs by `runId`, `plane`, and `assetName`; paths are normalized to basenames and no blobs are stored.
+- If the AI Module call fails or does not return a valid run id, the backend does not persist a fake successful run. Error persistence can be added later with an explicit failed-run contract.

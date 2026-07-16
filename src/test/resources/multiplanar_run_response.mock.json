@@ -9,6 +9,10 @@
       "modelKey": "sagittal_spider",
       "status": "completed",
       "effectiveInferenceMode": "real_baseline",
+      "modelArtifact": {
+        "artifactHash": "sha256:sagittal-checkpoint",
+        "checkpoint": "sagittal_spider.pt"
+      },
       "findings": [
         {
           "label": "canal_lumbar",
@@ -53,6 +57,10 @@
       "modelKey": "axial_t2_alkafri",
       "status": "completed",
       "effectiveInferenceMode": "real_baseline",
+      "modelArtifact": {
+        "artifactHash": "sha256:axial-checkpoint",
+        "checkpoint": "axial_t2_alkafri.pt"
+      },
       "findings": [
         {
           "label": "estenosis_receso_lateral",

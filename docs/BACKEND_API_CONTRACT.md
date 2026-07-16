@@ -254,3 +254,80 @@ Response:
   "updatedAt": "2026-06-30T00:00:00Z"
 }
 ```
+
+## POST/PUT /api/ai/runs/{multiplanarRunId}/review
+
+Registra o actualiza la revision profesional persistida de una corrida multiplanar. El run debe existir previamente en la persistencia BE-005b/BE-006.
+
+Enum final de `reviewStatus`:
+
+- `pending`: estado inicial del run persistido.
+- `accepted`: aceptado por el profesional.
+- `observed`: observado por el profesional; equivale al texto de producto "observado".
+- `rejected`: rechazado por el profesional.
+- `edited`: aceptado con ediciones/correcciones registradas.
+
+Request:
+
+```json
+{
+  "reviewStatus": "observed",
+  "reviewer": "dra-demo",
+  "comments": "Medicion observada para ajuste academico.",
+  "corrections": [
+    {
+      "measurementId": "canalAreaMm2",
+      "label": "Area del canal",
+      "beforeValue": {
+        "value": 82.4,
+        "unit": "mm2"
+      },
+      "afterValue": {
+        "value": 85.1,
+        "unit": "mm2"
+      },
+      "comment": "Ajuste manual por borde parcial."
+    }
+  ]
+}
+```
+
+Response:
+
+```json
+{
+  "multiplanarRunId": "multi-001",
+  "traceId": "trace-001",
+  "reviewStatus": "observed",
+  "reviewer": "dra-demo",
+  "reviewedAt": "2026-07-16T12:00:00Z",
+  "comments": "Medicion observada para ajuste academico.",
+  "corrections": [
+    {
+      "measurementId": "canalAreaMm2",
+      "label": "Area del canal",
+      "beforeValue": {
+        "value": 82.4,
+        "unit": "mm2"
+      },
+      "afterValue": {
+        "value": 85.1,
+        "unit": "mm2"
+      },
+      "comment": "Ajuste manual por borde parcial."
+    }
+  ]
+}
+```
+
+Reglas:
+
+- `404` si `multiplanarRunId` no existe.
+- `400` si `reviewStatus` no pertenece al enum final.
+- `400` si `reviewer` esta vacio.
+- `reviewedAt` lo asigna el servidor.
+- Las correcciones guardan un snapshot minimo `beforeValue`/`afterValue`; el versionado completo de mediciones queda para BE-008.
+
+## GET /api/ai/runs/{multiplanarRunId}/review
+
+Consulta la revision profesional persistida actual de una corrida multiplanar. Devuelve el mismo shape de response que `POST/PUT`.

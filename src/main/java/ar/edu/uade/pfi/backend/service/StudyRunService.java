@@ -107,9 +107,55 @@ public class StudyRunService {
         Instant reviewedAt,
         String comments
     ) {
+        return createRunWithId(
+            UUID.randomUUID().toString(),
+            study,
+            multiplanarRunId,
+            traceId,
+            requestedInferenceMode,
+            effectiveInferenceMode,
+            sagittalModelKey,
+            axialModelKey,
+            sagittalArtifactHash,
+            axialArtifactHash,
+            sagittalRunId,
+            axialRunId,
+            assets,
+            metricsSnapshot,
+            artifacts,
+            status,
+            reviewStatus,
+            reviewer,
+            reviewedAt,
+            comments
+        );
+    }
+
+    public StudyRun createRunWithId(
+        String id,
+        Study study,
+        String multiplanarRunId,
+        String traceId,
+        String requestedInferenceMode,
+        String effectiveInferenceMode,
+        String sagittalModelKey,
+        String axialModelKey,
+        String sagittalArtifactHash,
+        String axialArtifactHash,
+        String sagittalRunId,
+        String axialRunId,
+        Map<String, Object> assets,
+        Map<String, Object> metricsSnapshot,
+        List<RunArtifact> artifacts,
+        String status,
+        String reviewStatus,
+        String reviewer,
+        Instant reviewedAt,
+        String comments
+    ) {
         Instant now = clock.instant();
         return repository.saveRun(new StudyRun(
-            UUID.randomUUID().toString(),
+            id,
             study.id(),
             multiplanarRunId,
             traceId,

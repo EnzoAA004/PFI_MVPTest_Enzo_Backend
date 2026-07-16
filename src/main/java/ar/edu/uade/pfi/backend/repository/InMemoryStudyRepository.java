@@ -1,9 +1,12 @@
 package ar.edu.uade.pfi.backend.repository;
 
 import ar.edu.uade.pfi.backend.domain.InputResource;
+import ar.edu.uade.pfi.backend.domain.MeasurementCorrection;
 import ar.edu.uade.pfi.backend.domain.RunArtifact;
+import ar.edu.uade.pfi.backend.domain.RunReview;
 import ar.edu.uade.pfi.backend.domain.Study;
 import ar.edu.uade.pfi.backend.domain.StudyRun;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -21,6 +24,7 @@ public class InMemoryStudyRepository implements StudyRepository {
     private final ConcurrentMap<String, StudyRun> runsById = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, String> runIdsByMultiplanarRunId = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, String> runIdsByTraceId = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, List<MeasurementCorrection>> correctionsByRunId = new ConcurrentHashMap<>();
 
     @Override
     public Study saveStudy(Study study) {
@@ -74,5 +78,51 @@ public class InMemoryStudyRepository implements StudyRepository {
             .findFirst()
             .map(StudyRun::artifacts)
             .orElse(List.of());
+    }
+
+    @Override
+    public RunReview saveReview(String multiplanarRunId, String reviewStatus, String reviewer, Instant reviewedAt, String comments, List<MeasurementCorrection> corrections) {
+        StudyRun existing = findRunByMultiplanarRunId(multiplanarRunId).orElseThrow();
+        StudyRun updated = new StudyRun(
+            existing.id(),
+            existing.studyId(),
+            existing.multiplanarRunId(),
+            existing.traceId(),
+            existing.requestedInferenceMode(),
+            existing.effectiveInferenceMode(),
+            existing.sagittalModelKey(),
+            existing.axialModelKey(),
+            existing.sagittalArtifactHash(),
+            existing.axialArtifactHash(),
+            existing.sagittalRunId(),
+            existing.axialRunId(),
+            existing.assets(),
+            existing.metricsSnapshot(),
+            existing.artifacts(),
+            existing.status(),
+            reviewStatus,
+            reviewer,
+            reviewedAt,
+            comments,
+            existing.createdAt(),
+            reviewedAt
+        );
+        saveRun(updated);
+        correctionsByRunId.put(existing.id(), List.copyOf(corrections));
+        return new RunReview(multiplanarRunId, existing.traceId(), reviewStatus, reviewer, reviewedAt, comments, corrections);
+    }
+
+    @Override
+    public Optional<RunReview> findReviewByMultiplanarRunId(String multiplanarRunId) {
+        return findRunByMultiplanarRunId(multiplanarRunId)
+            .map(run -> new RunReview(
+                run.multiplanarRunId(),
+                run.traceId(),
+                run.reviewStatus(),
+                run.reviewer(),
+                run.reviewedAt(),
+                run.comments(),
+                correctionsByRunId.getOrDefault(run.id(), List.of())
+            ));
     }
 }

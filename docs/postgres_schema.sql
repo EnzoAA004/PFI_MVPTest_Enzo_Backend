@@ -115,7 +115,7 @@ CREATE TABLE IF NOT EXISTS domain_study_runs (
     assets JSONB NOT NULL DEFAULT '{}'::jsonb,
     metrics_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb,
     status TEXT NOT NULL DEFAULT 'created',
-    review_status TEXT NOT NULL DEFAULT 'pending' CHECK (review_status IN ('pending', 'accepted', 'rejected', 'edited')),
+    review_status TEXT NOT NULL DEFAULT 'pending' CHECK (review_status IN ('pending', 'accepted', 'observed', 'rejected', 'edited')),
     reviewer TEXT NOT NULL DEFAULT '',
     reviewed_at TIMESTAMPTZ NULL,
     comments TEXT NOT NULL DEFAULT '',
@@ -135,7 +135,19 @@ CREATE TABLE IF NOT EXISTS domain_run_artifacts (
     UNIQUE (study_run_id, plane, asset_name)
 );
 
+CREATE TABLE IF NOT EXISTS domain_review_corrections (
+    id UUID PRIMARY KEY,
+    study_run_id UUID NOT NULL REFERENCES domain_study_runs(id) ON DELETE CASCADE,
+    measurement_id TEXT NOT NULL,
+    label TEXT NOT NULL DEFAULT '',
+    before_value JSONB NOT NULL DEFAULT '{}'::jsonb,
+    after_value JSONB NOT NULL DEFAULT '{}'::jsonb,
+    comment TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE INDEX IF NOT EXISTS idx_domain_input_resources_study_plane ON domain_input_resources(study_id, plane);
 CREATE INDEX IF NOT EXISTS idx_domain_study_runs_study ON domain_study_runs(study_id);
 CREATE INDEX IF NOT EXISTS idx_domain_study_runs_trace_id ON domain_study_runs(trace_id);
 CREATE INDEX IF NOT EXISTS idx_domain_run_artifacts_run_plane ON domain_run_artifacts(run_id, plane);
+CREATE INDEX IF NOT EXISTS idx_domain_review_corrections_run ON domain_review_corrections(study_run_id);

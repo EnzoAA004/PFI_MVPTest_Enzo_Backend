@@ -3,6 +3,7 @@ package ar.edu.uade.pfi.backend.controller;
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunRequestDto;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunResponseDto;
+import ar.edu.uade.pfi.backend.service.MultiplanarRunPersistenceService;
 import jakarta.validation.Valid;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -17,9 +18,15 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/ai/multiplanar")
 public class AiMultiplanarController {
     private final AiServiceOperations aiServiceClient;
+    private final MultiplanarRunPersistenceService persistenceService;
 
     public AiMultiplanarController(AiServiceOperations aiServiceClient) {
+        this(aiServiceClient, null);
+    }
+
+    public AiMultiplanarController(AiServiceOperations aiServiceClient, MultiplanarRunPersistenceService persistenceService) {
         this.aiServiceClient = aiServiceClient;
+        this.persistenceService = persistenceService;
     }
 
     @GetMapping("/contract")
@@ -37,7 +44,12 @@ public class AiMultiplanarController {
 
     @PostMapping("/run")
     public MultiplanarRunResponseDto run(@Valid @RequestBody MultiplanarRunRequestDto request) {
-        return aiServiceClient.runMultiplanar(normalizedRequest(request));
+        MultiplanarRunRequestDto normalized = normalizedRequest(request);
+        MultiplanarRunResponseDto response = aiServiceClient.runMultiplanar(normalized);
+        if (persistenceService != null) {
+            persistenceService.persistSuccessfulRun(normalized, response);
+        }
+        return response;
     }
 
     private MultiplanarRunRequestDto normalizedRequest(MultiplanarRunRequestDto request) {
