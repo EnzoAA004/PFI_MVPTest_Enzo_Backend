@@ -4,9 +4,11 @@
   "effectiveInferenceMode": "dual_plane_with_3d_context",
   "planes": {
     "sagital": {
+      "runId": "run-sag-20260715-001",
       "plane": "sagital",
       "modelKey": "sagittal_spider",
       "status": "completed",
+      "effectiveInferenceMode": "real_baseline",
       "findings": [
         {
           "label": "canal_lumbar",
@@ -21,12 +23,19 @@
       "evidence": {
         "seriesId": "series-sag-t2",
         "sliceIndex": 42
+      },
+      "assets": {
+        "input": "input.png",
+        "overlay": "overlay.png",
+        "maskPreview": "mask-preview.png"
       }
     },
     "axial": {
+      "runId": "run-ax-20260715-001",
       "plane": "axial",
       "modelKey": "axial_t2_alkafri",
       "status": "completed",
+      "effectiveInferenceMode": "real_baseline",
       "findings": [
         {
           "label": "estenosis_receso_lateral",
@@ -41,6 +50,11 @@
       "evidence": {
         "seriesId": "series-ax-t2",
         "sliceIndex": 18
+      },
+      "assets": {
+        "input": "input.png",
+        "overlay": "overlay.png",
+        "maskPreview": "mask-preview.png"
       }
     }
   },

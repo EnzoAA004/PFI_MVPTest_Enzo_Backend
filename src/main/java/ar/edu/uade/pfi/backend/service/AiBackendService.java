@@ -17,7 +17,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
@@ -28,6 +30,7 @@ public class AiBackendService {
     static final long MAX_INPUT_UPLOAD_BYTES = 200L * 1024L * 1024L;
     private static final Set<String> ALLOWED_INPUT_EXTENSIONS = Set.of("npy", "png", "jpg", "jpeg", "bmp", "tif", "tiff", "mha", "mhd", "dcm");
     private static final Set<String> ALLOWED_INPUT_PLANES = Set.of("sagittal", "axial");
+    private static final Set<String> ALLOWED_ASSET_NAMES = Set.of("input.png", "overlay.png", "mask-preview.png");
     private static final Set<String> VALID_REVIEW_STATUSES = Set.of("pendiente", "aceptado", "observado", "descartado");
     private static final Set<String> FINAL_REVIEW_STATUSES = Set.of("aceptado", "observado", "descartado");
     private final AiServiceOperations aiServiceClient;
@@ -180,6 +183,20 @@ public class AiBackendService {
         return aiServiceClient.uploadInput(file, normalizedCaseId, normalizedPlane);
     }
 
+    public ResponseEntity<byte[]> getAsset(String runId, String plane, String assetName) {
+        String normalizedRunId = trimmed(runId);
+        String normalizedPlane = normalized(plane);
+        String normalizedAssetName = trimmed(assetName);
+        validateAssetRequest(normalizedRunId, normalizedPlane, normalizedAssetName);
+        ResponseEntity<byte[]> upstream = aiServiceClient.getAsset(normalizedRunId, normalizedPlane, normalizedAssetName);
+        HttpHeaders headers = new HttpHeaders();
+        String contentType = upstream.getHeaders().getFirst(HttpHeaders.CONTENT_TYPE);
+        if (contentType != null && !contentType.isBlank()) {
+            headers.add(HttpHeaders.CONTENT_TYPE, contentType);
+        }
+        return new ResponseEntity<>(upstream.getBody(), headers, upstream.getStatusCode());
+    }
+
     public Map<String, Object> getAgentReport(String runId) {
         try {
             Map<String, Object> response = normalizeForFrontend(aiServiceClient.getAgentReport(runId));
@@ -311,6 +328,25 @@ public class AiBackendService {
         String filename = StringUtils.getFilename(originalFilename == null ? "" : originalFilename);
         int dotIndex = filename == null ? -1 : filename.lastIndexOf('.');
         return dotIndex < 0 ? "" : filename.substring(dotIndex + 1).toLowerCase(Locale.ROOT);
+    }
+
+    private void validateAssetRequest(String runId, String plane, String assetName) {
+        if (runId.isBlank()) {
+            throw badRequest("runId es obligatorio.");
+        }
+        if (!ALLOWED_INPUT_PLANES.contains(plane)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset no encontrado.");
+        }
+        if (!isSimpleBasename(assetName) || !ALLOWED_ASSET_NAMES.contains(assetName)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Asset no permitido.");
+        }
+    }
+
+    private boolean isSimpleBasename(String assetName) {
+        if (assetName.isBlank() || assetName.contains("/") || assetName.contains("\\") || assetName.contains("..")) {
+            return false;
+        }
+        return assetName.equals(StringUtils.getFilename(assetName));
     }
 
     private ResponseStatusException badRequest(String message) {

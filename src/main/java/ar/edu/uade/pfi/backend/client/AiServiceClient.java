@@ -4,6 +4,7 @@ import ar.edu.uade.pfi.backend.config.AiServiceProperties;
 import ar.edu.uade.pfi.backend.config.TraceIdFilter;
 import ar.edu.uade.pfi.backend.dto.AiInputResponseDto;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunRequestDto;
+import ar.edu.uade.pfi.backend.dto.MultiplanarRunResponseDto;
 import ar.edu.uade.pfi.backend.dto.PipelineRunRequestDto;
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -13,6 +14,7 @@ import org.slf4j.MDC;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -20,6 +22,7 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.Exceptions;
+import reactor.core.publisher.Mono;
 
 @Component
 public class AiServiceClient implements AiServiceOperations {
@@ -99,13 +102,39 @@ public class AiServiceClient implements AiServiceOperations {
     }
 
     @Override
-    public Map<String, Object> runMultiplanar(MultiplanarRunRequestDto request) {
+    public ResponseEntity<byte[]> getAsset(String runId, String plane, String assetName) {
+        return execute(() -> aiWebClient.get()
+            .uri(uriBuilder -> uriBuilder.path("/assets/{runId}/{plane}/{assetName}").build(runId, plane, assetName))
+            .exchangeToMono(response -> {
+                if (response.statusCode().is2xxSuccessful()) {
+                    return response.toEntity(byte[].class);
+                }
+                int status = response.statusCode().value();
+                if (status == 403 || status == 404) {
+                    return response.releaseBody().then(Mono.error(new ResponseStatusException(response.statusCode(), "AI Module asset request failed")));
+                }
+                return response.createException().flatMap(Mono::error);
+            })
+            .block(timeout));
+    }
+
+    @Override
+    public MultiplanarRunResponseDto runMultiplanar(MultiplanarRunRequestDto request) {
         MultiplanarRunRequestDto tracedRequest = withTraceMetadata(request);
         return execute(() -> aiWebClient.post()
             .uri("/multiplanar/run")
             .bodyValue(tracedRequest)
-            .retrieve()
-            .bodyToMono(MAP_RESPONSE)
+            .exchangeToMono(response -> {
+                if (response.statusCode().is2xxSuccessful()) {
+                    return response.bodyToMono(MultiplanarRunResponseDto.class);
+                }
+                if (response.statusCode().is4xxClientError()) {
+                    return response.bodyToMono(String.class)
+                        .defaultIfEmpty("Multiplanar run rejected by AI Module")
+                        .flatMap(body -> Mono.error(new ResponseStatusException(response.statusCode(), compactMessage(body))));
+                }
+                return response.createException().flatMap(Mono::error);
+            })
             .block(timeout));
     }
 
@@ -165,10 +194,13 @@ public class AiServiceClient implements AiServiceOperations {
         Map<String, Object> metadata = mergedTraceMetadata(request.metadata(), traceId);
         return new MultiplanarRunRequestDto(
             request.caseId(),
+            request.sagittalInputId(),
+            request.axialInputId(),
             request.sagittalInputPath(),
             request.axialInputPath(),
             request.sagittalModelKey(),
             request.axialModelKey(),
+            request.allowContractFallback(),
             metadata
         );
     }
@@ -194,6 +226,9 @@ public class AiServiceClient implements AiServiceOperations {
 
     public ResponseStatusException translateException(RuntimeException ex) {
         Throwable unwrapped = Exceptions.unwrap(ex);
+        if (unwrapped instanceof ResponseStatusException responseStatusException) {
+            return responseStatusException;
+        }
         if (unwrapped instanceof WebClientResponseException responseException) {
             return new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI Module responded with status " + responseException.getStatusCode().value(), responseException);
         }

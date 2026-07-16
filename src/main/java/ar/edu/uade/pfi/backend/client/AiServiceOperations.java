@@ -2,8 +2,10 @@ package ar.edu.uade.pfi.backend.client;
 
 import ar.edu.uade.pfi.backend.dto.AiInputResponseDto;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunRequestDto;
+import ar.edu.uade.pfi.backend.dto.MultiplanarRunResponseDto;
 import ar.edu.uade.pfi.backend.dto.PipelineRunRequestDto;
 import java.util.Map;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MultipartFile;
 
 public interface AiServiceOperations {
@@ -29,8 +31,12 @@ public interface AiServiceOperations {
         throw new UnsupportedOperationException("input_upload_unavailable");
     }
 
-    default Map<String, Object> runMultiplanar(MultiplanarRunRequestDto request) {
-        return Map.of("status", "multiplanar_run_unavailable", "caseId", request.caseId(), "humanReviewRequired", true, "notClinicalDiagnosis", true);
+    default ResponseEntity<byte[]> getAsset(String runId, String plane, String assetName) {
+        throw new UnsupportedOperationException("asset_proxy_unavailable");
+    }
+
+    default MultiplanarRunResponseDto runMultiplanar(MultiplanarRunRequestDto request) {
+        throw new UnsupportedOperationException("multiplanar_run_unavailable");
     }
 
     Map<String, Object> getAgentReport(String runId);
