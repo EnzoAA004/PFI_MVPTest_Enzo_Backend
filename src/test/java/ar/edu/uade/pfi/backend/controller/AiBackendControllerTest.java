@@ -14,8 +14,10 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.HashMap;
 import java.util.Map;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -28,6 +30,7 @@ class AiBackendControllerTest {
     @BeforeEach
     void setUp() throws Exception {
         Class<?> clientType = Class.forName("ar.edu.uade.pfi.backend.client.AiServiceOperations");
+        Class<?> postgresReviewStoreType = Class.forName("ar.edu.uade.pfi.backend.service.PostgresReviewStoreService");
         Class<?> reviewStoreType = Class.forName("ar.edu.uade.pfi.backend.service.ReviewStoreService");
         Class<?> serviceType = Class.forName("ar.edu.uade.pfi.backend.service.AiBackendService");
         Class<?> controllerType = Class.forName("ar.edu.uade.pfi.backend.controller.AiBackendController");
@@ -38,7 +41,9 @@ class AiBackendControllerTest {
             new Class<?>[] {clientType},
             (proxy, method, args) -> aiClientResponses.get(method.getName())
         );
-        Object reviewStoreService = reviewStoreType.getConstructor().newInstance();
+        Object reviewStoreService = reviewStoreType
+            .getConstructor(postgresReviewStoreType, ObjectMapper.class)
+            .newInstance(Mockito.mock(postgresReviewStoreType), new ObjectMapper());
         aiBackendService = serviceType
             .getConstructor(clientType, reviewStoreType)
             .newInstance(aiServiceClient, reviewStoreService);
