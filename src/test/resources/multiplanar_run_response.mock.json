@@ -16,9 +16,26 @@
           "confidence": 0.91
         }
       ],
+      "landmarks": [
+        {
+          "name": "L4_left_pedicle",
+          "x": 124.2,
+          "y": 210.5,
+          "z": 42,
+          "confidence": 0.94
+        },
+        {
+          "name": "L5_right_pedicle",
+          "x": 166.7,
+          "y": 246.1,
+          "z": 42,
+          "confidence": 0.92
+        }
+      ],
       "measurements": {
         "canalAreaMm2": 82.4,
-        "discHeightMm": 7.8
+        "discHeightMm": 7.8,
+        "measurementsDerivedFromPredictionMask": true
       },
       "evidence": {
         "seriesId": "series-sag-t2",
@@ -43,9 +60,26 @@
           "confidence": 0.87
         }
       ],
+      "landmarks": [
+        {
+          "name": "canal_center",
+          "x": 93.3,
+          "y": 118.8,
+          "sliceIndex": 18,
+          "confidence": 0.9
+        },
+        {
+          "name": "left_foramen_min",
+          "x": 72.4,
+          "y": 116.2,
+          "sliceIndex": 18,
+          "confidence": 0.86
+        }
+      ],
       "measurements": {
         "leftForamenMm": 3.1,
-        "rightForamenMm": 3.4
+        "rightForamenMm": 3.4,
+        "measurementsDerivedFromPredictionMask": true
       },
       "evidence": {
         "seriesId": "series-ax-t2",

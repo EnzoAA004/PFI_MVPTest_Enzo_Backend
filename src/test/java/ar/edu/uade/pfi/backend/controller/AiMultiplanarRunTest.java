@@ -107,6 +107,7 @@ class AiMultiplanarRunTest {
                     "completed",
                     "real_baseline",
                     List.of(Map.of("label", "canal_lumbar")),
+                    List.of(Map.of("name", "L4_left_pedicle", "x", 124.2, "y", 210.5)),
                     Map.of("canalAreaMm2", 82.4),
                     Map.of("sliceIndex", 42),
                     Map.of("overlay", "overlay.png", "maskPreview", "mask-preview.png")
@@ -118,6 +119,7 @@ class AiMultiplanarRunTest {
                     "completed",
                     "real_baseline",
                     List.of(Map.of("label", "estenosis")),
+                    List.of(Map.of("name", "canal_center", "x", 93.3, "y", 118.8)),
                     Map.of("leftForamenMm", 3.1),
                     Map.of("sliceIndex", 18),
                     Map.of("overlay", "overlay.png", "maskPreview", "mask-preview.png")
