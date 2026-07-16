@@ -1,0 +1,61 @@
+{
+  "runId": "multi-run-20260715-001",
+  "traceId": "trace-be-001-contract",
+  "effectiveInferenceMode": "dual_plane_with_3d_context",
+  "planes": {
+    "sagital": {
+      "plane": "sagital",
+      "modelKey": "sagittal_spider",
+      "status": "completed",
+      "findings": [
+        {
+          "label": "canal_lumbar",
+          "level": "L4-L5",
+          "confidence": 0.91
+        }
+      ],
+      "measurements": {
+        "canalAreaMm2": 82.4,
+        "discHeightMm": 7.8
+      },
+      "evidence": {
+        "seriesId": "series-sag-t2",
+        "sliceIndex": 42
+      }
+    },
+    "axial": {
+      "plane": "axial",
+      "modelKey": "axial_t2_alkafri",
+      "status": "completed",
+      "findings": [
+        {
+          "label": "estenosis_receso_lateral",
+          "level": "L4-L5",
+          "confidence": 0.87
+        }
+      ],
+      "measurements": {
+        "leftForamenMm": 3.1,
+        "rightForamenMm": 3.4
+      },
+      "evidence": {
+        "seriesId": "series-ax-t2",
+        "sliceIndex": 18
+      }
+    }
+  },
+  "assets": {
+    "overlaySagitalPng": "artifacts/multi-run-20260715-001/sagital_overlay.png",
+    "overlayAxialPng": "artifacts/multi-run-20260715-001/axial_overlay.png",
+    "workspaceJson": "artifacts/multi-run-20260715-001/workspace.json"
+  },
+  "review": {
+    "status": "pendiente",
+    "humanReviewRequired": true,
+    "notClinicalDiagnosis": true,
+    "reviewer": ""
+  },
+  "unknownFutureField": {
+    "keptForCompatibility": true
+  }
+}
