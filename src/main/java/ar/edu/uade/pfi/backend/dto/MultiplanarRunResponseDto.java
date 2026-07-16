@@ -30,7 +30,6 @@ public record MultiplanarRunResponseDto(
         String status,
         String effectiveInferenceMode,
         List<Map<String, Object>> findings,
-        List<Map<String, Object>> landmarks,
         Map<String, Object> measurements,
         Map<String, Object> evidence,
         Map<String, Object> assets

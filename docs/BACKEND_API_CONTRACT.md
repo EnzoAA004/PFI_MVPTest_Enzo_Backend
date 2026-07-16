@@ -134,19 +134,6 @@ Response esperada:
     "sagital": {
       "runId": "run-sag-001",
       "effectiveInferenceMode": "real_baseline",
-      "landmarks": [
-        {
-          "name": "L4_left_pedicle",
-          "x": 124.2,
-          "y": 210.5,
-          "z": 42,
-          "confidence": 0.94
-        }
-      ],
-      "measurements": {
-        "canalAreaMm2": 82.4,
-        "measurementsDerivedFromPredictionMask": true
-      },
       "assets": {
         "overlay": "overlay.png"
       }
@@ -154,20 +141,6 @@ Response esperada:
     "axial": {
       "runId": "run-ax-001",
       "effectiveInferenceMode": "real_baseline",
-      "landmarks": [
-        {
-          "name": "canal_center",
-          "x": 93.3,
-          "y": 118.8,
-          "sliceIndex": 18,
-          "confidence": 0.9
-        }
-      ],
-      "measurements": {
-        "leftForamenMm": 3.1,
-        "rightForamenMm": 3.4,
-        "measurementsDerivedFromPredictionMask": true
-      },
       "assets": {
         "overlay": "overlay.png"
       }
