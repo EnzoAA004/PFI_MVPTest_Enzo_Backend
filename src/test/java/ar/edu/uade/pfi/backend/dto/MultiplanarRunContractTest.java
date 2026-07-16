@@ -30,10 +30,18 @@ class MultiplanarRunContractTest {
             assertNotNull(response.planes().sagital().effectiveInferenceMode());
             assertNotNull(response.planes().sagital().assets());
             assertFalse(response.planes().sagital().assets().isEmpty());
+            assertNotNull(response.planes().sagital().landmarks());
+            assertFalse(response.planes().sagital().landmarks().isEmpty());
+            assertNotNull(response.planes().sagital().measurements());
+            assertFalse(response.planes().sagital().measurements().isEmpty());
             assertNotNull(response.planes().axial().runId());
             assertNotNull(response.planes().axial().effectiveInferenceMode());
             assertNotNull(response.planes().axial().assets());
             assertFalse(response.planes().axial().assets().isEmpty());
+            assertNotNull(response.planes().axial().landmarks());
+            assertFalse(response.planes().axial().landmarks().isEmpty());
+            assertNotNull(response.planes().axial().measurements());
+            assertFalse(response.planes().axial().measurements().isEmpty());
             assertNotNull(response.assets());
             assertFalse(response.assets().isEmpty());
             assertNotNull(response.review());
