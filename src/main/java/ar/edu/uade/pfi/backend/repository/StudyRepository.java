@@ -1,5 +1,6 @@
 package ar.edu.uade.pfi.backend.repository;
 
+import ar.edu.uade.pfi.backend.domain.DomainAuditEvent;
 import ar.edu.uade.pfi.backend.domain.InputResource;
 import ar.edu.uade.pfi.backend.domain.MeasurementCorrection;
 import ar.edu.uade.pfi.backend.domain.RunArtifact;
@@ -30,4 +31,10 @@ public interface StudyRepository {
     RunReview saveReview(String multiplanarRunId, String reviewStatus, String reviewer, Instant reviewedAt, String comments, List<MeasurementCorrection> corrections);
 
     Optional<RunReview> findReviewByMultiplanarRunId(String multiplanarRunId);
+
+    DomainAuditEvent saveAuditEvent(DomainAuditEvent event);
+
+    List<DomainAuditEvent> findAuditEventsByTraceId(String traceId);
+
+    List<DomainAuditEvent> findAuditEventsByEntityId(String entityId);
 }

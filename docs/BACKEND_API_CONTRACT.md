@@ -331,3 +331,33 @@ Reglas:
 ## GET /api/ai/runs/{multiplanarRunId}/review
 
 Consulta la revision profesional persistida actual de una corrida multiplanar. Devuelve el mismo shape de response que `POST/PUT`.
+
+## GET /api/ai/audit-events
+
+Consulta eventos de auditoria persistidos por `traceId` o `entityId`.
+
+Ejemplos:
+
+- `GET /api/ai/audit-events?traceId=trace-001`
+- `GET /api/ai/audit-events?entityId=multi-001`
+
+Response:
+
+```json
+[
+  {
+    "id": "audit-event-uuid",
+    "actor": "backend",
+    "action": "multiplanar.run.completed",
+    "entityId": "multi-001",
+    "traceId": "trace-001",
+    "timestamp": "2026-07-16T12:00:00Z",
+    "metadata": {
+      "caseId": "CASE-DEMO",
+      "effectiveInferenceMode": "real_baseline"
+    }
+  }
+]
+```
+
+La metadata se sanea antes de persistir: no debe contener tokens, secretos, paths internos, blobs ni datos identificables.

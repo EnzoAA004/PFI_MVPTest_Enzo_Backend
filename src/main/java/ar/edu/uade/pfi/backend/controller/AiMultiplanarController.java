@@ -3,11 +3,13 @@ package ar.edu.uade.pfi.backend.controller;
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunRequestDto;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunResponseDto;
+import ar.edu.uade.pfi.backend.service.AuditService;
 import ar.edu.uade.pfi.backend.service.MultiplanarRunPersistenceService;
 import jakarta.validation.Valid;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -19,14 +21,21 @@ import org.springframework.web.bind.annotation.RestController;
 public class AiMultiplanarController {
     private final AiServiceOperations aiServiceClient;
     private final MultiplanarRunPersistenceService persistenceService;
+    private final AuditService auditService;
 
     public AiMultiplanarController(AiServiceOperations aiServiceClient) {
-        this(aiServiceClient, null);
+        this(aiServiceClient, null, null);
     }
 
     public AiMultiplanarController(AiServiceOperations aiServiceClient, MultiplanarRunPersistenceService persistenceService) {
+        this(aiServiceClient, persistenceService, null);
+    }
+
+    @Autowired
+    public AiMultiplanarController(AiServiceOperations aiServiceClient, MultiplanarRunPersistenceService persistenceService, AuditService auditService) {
         this.aiServiceClient = aiServiceClient;
         this.persistenceService = persistenceService;
+        this.auditService = auditService;
     }
 
     @GetMapping("/contract")
@@ -48,6 +57,15 @@ public class AiMultiplanarController {
         MultiplanarRunResponseDto response = aiServiceClient.runMultiplanar(normalized);
         if (persistenceService != null) {
             persistenceService.persistSuccessfulRun(normalized, response);
+        }
+        if (auditService != null) {
+            auditService.record("backend", "multiplanar.run.completed", response.runId(), response.traceId(), Map.of(
+                "caseId", normalized.caseId(),
+                "requestedInferenceMode", String.valueOf(normalized.metadata().getOrDefault("inferenceMode", "")),
+                "effectiveInferenceMode", String.valueOf(response.effectiveInferenceMode()),
+                "sagittalInputIdPresent", normalized.sagittalInputId() != null,
+                "axialInputIdPresent", normalized.axialInputId() != null
+            ));
         }
         return response;
     }

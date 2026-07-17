@@ -1,5 +1,6 @@
 package ar.edu.uade.pfi.backend.repository;
 
+import ar.edu.uade.pfi.backend.domain.DomainAuditEvent;
 import ar.edu.uade.pfi.backend.domain.InputResource;
 import ar.edu.uade.pfi.backend.domain.MeasurementCorrection;
 import ar.edu.uade.pfi.backend.domain.RunArtifact;
@@ -267,6 +268,36 @@ public class PostgresStudyRepository implements StudyRepository {
         }
     }
 
+    @Override
+    public DomainAuditEvent saveAuditEvent(DomainAuditEvent event) {
+        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+            INSERT INTO domain_audit_events(id, actor, action, entity_id, trace_id, metadata, created_at)
+            VALUES (?::uuid, ?, ?, ?, ?, ?::jsonb, ?)
+            """)) {
+            statement.setString(1, event.id());
+            statement.setString(2, event.actor());
+            statement.setString(3, event.action());
+            statement.setString(4, event.entityId());
+            statement.setString(5, event.traceId());
+            statement.setString(6, objectMapper.writeValueAsString(event.metadata()));
+            statement.setTimestamp(7, Timestamp.from(event.timestamp()));
+            statement.executeUpdate();
+            return event;
+        } catch (Exception ex) {
+            throw new IllegalStateException("Could not save audit event", ex);
+        }
+    }
+
+    @Override
+    public List<DomainAuditEvent> findAuditEventsByTraceId(String traceId) {
+        return findAuditEvents("trace_id", traceId);
+    }
+
+    @Override
+    public List<DomainAuditEvent> findAuditEventsByEntityId(String entityId) {
+        return findAuditEvents("entity_id", entityId);
+    }
+
     private Optional<StudyRun> findRun(String column, String value) {
         try (Connection connection = connection()) {
             return findRun(connection, column, value);
@@ -355,6 +386,34 @@ public class PostgresStudyRepository implements StudyRepository {
             statement.setString(7, artifact.artifactRef());
             statement.setTimestamp(8, Timestamp.from(artifact.createdAt()));
             statement.executeUpdate();
+        }
+    }
+
+    private List<DomainAuditEvent> findAuditEvents(String column, String value) {
+        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+            SELECT id, actor, action, entity_id, trace_id, metadata, created_at
+            FROM domain_audit_events
+            WHERE %s = ?
+            ORDER BY created_at, action
+            """.formatted(column))) {
+            statement.setString(1, value);
+            try (ResultSet rs = statement.executeQuery()) {
+                List<DomainAuditEvent> events = new ArrayList<>();
+                while (rs.next()) {
+                    events.add(new DomainAuditEvent(
+                        rs.getObject("id", UUID.class).toString(),
+                        rs.getString("actor"),
+                        rs.getString("action"),
+                        rs.getString("entity_id"),
+                        rs.getString("trace_id"),
+                        rs.getTimestamp("created_at").toInstant(),
+                        readJsonMap(rs.getString("metadata"))
+                    ));
+                }
+                return events;
+            }
+        } catch (Exception ex) {
+            throw new IllegalStateException("Could not find audit events", ex);
         }
     }
 

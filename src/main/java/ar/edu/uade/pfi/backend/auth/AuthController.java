@@ -9,11 +9,13 @@ import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.SettingsRequest;
 import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.TokenResponse;
 import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.UserResponse;
 import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.VerifyRequest;
+import ar.edu.uade.pfi.backend.service.AuditService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.ResponseEntity;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,9 +27,16 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/auth")
 public class AuthController {
     private final AuthService authService;
+    private final AuditService auditService;
 
     public AuthController(AuthService authService) {
+        this(authService, null);
+    }
+
+    @Autowired
+    public AuthController(AuthService authService, AuditService auditService) {
         this.authService = authService;
+        this.auditService = auditService;
     }
 
     @PostMapping("/register")
@@ -42,7 +51,13 @@ public class AuthController {
 
     @PostMapping("/login")
     public Object login(@Valid @RequestBody LoginRequest request) {
-        return authService.login(request.email(), request.password());
+        Object response = authService.login(request.email(), request.password());
+        if (auditService != null) {
+            auditService.record("auth", "auth.login.completed", "login", "", Map.of(
+                    "challengeRequired", response instanceof PendingAuthResponse
+            ));
+        }
+        return response;
     }
 
     @PostMapping("/verify-login")

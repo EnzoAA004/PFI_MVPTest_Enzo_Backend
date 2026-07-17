@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -35,10 +36,17 @@ public class AiBackendService {
     private static final Set<String> FINAL_REVIEW_STATUSES = Set.of("aceptado", "observado", "descartado");
     private final AiServiceOperations aiServiceClient;
     private final ReviewStoreService reviewStoreService;
+    private final AuditService auditService;
 
     public AiBackendService(AiServiceOperations aiServiceClient, ReviewStoreService reviewStoreService) {
+        this(aiServiceClient, reviewStoreService, null);
+    }
+
+    @Autowired
+    public AiBackendService(AiServiceOperations aiServiceClient, ReviewStoreService reviewStoreService, AuditService auditService) {
         this.aiServiceClient = aiServiceClient;
         this.reviewStoreService = reviewStoreService;
+        this.auditService = auditService;
     }
 
     public Map<String, Object> health() {
@@ -180,7 +188,14 @@ public class AiBackendService {
         String normalizedCaseId = trimmed(caseId);
         String normalizedPlane = normalized(plane);
         validateInputUpload(file, normalizedCaseId, normalizedPlane);
-        return aiServiceClient.uploadInput(file, normalizedCaseId, normalizedPlane);
+        AiInputResponseDto response = aiServiceClient.uploadInput(file, normalizedCaseId, normalizedPlane);
+        audit("backend", "upload.input.completed", response.inputId(), "", Map.of(
+            "caseId", response.caseId(),
+            "plane", response.plane(),
+            "format", response.format(),
+            "size", response.size()
+        ));
+        return response;
     }
 
     public ResponseEntity<byte[]> getAsset(String runId, String plane, String assetName) {
@@ -371,5 +386,10 @@ public class AiBackendService {
     private String extractRunId(Map<String, Object> response) {
         Object runId = response.get("runId");
         return runId == null ? null : runId.toString();
+    }
+
+    private void audit(String actor, String action, String entityId, String traceId, Map<String, Object> metadata) {
+        if (auditService == null) return;
+        auditService.record(actor, action, entityId, traceId, metadata);
     }
 }

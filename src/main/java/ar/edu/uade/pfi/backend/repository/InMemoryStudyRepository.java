@@ -1,5 +1,6 @@
 package ar.edu.uade.pfi.backend.repository;
 
+import ar.edu.uade.pfi.backend.domain.DomainAuditEvent;
 import ar.edu.uade.pfi.backend.domain.InputResource;
 import ar.edu.uade.pfi.backend.domain.MeasurementCorrection;
 import ar.edu.uade.pfi.backend.domain.RunArtifact;
@@ -25,6 +26,7 @@ public class InMemoryStudyRepository implements StudyRepository {
     private final ConcurrentMap<String, String> runIdsByMultiplanarRunId = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, String> runIdsByTraceId = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, List<MeasurementCorrection>> correctionsByRunId = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, DomainAuditEvent> auditEventsById = new ConcurrentHashMap<>();
 
     @Override
     public Study saveStudy(Study study) {
@@ -124,5 +126,25 @@ public class InMemoryStudyRepository implements StudyRepository {
                 run.comments(),
                 correctionsByRunId.getOrDefault(run.id(), List.of())
             ));
+    }
+
+    @Override
+    public DomainAuditEvent saveAuditEvent(DomainAuditEvent event) {
+        auditEventsById.put(event.id(), event);
+        return event;
+    }
+
+    @Override
+    public List<DomainAuditEvent> findAuditEventsByTraceId(String traceId) {
+        return auditEventsById.values().stream()
+            .filter(event -> event.traceId().equals(traceId))
+            .toList();
+    }
+
+    @Override
+    public List<DomainAuditEvent> findAuditEventsByEntityId(String entityId) {
+        return auditEventsById.values().stream()
+            .filter(event -> event.entityId().equals(entityId))
+            .toList();
     }
 }

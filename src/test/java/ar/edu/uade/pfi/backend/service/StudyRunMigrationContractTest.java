@@ -30,6 +30,15 @@ class StudyRunMigrationContractTest {
         assertTrue(sql.contains("idx_domain_study_runs_trace_id"));
         assertTrue(sql.contains("idx_domain_run_artifacts_run_plane"));
         assertTrue(sql.contains("idx_domain_review_corrections_run"));
+        String auditSql = Files.readString(Path.of("docs/migrations/V20260716_009_audit_events.sql")).toLowerCase();
+        assertTrue(auditSql.contains("create table if not exists domain_audit_events"));
+        assertTrue(auditSql.contains("actor text not null"));
+        assertTrue(auditSql.contains("action text not null"));
+        assertTrue(auditSql.contains("entity_id text not null"));
+        assertTrue(auditSql.contains("trace_id text not null"));
+        assertTrue(auditSql.contains("metadata jsonb not null"));
+        assertTrue(auditSql.contains("idx_domain_audit_events_trace_id"));
+        assertTrue(auditSql.contains("idx_domain_audit_events_entity_id"));
         assertFalse(sql.matches("(?s).*\\b(bytea|blob)\\b.*"));
         assertFalse(sql.contains("image_data"));
         assertFalse(sql.contains("mask_data"));

@@ -1,11 +1,13 @@
 package ar.edu.uade.pfi.backend.config;
 
+import ar.edu.uade.pfi.backend.service.AuditService;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -16,6 +18,16 @@ import org.springframework.web.server.ResponseStatusException;
 @RestControllerAdvice
 public class ApiExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
+    private final AuditService auditService;
+
+    public ApiExceptionHandler() {
+        this(null);
+    }
+
+    @Autowired
+    public ApiExceptionHandler(AuditService auditService) {
+        this.auditService = auditService;
+    }
 
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<Map<String, Object>> handleResponseStatusException(ResponseStatusException ex, HttpServletRequest request) {
@@ -66,9 +78,24 @@ public class ApiExceptionHandler {
         } else {
             log.warn("api_error traceId={} code={} status={} path={} message={}", traceId, code, status.value(), request.getRequestURI(), ex.getMessage());
         }
+        auditError(traceId, code, status, request);
         return ResponseEntity.status(status)
             .header(TraceIdFilter.TRACE_ID_HEADER, traceId)
             .body(body);
+    }
+
+    private void auditError(String traceId, String code, HttpStatus status, HttpServletRequest request) {
+        if (auditService == null) return;
+        try {
+            auditService.record("backend", "error.http", request.getRequestURI(), traceId, Map.of(
+                "code", code,
+                "status", status.value(),
+                "method", request.getMethod(),
+                "path", request.getRequestURI()
+            ));
+        } catch (RuntimeException ignored) {
+            // Never mask the original API error with audit persistence problems.
+        }
     }
 
     private String traceId(HttpServletRequest request) {
