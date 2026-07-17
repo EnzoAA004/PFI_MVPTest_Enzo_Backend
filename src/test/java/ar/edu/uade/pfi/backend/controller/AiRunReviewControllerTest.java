@@ -1,15 +1,20 @@
 package ar.edu.uade.pfi.backend.controller;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import ar.edu.uade.pfi.backend.auth.AuthFilter;
+import ar.edu.uade.pfi.backend.auth.RoleAuthorizationService;
+import ar.edu.uade.pfi.backend.auth.TokenService;
 import ar.edu.uade.pfi.backend.config.ApiExceptionHandler;
 import ar.edu.uade.pfi.backend.domain.RunArtifact;
 import ar.edu.uade.pfi.backend.domain.Study;
 import ar.edu.uade.pfi.backend.repository.PostgresStudyRepository;
+import ar.edu.uade.pfi.backend.service.AuditService;
 import ar.edu.uade.pfi.backend.service.RunReviewService;
 import ar.edu.uade.pfi.backend.service.StudyRunService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -21,6 +26,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -36,18 +42,21 @@ class AiRunReviewControllerTest {
 
     private MockMvc mockMvc;
     private StudyRunService studyRunService;
+    private PostgresStudyRepository repository;
 
     @BeforeEach
     void setUp() {
-        PostgresStudyRepository repository = new PostgresStudyRepository(
+        repository = new PostgresStudyRepository(
             new ObjectMapper(),
             postgres.getJdbcUrl() + "&user=" + postgres.getUsername() + "&password=" + postgres.getPassword(),
             true
         );
         studyRunService = new StudyRunService(repository);
         RunReviewService reviewService = new RunReviewService(repository);
-        mockMvc = MockMvcBuilders.standaloneSetup(new AiRunReviewController(reviewService))
-            .setControllerAdvice(new ApiExceptionHandler())
+        AuditService auditService = new AuditService(repository);
+        RoleAuthorizationService authorizationService = new RoleAuthorizationService(auditService);
+        mockMvc = MockMvcBuilders.standaloneSetup(new AiRunReviewController(reviewService, auditService, authorizationService))
+            .setControllerAdvice(new ApiExceptionHandler(auditService))
             .build();
     }
 
@@ -56,6 +65,7 @@ class AiRunReviewControllerTest {
         seedRun("multi-review-001", "trace-review-001");
 
         mockMvc.perform(post("/api/ai/runs/multi-review-001/review")
+                .with(reviewer())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
@@ -82,7 +92,7 @@ class AiRunReviewControllerTest {
             .andExpect(jsonPath("$.corrections[0].measurementId").value("canalAreaMm2"))
             .andExpect(jsonPath("$.corrections[0].afterValue.value").value(85.1));
 
-        mockMvc.perform(get("/api/ai/runs/multi-review-001/review"))
+        mockMvc.perform(get("/api/ai/runs/multi-review-001/review").with(reviewer()))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.reviewStatus").value("observed"))
             .andExpect(jsonPath("$.comments").value("Medicion observada para ajuste academico."))
@@ -94,6 +104,7 @@ class AiRunReviewControllerTest {
         seedRun("multi-review-002", "trace-review-002");
 
         mockMvc.perform(post("/api/ai/runs/multi-review-002/review")
+                .with(reviewer())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {"reviewStatus":"observed","reviewer":"dra-demo","comments":"Primera revision"}
@@ -101,6 +112,7 @@ class AiRunReviewControllerTest {
             .andExpect(status().isOk());
 
         mockMvc.perform(put("/api/ai/runs/multi-review-002/review")
+                .with(reviewer())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {"reviewStatus":"accepted","reviewer":"dra-demo","comments":"Aceptado luego de revisar"}
@@ -113,6 +125,7 @@ class AiRunReviewControllerTest {
     @Test
     void rejectsMissingRunInvalidStatusAndMissingReviewer() throws Exception {
         mockMvc.perform(post("/api/ai/runs/missing-run/review")
+                .with(reviewer())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {"reviewStatus":"accepted","reviewer":"dra-demo"}
@@ -122,6 +135,7 @@ class AiRunReviewControllerTest {
         seedRun("multi-review-003", "trace-review-003");
 
         mockMvc.perform(post("/api/ai/runs/multi-review-003/review")
+                .with(reviewer())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {"reviewStatus":"invalid","reviewer":"dra-demo"}
@@ -129,11 +143,30 @@ class AiRunReviewControllerTest {
             .andExpect(status().isBadRequest());
 
         mockMvc.perform(post("/api/ai/runs/multi-review-003/review")
+                .with(reviewer())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {"reviewStatus":"accepted","reviewer":""}
                     """))
             .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void rejectsReviewWhenRoleIsInsufficientAndAuditsDeniedAccess() throws Exception {
+        seedRun("multi-review-denied", "trace-review-denied");
+
+        mockMvc.perform(post("/api/ai/runs/multi-review-denied/review")
+                .with(pendingApproval())
+                .header("X-Trace-Id", "trace-denied-review")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"reviewStatus":"accepted","reviewer":"dra-demo"}
+                    """))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.message").value("Rol insuficiente"));
+
+        assertTrue(repository.findAuditEventsByEntityId("multi-review-denied").stream()
+            .anyMatch(event -> "access.denied".equals(event.action())));
     }
 
     private void seedRun(String multiplanarRunId, String traceId) {
@@ -162,5 +195,25 @@ class AiRunReviewControllerTest {
             null,
             ""
         );
+    }
+
+    private static RequestPostProcessor reviewer() {
+        return request -> {
+            request.setAttribute(
+                AuthFilter.AUTH_CLAIMS_ATTRIBUTE,
+                new TokenService.Claims("reviewer-id", "reviewer@pfi.local", "Reviewer", List.of("REVIEWER"))
+            );
+            return request;
+        };
+    }
+
+    private static RequestPostProcessor pendingApproval() {
+        return request -> {
+            request.setAttribute(
+                AuthFilter.AUTH_CLAIMS_ATTRIBUTE,
+                new TokenService.Claims("pending-id", "pending@pfi.local", "Pending", List.of("PENDING_APPROVAL"))
+            );
+            return request;
+        };
     }
 }

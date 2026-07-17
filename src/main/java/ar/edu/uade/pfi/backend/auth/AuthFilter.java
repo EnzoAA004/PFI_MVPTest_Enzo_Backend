@@ -68,7 +68,7 @@ public class AuthFilter extends OncePerRequestFilter {
         if ("OPTIONS".equalsIgnoreCase(method)) return true;
         if (PUBLIC_AUTH_PATHS.contains(path)) return true;
         if (path.equals("/api/ai/health") || path.equals("/api/ai/models")) return true;
-        if (path.equals("/api/system/diagnostics") || path.equals("/api/system/warmup")) return true;
+        if (path.equals("/api/system/warmup")) return true;
         return !path.startsWith("/api/");
     }
 }

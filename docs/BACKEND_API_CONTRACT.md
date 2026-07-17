@@ -4,6 +4,22 @@ Base URL local: `http://localhost:8080`
 
 Todas las respuestas vinculadas a resultados del AI Module deben conservar `humanReviewRequired=true`. El backend provee soporte tecnico revisable y no diagnostico clinico.
 
+## Roles y acciones sensibles
+
+El backend usa JWT con `roles` en claims. Roles existentes:
+
+- `ADMIN`: acciones administrativas.
+- `DOCTOR` / `REVIEWER`: profesional habilitado para revisar corridas.
+- `PENDING_APPROVAL`: cuenta profesional pendiente, sin acceso a acciones sensibles.
+
+Endpoints protegidos:
+
+- `POST /api/ai/models/sync`: requiere `ADMIN`.
+- `GET /api/system/diagnostics`: requiere `ADMIN`.
+- `POST/PUT/GET /api/ai/runs/{multiplanarRunId}/review`: requiere `REVIEWER`, `DOCTOR` o `ADMIN`.
+
+Si el rol es insuficiente, la respuesta es `403` con mensaje semantico `Rol insuficiente`. Los intentos denegados se auditan como `access.denied` sin tokens, credenciales ni datos identificables. No existe endpoint de cache clear en este backend al momento de BE-010.
+
 ## GET /api/ai/health
 
 Consulta `GET /health` del AI Module.
