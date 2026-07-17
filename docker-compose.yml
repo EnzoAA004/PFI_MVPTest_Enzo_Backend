@@ -1,0 +1,100 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pfi-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pfi_backend}
+      POSTGRES_USER: ${POSTGRES_USER:-pfi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-local-only}
+    ports:
+      - "${POSTGRES_PORT:-54329}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - pfi-local
+
+  ai-module:
+    build:
+      context: ../PFI_MVPTest_Enzo_AImodule
+    container_name: pfi-ai-module
+    environment:
+      PORT: 8000
+      PFI_MODEL_DIR: /models/final
+      PFI_OUTPUT_DIR: /app/outputs
+    ports:
+      - "${AI_MODULE_PORT:-8000}:8000"
+    volumes:
+      - ${AI_MODEL_DIR:-../PFI_MVPTest_Enzo_AImodule/models/final}:/models/final:ro
+      - ai-outputs:/app/outputs
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/health >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - pfi-local
+
+  backend:
+    build:
+      context: .
+    container_name: pfi-backend
+    environment:
+      PORT: 8080
+      PFI_PERSISTENCE_MODE: postgres
+      DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-pfi_backend}?user=${POSTGRES_USER:-pfi}&password=${POSTGRES_PASSWORD:-change-me-local-only}
+      PFI_AI_SERVICE_URL: http://ai-module:8000
+      PFI_AI_TIMEOUT_SECONDS: ${PFI_AI_TIMEOUT_SECONDS:-180}
+      PFI_AUTH_JWT_SECRET: ${PFI_AUTH_JWT_SECRET:-change-me-local-jwt-secret}
+      PFI_CORS_ALLOWED_ORIGINS: ${PFI_CORS_ALLOWED_ORIGINS:-http://localhost:8088}
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ai-module:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/api/ai/health >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - pfi-local
+
+  frontend:
+    build:
+      context: ../PFI_MVPTest_Enzo_Frontend
+      args:
+        VITE_API_BASE_URL: ${BACKEND_PUBLIC_URL:-http://localhost:8080}
+    container_name: pfi-frontend
+    environment:
+      BACKEND_URL: ${BACKEND_PUBLIC_URL:-http://localhost:8080}
+    ports:
+      - "${FRONTEND_PORT:-8088}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/env.js >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 10s
+    networks:
+      - pfi-local
+
+networks:
+  pfi-local:
+    name: pfi-local
+
+volumes:
+  postgres-data:
+  ai-outputs:

@@ -11,6 +11,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -21,6 +22,7 @@ public class AuditService {
     private final StudyRepository repository;
     private final Clock clock;
 
+    @Autowired
     public AuditService(StudyRepository repository) {
         this(repository, Clock.systemUTC());
     }

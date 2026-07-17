@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
@@ -36,6 +37,7 @@ public class PostgresStudyRepository implements StudyRepository {
     private final String jdbcUrl;
     private final ObjectMapper objectMapper;
 
+    @Autowired
     public PostgresStudyRepository(
         ObjectMapper objectMapper,
         @Value("${pfi.database.url:${DATABASE_URL:}}") String databaseUrl

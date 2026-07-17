@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -23,6 +24,7 @@ public class RunReviewService {
     private final StudyRepository repository;
     private final Clock clock;
 
+    @Autowired
     public RunReviewService(StudyRepository repository) {
         this(repository, Clock.systemUTC());
     }

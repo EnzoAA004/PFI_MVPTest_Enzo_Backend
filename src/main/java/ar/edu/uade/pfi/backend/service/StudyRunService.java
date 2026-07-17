@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -18,6 +19,7 @@ public class StudyRunService {
     private final StudyRepository repository;
     private final Clock clock;
 
+    @Autowired
     public StudyRunService(StudyRepository repository) {
         this(repository, Clock.systemUTC());
     }
