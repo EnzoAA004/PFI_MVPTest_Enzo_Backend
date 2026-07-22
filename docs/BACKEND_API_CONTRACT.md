@@ -271,6 +271,49 @@ Response:
 }
 ```
 
+### Modo sagital `real_baseline` estricto
+
+Una request es estricta cuando `metadata.inferenceMode` es `real_baseline` y `metadata.allowContractFallback` es `false`. Si `allowContractFallback` no fue enviado en una request `real_baseline`, el backend agrega `false`; si fue enviado como `true`, se conserva para compatibilidad demo/contract.
+
+En modo estricto:
+
+- `plane` debe ser `sagittal`;
+- `modelKey` se normaliza a `sagittal_spider`;
+- `inputPath` es obligatorio y no se autocompleta con `demo/<caseId>`;
+- los errores 4xx del AI Module se preservan como errores 4xx;
+- timeout devuelve `504`;
+- conexion rechazada o error 5xx upstream devuelve `502`;
+- una respuesta 2xx con contrato invalido devuelve `502` con `code=AI_CONTRACT_VIOLATION`;
+- no se crea `pipeline_degraded_fallback`, `degraded-*`, mediciones ficticias ni `agentDecision` sintetico como exito.
+
+El contrato sagital esperado se configura por variables:
+
+- `PFI_SAGITTAL_EXPECTED_MODEL_KEY=sagittal_spider`
+- `PFI_SAGITTAL_EXPECTED_MODEL_VERSION=sagittal-spider-final-v1`
+- `PFI_SAGITTAL_EXPECTED_MODEL_SHA256=cf11dcc0ad77a7c787e64a796a2fd7398ef906add461cef4b3d61f1a5238e944`
+- `PFI_SAGITTAL_EXPECTED_RELEASE_ID=sagittal_spider_final_v1`
+- `PFI_SAGITTAL_EXPECTED_RELEASE_CONTENT_SHA256=7420ad4271fe634c970b2a543d1ef8fb1437888c99ca8bd5733a06e5f63e3e7e`
+- `PFI_SAGITTAL_EXPECTED_RELEASE_MANIFEST_SHA256=d36d0c4fe183ba9a98f0a3471486be5dee1cf1fa820dc32b3a50177ce322be21`
+
+La respuesta estricta se sanitiza antes de llegar al frontend: se eliminan rutas internas (`/tmp`, `/content`, rutas Windows, `models/final`, `metadata.sourcePath`, `metadata.outputFiles`) y los assets publicos se reescriben como `/api/ai/assets/{runId}/{plane}/{assetName}`. No se publican `mask.npy` ni `confidence.npy`.
+
+## POST /api/ai/models/sync
+
+Endpoint administrativo con rol `ADMIN`. Reenvia `POST /models/sync?force=false|true` al AI Module y valida el item sagital individual.
+
+Se acepta exito solo cuando el status global es `synced_verified` o `existing_release_verified` y el item `sagittal_spider` coincide con `releaseId`, hashes de release, `modelSha256`, `source=gcs_verified_release`, flags de sync/verificacion y `gcsReadOnly=true`. Si falla la verificacion, responde error controlado y no afirma readiness.
+
+La respuesta exitosa agrega:
+
+```json
+{
+  "sagittalReadyForRealInference": true,
+  "proxiedByBackend": true,
+  "humanReviewRequired": true,
+  "notClinicalDiagnosis": true
+}
+```
+
 ## POST/PUT /api/ai/runs/{multiplanarRunId}/review
 
 Registra o actualiza la revision profesional persistida de una corrida multiplanar. El run debe existir previamente en la persistencia BE-005b/BE-006.

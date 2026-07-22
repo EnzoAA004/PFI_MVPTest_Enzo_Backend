@@ -20,6 +20,9 @@ PFI_AUTH_ENABLED=true
 PFI_AUTH_JWT_SECRET=change-this-secret
 PFI_AUTH_ACCESS_TOKEN_SECONDS=3600
 PFI_AUTH_EXPOSE_DEV_CODES=true
+PFI_SAGITTAL_EXPECTED_MODEL_KEY=sagittal_spider
+PFI_SAGITTAL_EXPECTED_MODEL_VERSION=sagittal-spider-final-v1
+PFI_SAGITTAL_EXPECTED_MODEL_SHA256=cf11dcc0ad77a7c787e64a796a2fd7398ef906add461cef4b3d61f1a5238e944
 PORT=8080
 ```
 
@@ -42,6 +45,8 @@ docker run --rm -p 8080:8080 --env PFI_AI_SERVICE_URL=http://host.docker.interna
 - `GET /api/ai/health`: consulta el health del AI Module.
 - `GET /api/ai/models`: lista modelos disponibles en el AI Module.
 - `POST /api/ai/pipeline/run`: ejecuta el pipeline remoto y marca revision humana requerida.
+- `POST /api/ai/models/sync`: endpoint administrativo que valida el release sagital real antes de marcarlo listo.
+- `GET /api/ai/assets/{runId}/{plane}/{assetName}`: proxy unico para assets publicos del AI Module.
 - `GET /api/ai/agent/report/{runId}`: obtiene el reporte del agente y agrega revision local.
 - `GET /api/ai/studies/demo-review`: obtiene el contrato visual de estudio, series, mascaras, landmarks y mediciones.
 - `PATCH /api/ai/review/{runId}`: actualiza la revision profesional local.
@@ -111,3 +116,11 @@ Ese esquema contempla:
 ## Relacion con otros modulos
 
 El frontend React consume solamente este backend. El backend delega inferencia, modelos y reportes al AI Module FastAPI configurado con `PFI_AI_SERVICE_URL`. El contrato de estudio permite evolucionar hacia overlays reales, contornos de mascaras, landmarks y mediciones derivadas cuando se conecte la inferencia real.
+
+## Contrato sagital real_baseline
+
+Para `POST /api/ai/pipeline/run`, una request es estricta cuando `metadata.inferenceMode=real_baseline` y `metadata.allowContractFallback=false`. Si `allowContractFallback` falta en una request `real_baseline`, el backend agrega `false`. En modo estricto se exige `plane=sagittal`, `inputPath` no vacio y `modelKey=sagittal_spider`; no se genera fallback demo ni `degraded-*` ante errores.
+
+El backend valida que la respuesta del AI Module preserve `modelVersion`, `artifactHash`, orientacion del volumen, measurements revisables, flags de seguridad y assets registrados. Las rutas internas del AI Module no se exponen: el frontend recibe URLs relativas `/api/ai/assets/{runId}/{plane}/{assetName}`. El endpoint sigue siendo soporte tecnico revisable, no validacion clinica.
+
+Para una prueba local real, usar `scripts/run_sagittal_real_backend_e2e.ps1` con `RUN_BACKEND_REAL_E2E=1`, `PFI_E2E_INPUT_PATH` y `PFI_BACKEND_BEARER_TOKEN`. El script llama solamente al backend, nunca directo al AI Module.

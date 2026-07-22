@@ -37,16 +37,33 @@ public class AiBackendService {
     private final AiServiceOperations aiServiceClient;
     private final ReviewStoreService reviewStoreService;
     private final AuditService auditService;
+    private final PipelineRunRequestNormalizer pipelineRunRequestNormalizer;
+    private final SagittalRealBaselineContractValidator sagittalContractValidator;
+    private final AiPipelineResponsePresenter pipelineResponsePresenter;
 
     public AiBackendService(AiServiceOperations aiServiceClient, ReviewStoreService reviewStoreService) {
-        this(aiServiceClient, reviewStoreService, null);
+        this(aiServiceClient, reviewStoreService, null, null, null, null);
+    }
+
+    public AiBackendService(AiServiceOperations aiServiceClient, ReviewStoreService reviewStoreService, AuditService auditService) {
+        this(aiServiceClient, reviewStoreService, auditService, null, null, null);
     }
 
     @Autowired
-    public AiBackendService(AiServiceOperations aiServiceClient, ReviewStoreService reviewStoreService, AuditService auditService) {
+    public AiBackendService(
+        AiServiceOperations aiServiceClient,
+        ReviewStoreService reviewStoreService,
+        AuditService auditService,
+        PipelineRunRequestNormalizer pipelineRunRequestNormalizer,
+        SagittalRealBaselineContractValidator sagittalContractValidator,
+        AiPipelineResponsePresenter pipelineResponsePresenter
+    ) {
         this.aiServiceClient = aiServiceClient;
         this.reviewStoreService = reviewStoreService;
         this.auditService = auditService;
+        this.pipelineRunRequestNormalizer = pipelineRunRequestNormalizer;
+        this.sagittalContractValidator = sagittalContractValidator;
+        this.pipelineResponsePresenter = pipelineResponsePresenter;
     }
 
     public Map<String, Object> health() {
@@ -76,13 +93,19 @@ public class AiBackendService {
             response.put("proxiedByBackend", true);
             response.put("aiModuleAvailable", true);
             response.put("degradedMode", false);
+            response.putIfAbsent("backendReady", true);
+            response.putIfAbsent("sagittalReadyForRealInference", false);
+            response.putIfAbsent("axialReadyForRealInference", false);
             return response;
         } catch (RuntimeException ex) {
             return normalizeForFrontend(Map.ofEntries(
                 Map.entry("status", "ai_readiness_unavailable"),
                 Map.entry("service", "pfi-ai-module"),
+                Map.entry("backendReady", true),
                 Map.entry("readyForDemo", false),
                 Map.entry("readyForRealInference", false),
+                Map.entry("sagittalReadyForRealInference", false),
+                Map.entry("axialReadyForRealInference", false),
                 Map.entry("defaultInferenceMode", "contract"),
                 Map.entry("recommendedInferenceMode", "contract"),
                 Map.entry("proxiedByBackend", true),
@@ -108,14 +131,18 @@ public class AiBackendService {
                     "sagittal_spider", Map.of(
                         "plane", "sagittal",
                         "numClasses", 4,
-                        "enabled", true,
-                        "source", "backend_degraded_fallback"
+                        "enabled", false,
+                        "availableForRealInference", false,
+                        "baselineReady", false,
+                        "source", "ai_module_unavailable"
                     ),
                     "axial_t2_alkafri", Map.of(
                         "plane", "axial",
                         "numClasses", 6,
-                        "enabled", true,
-                        "source", "backend_degraded_fallback"
+                        "enabled", false,
+                        "availableForRealInference", false,
+                        "baselineReady", false,
+                        "source", "ai_module_unavailable"
                     )
                 )
             );
@@ -145,22 +172,34 @@ public class AiBackendService {
     }
 
     public Map<String, Object> runPipeline(PipelineRunRequestDto request) {
+        PipelineRunRequestDto normalizedRequest = normalizePipelineRequest(request);
+        boolean strict = isStrictRealBaseline(normalizedRequest);
         try {
-            Map<String, Object> response = normalizeForFrontend(aiServiceClient.runPipeline(request));
+            Map<String, Object> response = normalizeForFrontend(aiServiceClient.runPipeline(normalizedRequest));
+            if (strict) {
+                response = presentStrictPipelineResponse(normalizedRequest, response);
+            }
             String runId = extractRunId(response);
             if (runId != null) {
                 response.put("review", reviewStoreService.findOrDefault(runId));
             }
             response.put("aiModuleAvailable", true);
             response.put("degradedMode", false);
+            if (strict) {
+                auditStrictPipelineCompleted(normalizedRequest, response);
+            }
             return response;
         } catch (RuntimeException ex) {
-            String runId = "degraded-" + Math.abs((request.caseId() + "|" + request.plane() + "|" + request.modelKey()).hashCode());
+            if (strict) {
+                auditStrictPipelineFailed(normalizedRequest, ex);
+                throw ex;
+            }
+            String runId = "degraded-" + Math.abs((normalizedRequest.caseId() + "|" + normalizedRequest.plane() + "|" + normalizedRequest.modelKey()).hashCode());
             return normalizeForFrontend(Map.ofEntries(
                 Map.entry("runId", runId),
-                Map.entry("caseId", request.caseId()),
-                Map.entry("plane", request.plane()),
-                Map.entry("modelKey", request.modelKey() == null ? "unknown" : request.modelKey()),
+                Map.entry("caseId", normalizedRequest.caseId()),
+                Map.entry("plane", normalizedRequest.plane()),
+                Map.entry("modelKey", normalizedRequest.modelKey() == null ? "unknown" : normalizedRequest.modelKey()),
                 Map.entry("status", "pipeline_degraded_fallback"),
                 Map.entry("aiModuleAvailable", false),
                 Map.entry("degradedMode", true),
@@ -391,5 +430,66 @@ public class AiBackendService {
     private void audit(String actor, String action, String entityId, String traceId, Map<String, Object> metadata) {
         if (auditService == null) return;
         auditService.record(actor, action, entityId, traceId, metadata);
+    }
+
+    private PipelineRunRequestDto normalizePipelineRequest(PipelineRunRequestDto request) {
+        if (pipelineRunRequestNormalizer == null) {
+            return request;
+        }
+        return pipelineRunRequestNormalizer.normalizePipelineRequest(request);
+    }
+
+    private boolean isStrictRealBaseline(PipelineRunRequestDto request) {
+        return pipelineRunRequestNormalizer != null && pipelineRunRequestNormalizer.isStrictRealBaseline(request);
+    }
+
+    private Map<String, Object> presentStrictPipelineResponse(PipelineRunRequestDto request, Map<String, Object> response) {
+        if (sagittalContractValidator != null) {
+            sagittalContractValidator.validatePipelineResponse(request, response);
+        }
+        return pipelineResponsePresenter == null ? response : pipelineResponsePresenter.present(response);
+    }
+
+    private void auditStrictPipelineCompleted(PipelineRunRequestDto request, Map<String, Object> response) {
+        Map<String, Object> metadata = metadataMap(response);
+        audit("backend", "pipeline.real_baseline.completed", extractRunId(response), text(response.get("traceId")), Map.ofEntries(
+            Map.entry("runId", text(response.get("runId"))),
+            Map.entry("caseId", request.caseId()),
+            Map.entry("plane", request.plane()),
+            Map.entry("modelKey", text(response.get("modelKey"))),
+            Map.entry("modelVersion", text(response.get("modelVersion"))),
+            Map.entry("artifactHash", text(response.get("artifactHash"))),
+            Map.entry("inferenceMode", text(response.get("inferenceMode"))),
+            Map.entry("selectedSlice", metadata.getOrDefault("selectedSlice", "")),
+            Map.entry("selectedAxis", metadata.getOrDefault("selectedAxis", "")),
+            Map.entry("sliceCount", metadata.getOrDefault("sliceCount", "")),
+            Map.entry("inputOrientationTransform", metadata.getOrDefault("inputOrientationTransform", "")),
+            Map.entry("traceId", text(response.get("traceId"))),
+            Map.entry("humanReviewRequired", response.getOrDefault("humanReviewRequired", true))
+        ));
+    }
+
+    private void auditStrictPipelineFailed(PipelineRunRequestDto request, RuntimeException ex) {
+        audit("backend", "pipeline.real_baseline.failed", request.caseId(), "", Map.of(
+            "caseId", request.caseId(),
+            "plane", request.plane(),
+            "modelKey", request.modelKey(),
+            "inferenceMode", "real_baseline",
+            "errorType", ex.getClass().getSimpleName()
+        ));
+    }
+
+    private Map<String, Object> metadataMap(Map<String, Object> response) {
+        Object metadata = response.get("metadata");
+        if (metadata instanceof Map<?, ?> map) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> typed = (Map<String, Object>) map;
+            return typed;
+        }
+        return Map.of();
+    }
+
+    private String text(Object value) {
+        return value == null ? "" : value.toString();
     }
 }

@@ -2,6 +2,7 @@ package ar.edu.uade.pfi.backend.controller;
 
 import ar.edu.uade.pfi.backend.auth.RoleAuthorizationService;
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
+import ar.edu.uade.pfi.backend.service.SagittalRealBaselineContractValidator;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,15 +16,25 @@ import org.springframework.web.bind.annotation.RestController;
 public class AiModelSyncController {
     private final AiServiceOperations aiServiceClient;
     private final RoleAuthorizationService authorizationService;
+    private final SagittalRealBaselineContractValidator sagittalContractValidator;
 
     public AiModelSyncController(AiServiceOperations aiServiceClient) {
-        this(aiServiceClient, null);
+        this(aiServiceClient, null, null);
+    }
+
+    public AiModelSyncController(AiServiceOperations aiServiceClient, RoleAuthorizationService authorizationService) {
+        this(aiServiceClient, authorizationService, null);
     }
 
     @Autowired
-    public AiModelSyncController(AiServiceOperations aiServiceClient, RoleAuthorizationService authorizationService) {
+    public AiModelSyncController(
+        AiServiceOperations aiServiceClient,
+        RoleAuthorizationService authorizationService,
+        SagittalRealBaselineContractValidator sagittalContractValidator
+    ) {
         this.aiServiceClient = aiServiceClient;
         this.authorizationService = authorizationService;
+        this.sagittalContractValidator = sagittalContractValidator;
     }
 
     @PostMapping("/sync")
@@ -31,21 +42,14 @@ public class AiModelSyncController {
         if (authorizationService != null) {
             authorizationService.requireAdmin(request, "models.sync");
         }
-        try {
-            Map<String, Object> response = aiServiceClient.syncModels(force);
-            response.putIfAbsent("proxiedByBackend", true);
-            response.putIfAbsent("humanReviewRequired", true);
-            response.putIfAbsent("notClinicalDiagnosis", true);
-            return response;
-        } catch (RuntimeException ex) {
-            return Map.of(
-                "status", "models_sync_failed",
-                "message", ex.getMessage() == null ? "AI Module unavailable" : ex.getMessage(),
-                "force", force,
-                "proxiedByBackend", true,
-                "humanReviewRequired", true,
-                "notClinicalDiagnosis", true
-            );
+        Map<String, Object> response = aiServiceClient.syncModels(force);
+        if (sagittalContractValidator != null) {
+            sagittalContractValidator.validateSagittalSync(response);
+            response.put("sagittalReadyForRealInference", true);
         }
+        response.putIfAbsent("proxiedByBackend", true);
+        response.putIfAbsent("humanReviewRequired", true);
+        response.putIfAbsent("notClinicalDiagnosis", true);
+        return response;
     }
 }

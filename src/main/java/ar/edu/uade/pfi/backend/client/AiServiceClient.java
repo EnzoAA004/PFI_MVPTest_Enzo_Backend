@@ -9,6 +9,7 @@ import ar.edu.uade.pfi.backend.dto.PipelineRunRequestDto;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
 import org.slf4j.MDC;
 import org.springframework.core.ParameterizedTypeReference;
@@ -64,8 +65,7 @@ public class AiServiceClient implements AiServiceOperations {
     public Map<String, Object> syncModels(boolean force) {
         return execute(() -> aiWebClient.post()
             .uri(uriBuilder -> uriBuilder.path("/models/sync").queryParam("force", force).build())
-            .retrieve()
-            .bodyToMono(MAP_RESPONSE)
+            .exchangeToMono(response -> mapResponseOrError(response, "models/sync"))
             .block(timeout));
     }
 
@@ -80,8 +80,7 @@ public class AiServiceClient implements AiServiceOperations {
         return execute(() -> aiWebClient.post()
             .uri("/pipeline/run")
             .bodyValue(tracedRequest)
-            .retrieve()
-            .bodyToMono(MAP_RESPONSE)
+            .exchangeToMono(response -> mapResponseOrError(response, "pipeline/run"))
             .block(timeout));
     }
 
@@ -177,6 +176,23 @@ public class AiServiceClient implements AiServiceOperations {
         return execute(() -> aiWebClient.get().uri(path).retrieve().bodyToMono(MAP_RESPONSE).block(timeout));
     }
 
+    private Mono<Map<String, Object>> mapResponseOrError(org.springframework.web.reactive.function.client.ClientResponse response, String operation) {
+        if (response.statusCode().is2xxSuccessful()) {
+            return response.bodyToMono(MAP_RESPONSE);
+        }
+        if (response.statusCode().is4xxClientError()) {
+            return response.bodyToMono(String.class)
+                .defaultIfEmpty(operation + " rejected by AI Module")
+                .flatMap(body -> Mono.error(new ResponseStatusException(response.statusCode(), compactMessage(body))));
+        }
+        return response.bodyToMono(String.class)
+            .defaultIfEmpty(operation + " failed in AI Module")
+            .flatMap(body -> Mono.error(new ResponseStatusException(
+                HttpStatus.BAD_GATEWAY,
+                "AI Module responded with status " + response.statusCode().value() + ": " + compactMessage(body)
+            )));
+    }
+
     private PipelineRunRequestDto withTraceMetadata(PipelineRunRequestDto request) {
         String traceId = MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY);
         if (traceId == null || traceId.isBlank()) {
@@ -231,6 +247,9 @@ public class AiServiceClient implements AiServiceOperations {
         }
         if (unwrapped instanceof WebClientResponseException responseException) {
             return new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI Module responded with status " + responseException.getStatusCode().value(), responseException);
+        }
+        if (unwrapped instanceof TimeoutException || compactMessage(unwrapped.getMessage() == null ? "" : unwrapped.getMessage()).toLowerCase().contains("timeout")) {
+            return new ResponseStatusException(HttpStatus.GATEWAY_TIMEOUT, "AI Module request timed out", unwrapped);
         }
         String message = unwrapped.getMessage() == null ? "unknown error" : compactMessage(unwrapped.getMessage());
         return new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI Module is not available: " + message, unwrapped);

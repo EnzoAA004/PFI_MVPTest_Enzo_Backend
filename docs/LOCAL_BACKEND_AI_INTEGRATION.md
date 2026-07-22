@@ -2,6 +2,8 @@
 
 Este backend Spring Boot consume el AI Module FastAPI por HTTP. No ejecuta modelos en Java y no emite diagnostico clinico; toda salida tecnica queda marcada con `humanReviewRequired=true` y `notClinicalDiagnosis=true`.
 
+La separacion de repos es obligatoria: el frontend llama al backend, y el backend llama al AI Module por HTTP usando `PFI_AI_SERVICE_URL`. Este repositorio no importa codigo Python, no abre rutas internas de `models/final`, no descarga checkpoints y no accede a GCS.
+
 ## 1. Levantar AI Module
 
 Desde el repositorio del modulo Python:
@@ -25,6 +27,9 @@ Por defecto el backend apunta a `http://localhost:8000`.
 set PFI_AI_SERVICE_URL=http://localhost:8000
 set PFI_AI_TIMEOUT_SECONDS=60
 set PFI_CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
+set PFI_SAGITTAL_EXPECTED_MODEL_KEY=sagittal_spider
+set PFI_SAGITTAL_EXPECTED_MODEL_VERSION=sagittal-spider-final-v1
+set PFI_SAGITTAL_EXPECTED_MODEL_SHA256=cf11dcc0ad77a7c787e64a796a2fd7398ef906add461cef4b3d61f1a5238e944
 ```
 
 En Bash:
@@ -33,6 +38,9 @@ En Bash:
 export PFI_AI_SERVICE_URL=http://localhost:8000
 export PFI_AI_TIMEOUT_SECONDS=60
 export PFI_CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
+export PFI_SAGITTAL_EXPECTED_MODEL_KEY=sagittal_spider
+export PFI_SAGITTAL_EXPECTED_MODEL_VERSION=sagittal-spider-final-v1
+export PFI_SAGITTAL_EXPECTED_MODEL_SHA256=cf11dcc0ad77a7c787e64a796a2fd7398ef906add461cef4b3d61f1a5238e944
 ```
 
 ## 3. Levantar Backend
@@ -67,6 +75,23 @@ Tambien se puede usar:
 ```bash
 bash scripts/smoke_backend.sh
 ```
+
+## 5. Sagittal real_baseline estricto
+
+`POST /api/ai/pipeline/run` entra en modo estricto cuando `metadata.inferenceMode=real_baseline` y `metadata.allowContractFallback=false`. Si `allowContractFallback` falta, el backend agrega `false`.
+
+En modo estricto el backend exige `plane=sagittal`, normaliza `modelKey=sagittal_spider`, requiere `inputPath`, valida `modelVersion` y `artifactHash`, no genera fallback demo, y no devuelve `pipeline_degraded_fallback` como exito. Las rutas internas del AI Module se eliminan y los assets publicos se reescriben a `/api/ai/assets/{runId}/{plane}/{assetName}`.
+
+El E2E real es opt-in:
+
+```powershell
+$env:RUN_BACKEND_REAL_E2E="1"
+$env:PFI_E2E_INPUT_PATH="C:\ruta\fixture.mha"
+$env:PFI_BACKEND_BEARER_TOKEN="<token>"
+.\scripts\run_sagittal_real_backend_e2e.ps1
+```
+
+El script llama solo al backend, no al AI Module directo, y no imprime headers de autorizacion.
 
 ## Errores Comunes
 
