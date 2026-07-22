@@ -2,6 +2,7 @@ package ar.edu.uade.pfi.backend.config;
 
 import ar.edu.uade.pfi.backend.service.AuditService;
 import ar.edu.uade.pfi.backend.service.AiContractViolationException;
+import ar.edu.uade.pfi.backend.service.AiMultiplanarContractViolationException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -39,6 +40,11 @@ public class ApiExceptionHandler {
     @ExceptionHandler(AiContractViolationException.class)
     public ResponseEntity<Map<String, Object>> handleAiContractViolation(AiContractViolationException ex, HttpServletRequest request) {
         return buildError(HttpStatus.BAD_GATEWAY, "AI_CONTRACT_VIOLATION", safeMessage(ex.getMessage(), HttpStatus.BAD_GATEWAY), request, ex);
+    }
+
+    @ExceptionHandler(AiMultiplanarContractViolationException.class)
+    public ResponseEntity<Map<String, Object>> handleAiMultiplanarContractViolation(AiMultiplanarContractViolationException ex, HttpServletRequest request) {
+        return buildError(HttpStatus.BAD_GATEWAY, "AI_MULTIPLANAR_CONTRACT_VIOLATION", safeMessage(ex.getMessage(), HttpStatus.BAD_GATEWAY), request, ex);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

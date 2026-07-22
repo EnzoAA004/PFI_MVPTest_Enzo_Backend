@@ -59,10 +59,14 @@ Testcontainers PostgreSQL is the acceptance gate for the real persistence path. 
 
 ## Multiplanar Run Persistence Flow
 
-BE-006 persists successful `POST /api/ai/multiplanar/run` responses after the AI Module returns the frozen multiplanar DTO and before the backend returns it to the frontend.
+BE-006 persists successful `POST /api/ai/multiplanar/run` responses after the AI Module returns the multiplanar DTO, after strict contract validation and after safe presentation/sanitization, before the backend returns it to the frontend.
 
 - `Study` is found or created by de-identified `caseId`.
 - `InputResource` rows are registered from `sagittalInputId` and `axialInputId`.
-- `StudyRun` stores `multiplanarRunId`, `traceId`, requested/effective inference modes, model keys, checkpoint/artifact hashes, child run ids, asset refs, metrics snapshot, and initial review state.
+- `StudyRun` stores `multiplanarRunId`, `traceId`, requested/effective inference modes, model keys, checkpoint/artifact hashes, child run ids, safe asset refs, metrics snapshot, and initial review state.
+- Artifact hashes are resolved from `plane.artifactHash`, `plane.aiOutput.artifactHash`, `plane.modelArtifact.artifactHash`, or `plane.modelArtifact.sha256`.
+- Plane effective modes are stored after normalization from `effectiveInferenceMode`, `inferenceMode`, `aiOutput.inferenceMode`, or `metadata.inferenceMode`.
 - `RunArtifact` rows store refs by `runId`, `plane`, and `assetName`; paths are normalized to basenames and no blobs are stored.
-- If the AI Module call fails or does not return a valid run id, the backend does not persist a fake successful run. Error persistence can be added later with an explicit failed-run contract.
+- Public persisted assets are proxy refs for `input.png`, `overlay.png`, and `mask-preview.png`. Raw assets such as `mask.npy` and `confidence.npy` are not exposed to the browser.
+- Internal paths (`inputPath`, `sourcePath`, `outputFiles`, any `path`, `/tmp`, `/content`, Windows paths, Colab, Google Drive, `models/final`) are removed before public response/persistence.
+- If the AI Module call fails, returns mixed/contract/fallback in strict real_baseline, or violates the sagital/axial real contract, the backend does not persist a fake successful run. Error persistence can be added later with an explicit failed-run contract.

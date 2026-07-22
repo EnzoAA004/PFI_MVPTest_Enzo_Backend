@@ -1,0 +1,210 @@
+{
+  "status": "multiplanar_run_ready",
+  "schemaVersion": "multiplanar-run-v1",
+  "runId": "multi-contract-001",
+  "traceId": "trace-contract-001",
+  "caseId": "CASE-001",
+  "workspaceMode": "dual_plane_with_3d_context",
+  "requestedInferenceMode": "real_baseline",
+  "effectiveInferenceMode": "real_baseline",
+  "planes": {
+    "sagittal": {
+      "runId": "run-sag-001",
+      "caseId": "CASE-001",
+      "plane": "sagittal",
+      "modelKey": "sagittal_spider",
+      "modelVersion": "sagittal-spider-final-v1",
+      "artifactHash": "cf11dcc0ad77a7c787e64a796a2fd7398ef906add461cef4b3d61f1a5238e944",
+      "status": "completed",
+      "inferenceMode": "real_baseline",
+      "requestedInferenceMode": "real_baseline",
+      "allowContractFallback": false,
+      "inputId": "inp_sagittal_001",
+      "modelArtifact": {
+        "artifactHash": "cf11dcc0ad77a7c787e64a796a2fd7398ef906add461cef4b3d61f1a5238e944",
+        "sha256": "cf11dcc0ad77a7c787e64a796a2fd7398ef906add461cef4b3d61f1a5238e944",
+        "path": "/models/final/sagittal_spider.pt"
+      },
+      "series": [
+        {
+          "seriesId": "series-sag-t2",
+          "imagePath": "/tmp/private/input.png",
+          "overlayPath": "/content/private/overlay.png",
+          "imageUrl": "/tmp/private/input.png",
+          "overlayUrl": "/content/private/overlay.png"
+        }
+      ],
+      "masks": [
+        {
+          "name": "canal",
+          "path": "C:\\private\\mask.npy"
+        }
+      ],
+      "landmarks": [
+        {
+          "name": "L4_left_pedicle",
+          "x": 124.2,
+          "y": 210.5,
+          "z": 42,
+          "confidence": 0.94
+        }
+      ],
+      "measurements": {
+        "status": "real_baseline_ready",
+        "values": [
+          {
+            "id": "canalAreaMm2",
+            "value": 82.4,
+            "unit": "mm2"
+          }
+        ]
+      },
+      "aiOutput": {
+        "status": "real_baseline_ready",
+        "inferenceMode": "real_baseline",
+        "requestedInferenceMode": "real_baseline",
+        "artifactHash": "cf11dcc0ad77a7c787e64a796a2fd7398ef906add461cef4b3d61f1a5238e944",
+        "realInferenceAvailable": true,
+        "humanReviewRequired": true,
+        "notClinicalDiagnosis": true
+      },
+      "quality": {
+        "confidence": 0.94
+      },
+      "assets": {
+        "input.png": {
+          "assetName": "input.png",
+          "path": "/tmp/run-sag/input.png"
+        },
+        "overlay.png": {
+          "assetName": "overlay.png",
+          "path": "/content/run-sag/overlay.png"
+        },
+        "mask-preview.png": {
+          "assetName": "mask-preview.png"
+        },
+        "mask.npy": {
+          "assetName": "mask.npy",
+          "path": "/tmp/run-sag/mask.npy"
+        },
+        "confidence.npy": {
+          "assetName": "confidence.npy",
+          "path": "/tmp/run-sag/confidence.npy"
+        }
+      },
+      "metadata": {
+        "inferenceMode": "real_baseline",
+        "requestedInferenceMode": "real_baseline",
+        "artifactHash": "cf11dcc0ad77a7c787e64a796a2fd7398ef906add461cef4b3d61f1a5238e944",
+        "selectedSlice": 9,
+        "selectedAxis": 2,
+        "sliceCount": 17,
+        "inputShapeNative": [17, 512, 512],
+        "inputShapeCanonical": [512, 512, 17],
+        "inputOrientationTransform": "move_axis_0_to_last",
+        "spacingXyz": [0.7, 0.7, 4.0],
+        "arrayAxisSpacingNative": [4.0, 0.7, 0.7],
+        "arrayAxisSpacingCanonical": [0.7, 0.7, 4.0],
+        "inPlaneSpacing": [0.7, 0.7],
+        "inPlaneSpacingUnit": "mm",
+        "sourcePath": "/content/private/input.mha",
+        "outputFiles": {
+          "overlay": "/content/private/overlay.png"
+        }
+      },
+      "humanReviewRequired": true,
+      "notClinicalDiagnosis": true,
+      "degradedMode": false
+    },
+    "axial": {
+      "runId": "run-ax-001",
+      "caseId": "CASE-001",
+      "plane": "axial",
+      "modelKey": "axial_t2_alkafri",
+      "modelVersion": "axial-real-v1",
+      "artifactHash": "axial-artifact-hash",
+      "status": "completed",
+      "inferenceMode": "real_baseline",
+      "requestedInferenceMode": "real_baseline",
+      "allowContractFallback": false,
+      "inputId": "inp_axial_001",
+      "series": [
+        {
+          "seriesId": "series-ax-t2",
+          "imagePath": "/tmp/private/axial-input.png",
+          "overlayPath": "/tmp/private/axial-overlay.png"
+        }
+      ],
+      "masks": [
+        {
+          "name": "canal"
+        }
+      ],
+      "landmarks": [
+        {
+          "name": "canal_center",
+          "x": 93.3,
+          "y": 118.8,
+          "sliceIndex": 18,
+          "confidence": 0.9
+        }
+      ],
+      "measurements": {
+        "status": "real_baseline_ready",
+        "values": [
+          {
+            "id": "leftForamenMm",
+            "value": 3.1,
+            "unit": "mm"
+          }
+        ]
+      },
+      "aiOutput": {
+        "status": "real_baseline_ready",
+        "inferenceMode": "real_baseline",
+        "requestedInferenceMode": "real_baseline",
+        "artifactHash": "axial-artifact-hash",
+        "realInferenceAvailable": true,
+        "humanReviewRequired": true,
+        "notClinicalDiagnosis": true
+      },
+      "quality": {
+        "confidence": 0.9
+      },
+      "assets": {
+        "input.png": {},
+        "overlay.png": {},
+        "mask-preview.png": {},
+        "mask.npy": {},
+        "confidence.npy": {}
+      },
+      "metadata": {
+        "inferenceMode": "real_baseline",
+        "requestedInferenceMode": "real_baseline"
+      },
+      "humanReviewRequired": true,
+      "notClinicalDiagnosis": true,
+      "degradedMode": false
+    }
+  },
+  "threeD": {
+    "enabled": true
+  },
+  "quality": {
+    "workspaceConfidence": 0.92
+  },
+  "review": {
+    "status": "pending",
+    "humanReviewRequired": true
+  },
+  "metadata": {
+    "source": "contract-test",
+    "sourcePath": "/tmp/workspace/private",
+    "outputFiles": {
+      "workspace": "/content/private/workspace.json"
+    }
+  },
+  "humanReviewRequired": true,
+  "notClinicalDiagnosis": true,
+  "degradedMode": false
+}

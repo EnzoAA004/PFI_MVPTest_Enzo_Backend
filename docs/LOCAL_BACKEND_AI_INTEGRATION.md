@@ -105,6 +105,24 @@ En modo estricto el backend exige `plane=sagittal`, normaliza `modelKey=sagittal
 
 El flujo recomendado es `POST /api/ai/inputs` -> `inputId` -> `POST /api/ai/pipeline/run` con `inputId` top-level -> assets por `/api/ai/assets/{runId}/{plane}/{assetName}` -> revision profesional. En modo estricto se acepta `inputId` o `inputPath`, pero no ambos; `inputId` es preferido. El backend no convierte `inputId` a path, no expone `inputPath`, `metadata.sourcePath` ni rutas internas, y el frontend nunca llama directo al AI Module. El ciclo de vida del `inputId` queda a cargo del AI Module.
 
+## 6. Multiplanar real_baseline dual
+
+Para el flujo que usa el Frontend de analisis, subir primero ambos planos y ejecutar:
+
+```bash
+curl -X POST http://localhost:8080/api/ai/multiplanar/run \
+  -H "Content-Type: application/json" \
+  -d '{"caseId":"CASE-001","sagittalInputId":"inp_sagittal_001","axialInputId":"inp_axial_001","sagittalModelKey":"sagittal_spider","axialModelKey":"axial_t2_alkafri","allowContractFallback":false,"metadata":{"inferenceMode":"real_baseline","requestedInferenceMode":"real_baseline","allowContractFallback":false,"source":"frontend-analysis-timeline","deidentified":true}}'
+```
+
+En strict dual el backend exige `sagittalInputId` y `axialInputId`, rechaza `inputId` + `inputPath` del mismo plano, rechaza paths demo, fija `allowContractFallback=false`, conserva `traceId` y normaliza modelos a `sagittal_spider` / `axial_t2_alkafri`.
+
+El AI Module puede devolver `inferenceMode` por plano sin `effectiveInferenceMode`. El backend conserva `inferenceMode` y completa `effectiveInferenceMode` con precedencia `effectiveInferenceMode` -> `inferenceMode` -> `aiOutput.inferenceMode` -> `metadata.inferenceMode`. Asi el Frontend puede evaluar `planes.sagittal.effectiveInferenceMode` y `planes.axial.effectiveInferenceMode`.
+
+El sagital real se valida contra `modelVersion=sagittal-spider-final-v1`, artifact hash final, orientacion SPIDER `[17,512,512] -> [512,512,17]`, `selectedAxis=2`, `selectedSlice` en rango y spacing positivo en `mm`. El axial debe ser `real_baseline` con `modelKey=axial_t2_alkafri`, pero no hereda reglas de version/hash sagital.
+
+La respuesta publica no contiene paths internos ni assets raw. Los assets permitidos se publican como `/api/ai/assets/{planeRunId}/{plane}/input.png`, `/overlay.png` y `/mask-preview.png`; `mask.npy` y `confidence.npy` se eliminan. Si el AI Module devuelve mixed/contract/fallback/degraded en strict, el backend responde error y no persiste una corrida completed falsa.
+
 El E2E real es opt-in:
 
 ```powershell

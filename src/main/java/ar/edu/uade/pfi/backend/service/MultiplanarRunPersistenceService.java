@@ -37,7 +37,7 @@ public class MultiplanarRunPersistenceService {
         registerInput(study, "sagittal", request.sagittalInputId());
         registerInput(study, "axial", request.axialInputId());
 
-        MultiplanarRunResponseDto.PlaneDto sagittal = response.planes() == null ? null : response.planes().sagital();
+        MultiplanarRunResponseDto.PlaneDto sagittal = response.planes() == null ? null : response.planes().sagittal();
         MultiplanarRunResponseDto.PlaneDto axial = response.planes() == null ? null : response.planes().axial();
         String studyRunId = UUID.randomUUID().toString();
         Instant now = clock.instant();
@@ -109,8 +109,10 @@ public class MultiplanarRunPersistenceService {
         if (plane == null) return Map.of();
         Map<String, Object> metrics = new LinkedHashMap<>();
         metrics.put("effectiveInferenceMode", valueOrEmpty(plane.effectiveInferenceMode()));
+        metrics.put("inferenceMode", valueOrEmpty(plane.inferenceMode()));
         metrics.put("measurements", safeMap(plane.measurements()));
         metrics.put("evidence", safeMap(plane.evidence()));
+        metrics.put("quality", safeMap(plane.quality()));
         return metrics;
     }
 
@@ -121,12 +123,22 @@ public class MultiplanarRunPersistenceService {
     }
 
     private String artifactHash(MultiplanarRunResponseDto.PlaneDto plane) {
-        if (plane == null || plane.modelArtifact() == null) return "";
+        if (plane == null) return "";
+        if (!blank(plane.artifactHash())) return plane.artifactHash();
+        String aiOutputHash = valueFrom(plane.aiOutput(), "artifactHash");
+        if (!blank(aiOutputHash)) return aiOutputHash;
+        if (plane.modelArtifact() == null) return "";
         for (String key : List.of("artifactHash", "checkpointHash", "hash", "sha256")) {
-            Object value = plane.modelArtifact().get(key);
-            if (value != null && !String.valueOf(value).isBlank()) return String.valueOf(value);
+            String value = valueFrom(plane.modelArtifact(), key);
+            if (!blank(value)) return value;
         }
         return "";
+    }
+
+    private String valueFrom(Map<String, Object> map, String key) {
+        if (map == null) return "";
+        Object value = map.get(key);
+        return value == null ? "" : String.valueOf(value);
     }
 
     private String reviewStatus(Map<String, Object> review) {

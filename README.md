@@ -46,6 +46,7 @@ docker run --rm -p 8080:8080 --env PFI_AI_SERVICE_URL=http://host.docker.interna
 - `GET /api/ai/models`: lista modelos disponibles en el AI Module.
 - `POST /api/ai/inputs`: sube un archivo al AI Module y devuelve un `inputId` opaco, sin paths internos.
 - `POST /api/ai/pipeline/run`: ejecuta el pipeline remoto y marca revision humana requerida.
+- `POST /api/ai/multiplanar/run`: ejecuta corrida dual sagital/axial usando `inputId` por plano.
 - `POST /api/ai/models/sync`: endpoint administrativo que valida el release sagital real antes de marcarlo listo.
 - `GET /api/ai/assets/{runId}/{plane}/{assetName}`: proxy unico para assets publicos del AI Module.
 - `GET /api/ai/agent/report/{runId}`: obtiene el reporte del agente y agrega revision local.
@@ -135,3 +136,17 @@ El flujo recomendado es subir primero el archivo con `POST /api/ai/inputs`, reci
 El backend valida que la respuesta del AI Module preserve `modelVersion`, `artifactHash`, orientacion del volumen, measurements revisables, flags de seguridad y assets registrados. Las rutas internas del AI Module no se exponen: no se devuelve `inputPath` ni `metadata.sourcePath`, y el frontend recibe URLs relativas `/api/ai/assets/{runId}/{plane}/{assetName}`. El endpoint sigue siendo soporte tecnico revisable, no validacion clinica.
 
 Para una prueba local real, usar `scripts/run_sagittal_real_backend_e2e.ps1` con `RUN_BACKEND_REAL_E2E=1`, `PFI_E2E_INPUT_PATH` y `PFI_BACKEND_BEARER_TOKEN`. El script llama solamente al backend, nunca directo al AI Module.
+
+## Contrato multiplanar real
+
+El flujo recomendado para analisis dual es:
+
+1. Subir input sagital y axial por `POST /api/ai/inputs`.
+2. Enviar `POST /api/ai/multiplanar/run` con `sagittalInputId`, `axialInputId`, `sagittalModelKey=sagittal_spider`, `axialModelKey=axial_t2_alkafri`, `metadata.inferenceMode=real_baseline` y `allowContractFallback=false`.
+3. Consumir `planes.sagittal.effectiveInferenceMode` y `planes.axial.effectiveInferenceMode`.
+4. Abrir assets solo por URLs proxy del backend.
+5. Registrar revision profesional.
+
+El AI Module puede informar por plano `inferenceMode`; el backend conserva ese campo y completa `effectiveInferenceMode` cuando falta usando `effectiveInferenceMode`, `inferenceMode`, `aiOutput.inferenceMode` o `metadata.inferenceMode`, en ese orden. En modo estricto, sagital debe coincidir con el checkpoint final `sagittal-spider-final-v1` y hash `cf11dcc0ad77a7c787e64a796a2fd7398ef906add461cef4b3d61f1a5238e944`; axial se valida como real independiente sin exigir SHA sagital.
+
+La respuesta publica elimina rutas internas (`inputPath`, `sourcePath`, `outputFiles`, cualquier `path`, `/tmp`, `/content`, rutas Windows, Colab, Google Drive, `models/final`) y publica solo `input.png`, `overlay.png`, `mask-preview.png` como `/api/ai/assets/{planeRunId}/{plane}/{assetName}`. `mask.npy` y `confidence.npy` no llegan al navegador. Si una corrida strict queda mixed/contract/fallback o degradada, el backend devuelve error `AI_MULTIPLANAR_CONTRACT_VIOLATION`, no persiste un completed falso y audita el fallo.

@@ -145,13 +145,25 @@ Response esperada:
 
 ```json
 {
+  "status": "multiplanar_run_ready",
+  "schemaVersion": "multiplanar-run-v1",
   "runId": "multi-001",
   "traceId": "trace-001",
+  "caseId": "case-001",
+  "workspaceMode": "dual_plane_with_3d_context",
+  "requestedInferenceMode": "real_baseline",
   "effectiveInferenceMode": "real_baseline",
   "planes": {
-    "sagital": {
+    "sagittal": {
       "runId": "run-sag-001",
+      "plane": "sagittal",
+      "modelKey": "sagittal_spider",
+      "modelVersion": "sagittal-spider-final-v1",
+      "artifactHash": "cf11dcc0ad77a7c787e64a796a2fd7398ef906add461cef4b3d61f1a5238e944",
+      "inferenceMode": "real_baseline",
+      "requestedInferenceMode": "real_baseline",
       "effectiveInferenceMode": "real_baseline",
+      "inputId": "input-sag-001",
       "landmarks": [
         {
           "name": "L4_left_pedicle",
@@ -166,11 +178,26 @@ Response esperada:
         "measurementsDerivedFromPredictionMask": true
       },
       "assets": {
-        "overlay": "overlay.png"
+        "input.png": "/api/ai/assets/run-sag-001/sagittal/input.png",
+        "overlay.png": "/api/ai/assets/run-sag-001/sagittal/overlay.png",
+        "mask-preview.png": "/api/ai/assets/run-sag-001/sagittal/mask-preview.png"
+      },
+      "metadata": {
+        "inputShapeNative": [17, 512, 512],
+        "inputShapeCanonical": [512, 512, 17],
+        "inputOrientationTransform": "move_axis_0_to_last",
+        "selectedAxis": 2,
+        "selectedSlice": 9,
+        "sliceCount": 17,
+        "inPlaneSpacing": [0.7, 0.7],
+        "inPlaneSpacingUnit": "mm"
       }
     },
     "axial": {
       "runId": "run-ax-001",
+      "plane": "axial",
+      "modelKey": "axial_t2_alkafri",
+      "inferenceMode": "real_baseline",
       "effectiveInferenceMode": "real_baseline",
       "landmarks": [
         {
@@ -187,7 +214,9 @@ Response esperada:
         "measurementsDerivedFromPredictionMask": true
       },
       "assets": {
-        "overlay": "overlay.png"
+        "input.png": "/api/ai/assets/run-ax-001/axial/input.png",
+        "overlay.png": "/api/ai/assets/run-ax-001/axial/overlay.png",
+        "mask-preview.png": "/api/ai/assets/run-ax-001/axial/mask-preview.png"
       }
     }
   },
@@ -198,6 +227,21 @@ Response esperada:
 ```
 
 `allowContractFallback` se propaga en `metadata`. Si el AI Module rechaza una corrida con fallback deshabilitado, el backend devuelve el error semantico y no genera una respuesta 200 degradada.
+
+Para compatibilidad, el backend deserializa tanto `planes.sagittal` como el alias historico `planes.sagital`. La respuesta publica principal incluye `planes.sagittal`; tambien conserva alias de lectura legacy.
+
+`inferenceMode` es el modo reportado por el AI Module. `effectiveInferenceMode` es el campo que consume el Frontend para habilitar evaluacion. Por plano se resuelve con esta precedencia sin perder trazabilidad:
+
+1. `effectiveInferenceMode`;
+2. `inferenceMode`;
+3. `aiOutput.inferenceMode`;
+4. `metadata.inferenceMode`.
+
+En `real_baseline` estricto dual (`metadata.inferenceMode=real_baseline` y `allowContractFallback=false`) el backend valida que root, sagital y axial sean reales. El sagital debe usar `modelKey=sagittal_spider`, `modelVersion=sagittal-spider-final-v1`, `artifactHash=cf11dcc0ad77a7c787e64a796a2fd7398ef906add461cef4b3d61f1a5238e944`, orientacion SPIDER `[17,512,512] -> [512,512,17]`, `selectedAxis=2`, spacing positivo en `mm`, `humanReviewRequired=true` y `notClinicalDiagnosis=true`. El axial se valida como plano real independiente con `modelKey=axial_t2_alkafri`, sin exigir SHA/version sagital.
+
+Si root queda `mixed`, algun plano queda `contract`/fallback, `degradedMode=true`, faltan inputs estrictos, o el contrato no preserva inferencia real, el backend devuelve error y no persiste el run como completed. Violaciones de contrato devuelven `502` con `code=AI_MULTIPLANAR_CONTRACT_VIOLATION`.
+
+El payload publico elimina rutas internas recursivamente (`inputPath`, `sourcePath`, `imagePath`, `outputFiles`, cualquier `path`, `/tmp`, `/content`, rutas Windows, Colab, Google Drive y `models/final`). Se conservan `inputId`, runIds, hashes, orientacion, spacing, quality, mediciones y flags de revision. Assets raw (`mask.npy`, `confidence.npy`) se eliminan del payload publico; solo se publican `input.png`, `overlay.png` y `mask-preview.png` via `/api/ai/assets/{planeRunId}/{plane}/{assetName}` usando el `runId` del plano, no el runId multiplanar.
 
 ## GET /api/ai/assets/{runId}/{plane}/{assetName}
 

@@ -12,6 +12,9 @@ import ar.edu.uade.pfi.backend.client.AiServiceOperations;
 import ar.edu.uade.pfi.backend.config.ApiExceptionHandler;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunRequestDto;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunResponseDto;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -23,6 +26,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.server.ResponseStatusException;
 
 class AiMultiplanarRunTest {
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
     @Test
     void runUsesInputIdsAndReturnsFrozenResponseFields() throws Exception {
         AiServiceOperations ai = org.mockito.Mockito.mock(AiServiceOperations.class);
@@ -50,12 +55,13 @@ class AiMultiplanarRunTest {
             .andExpect(jsonPath("$.runId").value("multi-123"))
             .andExpect(jsonPath("$.traceId").value("trace-123"))
             .andExpect(jsonPath("$.effectiveInferenceMode").value("real_baseline"))
-            .andExpect(jsonPath("$.planes.sagital.runId").value("run-sag-123"))
-            .andExpect(jsonPath("$.planes.sagital.effectiveInferenceMode").value("real_baseline"))
-            .andExpect(jsonPath("$.planes.sagital.assets.overlay").value("overlay.png"))
+            .andExpect(jsonPath("$.planes.sagittal.runId").value("run-sag-123"))
+            .andExpect(jsonPath("$.planes.sagittal.effectiveInferenceMode").value("real_baseline"))
+            .andExpect(jsonPath("$.planes.sagittal.inferenceMode").value("real_baseline"))
+            .andExpect(jsonPath("$.planes.sagittal.assets['overlay.png']").value("/api/ai/assets/run-sag-123/sagittal/overlay.png"))
             .andExpect(jsonPath("$.planes.axial.runId").value("run-ax-123"))
             .andExpect(jsonPath("$.planes.axial.effectiveInferenceMode").value("real_baseline"))
-            .andExpect(jsonPath("$.planes.axial.assets.maskPreview").value("mask-preview.png"))
+            .andExpect(jsonPath("$.planes.axial.assets['mask-preview.png']").value("/api/ai/assets/run-ax-123/axial/mask-preview.png"))
             .andExpect(jsonPath("$.assets.workspace").value("workspace.json"));
 
         ArgumentCaptor<MultiplanarRunRequestDto> request = ArgumentCaptor.forClass(MultiplanarRunRequestDto.class);
@@ -94,6 +100,74 @@ class AiMultiplanarRunTest {
             .andExpect(jsonPath("$.message").value("axial plane requires real_baseline; fallback disabled"));
     }
 
+    @Test
+    void strictRealBaselineNormalizesRequestAndReturnsPresentedContract() throws Exception {
+        AiServiceOperations ai = org.mockito.Mockito.mock(AiServiceOperations.class);
+        when(ai.runMultiplanar(any())).thenReturn(contractFixture());
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new AiMultiplanarController(ai))
+            .setControllerAdvice(new ApiExceptionHandler())
+            .build();
+
+        mockMvc.perform(post("/api/ai/multiplanar/run")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "caseId": "CASE-001",
+                      "sagittalInputId": "inp_sagittal_001",
+                      "axialInputId": "inp_axial_001",
+                      "sagittalModelKey": "demo_model",
+                      "axialModelKey": "demo_axial",
+                      "allowContractFallback": false,
+                      "metadata": {
+                        "inferenceMode": "real_baseline",
+                        "traceId": "trace-client-001"
+                      }
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.planes.sagittal.effectiveInferenceMode").value("real_baseline"))
+            .andExpect(jsonPath("$.planes.sagittal.inferenceMode").value("real_baseline"))
+            .andExpect(jsonPath("$.planes.sagittal.assets['overlay.png']").value("/api/ai/assets/run-sag-001/sagittal/overlay.png"))
+            .andExpect(jsonPath("$.planes.sagittal.assets['mask.npy']").doesNotExist())
+            .andExpect(jsonPath("$.planes.sagittal.metadata.sourcePath").doesNotExist());
+
+        ArgumentCaptor<MultiplanarRunRequestDto> request = ArgumentCaptor.forClass(MultiplanarRunRequestDto.class);
+        verify(ai).runMultiplanar(request.capture());
+        assertEquals("sagittal_spider", request.getValue().sagittalModelKey());
+        assertEquals("axial_t2_alkafri", request.getValue().axialModelKey());
+        assertEquals(false, request.getValue().allowContractFallback());
+        assertEquals(false, request.getValue().metadata().get("allowContractFallback"));
+        assertEquals("real_baseline", request.getValue().metadata().get("requestedInferenceMode"));
+        assertEquals("trace-client-001", request.getValue().metadata().get("traceId"));
+    }
+
+    @Test
+    void strictRealBaselineRejectsMissingInputIdsAmbiguousInputsAndDemoPaths() throws Exception {
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new AiMultiplanarController(org.mockito.Mockito.mock(AiServiceOperations.class)))
+            .setControllerAdvice(new ApiExceptionHandler())
+            .build();
+
+        mockMvc.perform(post("/api/ai/multiplanar/run")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(strictBody("", "inp_axial_001", null, null)))
+            .andExpect(status().isBadRequest());
+
+        mockMvc.perform(post("/api/ai/multiplanar/run")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(strictBody("inp_sagittal_001", "", null, null)))
+            .andExpect(status().isBadRequest());
+
+        mockMvc.perform(post("/api/ai/multiplanar/run")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(strictBody("inp_sagittal_001", "inp_axial_001", "some/path", null)))
+            .andExpect(status().isBadRequest());
+
+        mockMvc.perform(post("/api/ai/multiplanar/run")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(strictBody("demo/sag", "inp_axial_001", null, null)))
+            .andExpect(status().isBadRequest());
+    }
+
     private MultiplanarRunResponseDto multiplanarResponse() {
         return new MultiplanarRunResponseDto(
             "multi-123",
@@ -129,6 +203,32 @@ class AiMultiplanarRunTest {
             ),
             Map.of("workspace", "workspace.json"),
             Map.of("status", "pendiente")
+        );
+    }
+
+    private MultiplanarRunResponseDto contractFixture() throws Exception {
+        String json = Files.readString(Path.of("src/test/resources/contracts/ai-module-multiplanar-real-baseline.json"));
+        return objectMapper.readValue(json, MultiplanarRunResponseDto.class);
+    }
+
+    private String strictBody(String sagittalInputId, String axialInputId, String sagittalInputPath, String axialInputPath) {
+        return """
+            {
+              "caseId": "CASE-001",
+              "sagittalInputId": "%s",
+              "axialInputId": "%s",
+              "sagittalInputPath": %s,
+              "axialInputPath": %s,
+              "allowContractFallback": false,
+              "metadata": {
+                "inferenceMode": "real_baseline"
+              }
+            }
+            """.formatted(
+            sagittalInputId,
+            axialInputId,
+            sagittalInputPath == null ? "null" : "\"" + sagittalInputPath + "\"",
+            axialInputPath == null ? "null" : "\"" + axialInputPath + "\""
         );
     }
 }
