@@ -28,7 +28,7 @@ public class PipelineRunRequestNormalizer {
     public PipelineRunRequestDto normalizePipelineRequest(PipelineRunRequestDto request) {
         Map<String, Object> metadata = new LinkedHashMap<>(metadata(request));
         if (!isRealBaselineRequested(request)) {
-            return new PipelineRunRequestDto(request.caseId(), request.plane(), request.modelKey(), request.inputPath(), metadata);
+            return new PipelineRunRequestDto(request.caseId(), request.plane(), request.modelKey(), request.inputPath(), request.inputId(), metadata);
         }
 
         metadata.put("inferenceMode", "real_baseline");
@@ -37,18 +37,35 @@ public class PipelineRunRequestNormalizer {
         boolean strict = Boolean.FALSE.equals(booleanValue(metadata.get("allowContractFallback")));
         String plane = normalized(request.plane());
         String inputPath = request.inputPath() == null ? "" : request.inputPath().trim();
+        String inputId = request.inputId() == null ? "" : request.inputId().trim();
 
         if (strict) {
             if (!"sagittal".equals(plane)) {
                 throw badRequest("real_baseline estricto solo esta habilitado para plane=sagittal.");
             }
-            if (inputPath.isBlank() || inputPath.startsWith("demo/")) {
-                throw badRequest("inputPath es obligatorio para real_baseline estricto y no puede ser demo.");
+            if (inputId.startsWith("demo/")) {
+                throw badRequest("inputId no puede ser demo en real_baseline estricto.");
             }
-            return new PipelineRunRequestDto(request.caseId(), "sagittal", expected.modelKey(), inputPath, metadata);
+            if (!inputPath.isBlank() && inputPath.startsWith("demo/")) {
+                throw badRequest("inputPath demo no esta permitido para real_baseline estricto.");
+            }
+            if (inputId.isBlank() && inputPath.isBlank()) {
+                throw badRequest("inputId o inputPath es obligatorio para real_baseline estricto.");
+            }
+            if (!inputId.isBlank() && !inputPath.isBlank()) {
+                throw badRequest("Enviar solamente inputId o inputPath, no ambos.");
+            }
+            return new PipelineRunRequestDto(
+                request.caseId(),
+                "sagittal",
+                expected.modelKey(),
+                inputPath.isBlank() ? null : inputPath,
+                inputId.isBlank() ? null : inputId,
+                metadata
+            );
         }
 
-        return new PipelineRunRequestDto(request.caseId(), request.plane(), request.modelKey(), request.inputPath(), metadata);
+        return new PipelineRunRequestDto(request.caseId(), request.plane(), request.modelKey(), request.inputPath(), request.inputId(), metadata);
     }
 
     private ResponseStatusException badRequest(String message) {

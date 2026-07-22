@@ -44,6 +44,7 @@ docker run --rm -p 8080:8080 --env PFI_AI_SERVICE_URL=http://host.docker.interna
 
 - `GET /api/ai/health`: consulta el health del AI Module.
 - `GET /api/ai/models`: lista modelos disponibles en el AI Module.
+- `POST /api/ai/inputs`: sube un archivo al AI Module y devuelve un `inputId` opaco, sin paths internos.
 - `POST /api/ai/pipeline/run`: ejecuta el pipeline remoto y marca revision humana requerida.
 - `POST /api/ai/models/sync`: endpoint administrativo que valida el release sagital real antes de marcarlo listo.
 - `GET /api/ai/assets/{runId}/{plane}/{assetName}`: proxy unico para assets publicos del AI Module.
@@ -70,10 +71,18 @@ curl http://localhost:8080/api/ai/models
 ```
 
 ```bash
+curl -X POST http://localhost:8080/api/ai/inputs \
+  -H "Authorization: Bearer <token>" \
+  -F "file=@fixture.mha" \
+  -F "caseId=case-001" \
+  -F "plane=sagittal"
+```
+
+```bash
 curl -X POST http://localhost:8080/api/ai/pipeline/run \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <token>" \
-  -d '{"caseId":"case-001","plane":"sagittal","modelKey":"baseline","inputPath":"studies/case-001"}'
+  -d '{"caseId":"case-001","plane":"sagittal","modelKey":"sagittal_spider","inputId":"inp_case_001_sagittal","metadata":{"inferenceMode":"real_baseline","allowContractFallback":false}}'
 ```
 
 ```bash
@@ -119,8 +128,10 @@ El frontend React consume solamente este backend. El backend delega inferencia, 
 
 ## Contrato sagital real_baseline
 
-Para `POST /api/ai/pipeline/run`, una request es estricta cuando `metadata.inferenceMode=real_baseline` y `metadata.allowContractFallback=false`. Si `allowContractFallback` falta en una request `real_baseline`, el backend agrega `false`. En modo estricto se exige `plane=sagittal`, `inputPath` no vacio y `modelKey=sagittal_spider`; no se genera fallback demo ni `degraded-*` ante errores.
+Para `POST /api/ai/pipeline/run`, una request es estricta cuando `metadata.inferenceMode=real_baseline` y `metadata.allowContractFallback=false`. Si `allowContractFallback` falta en una request `real_baseline`, el backend agrega `false`. En modo estricto se exige `plane=sagittal`, `inputId` o `inputPath`, y `modelKey=sagittal_spider`; no se genera fallback demo ni `degraded-*` ante errores.
 
-El backend valida que la respuesta del AI Module preserve `modelVersion`, `artifactHash`, orientacion del volumen, measurements revisables, flags de seguridad y assets registrados. Las rutas internas del AI Module no se exponen: el frontend recibe URLs relativas `/api/ai/assets/{runId}/{plane}/{assetName}`. El endpoint sigue siendo soporte tecnico revisable, no validacion clinica.
+El flujo recomendado es subir primero el archivo con `POST /api/ai/inputs`, recibir el `inputId` opaco del AI Module y usarlo como campo top-level en `POST /api/ai/pipeline/run`. En modo estricto se acepta `inputId` o `inputPath`, pero no ambos; `inputId` es preferido y su ciclo de vida pertenece al AI Module.
+
+El backend valida que la respuesta del AI Module preserve `modelVersion`, `artifactHash`, orientacion del volumen, measurements revisables, flags de seguridad y assets registrados. Las rutas internas del AI Module no se exponen: no se devuelve `inputPath` ni `metadata.sourcePath`, y el frontend recibe URLs relativas `/api/ai/assets/{runId}/{plane}/{assetName}`. El endpoint sigue siendo soporte tecnico revisable, no validacion clinica.
 
 Para una prueba local real, usar `scripts/run_sagittal_real_backend_e2e.ps1` con `RUN_BACKEND_REAL_E2E=1`, `PFI_E2E_INPUT_PATH` y `PFI_BACKEND_BEARER_TOKEN`. El script llama solamente al backend, nunca directo al AI Module.

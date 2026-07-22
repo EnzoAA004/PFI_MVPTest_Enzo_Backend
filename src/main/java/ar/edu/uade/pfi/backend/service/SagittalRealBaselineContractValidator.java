@@ -65,6 +65,7 @@ public class SagittalRealBaselineContractValidator {
         validateSeries(response, selectedSlice, sliceCount);
         validateAssets(response, text(response, "runId"), text(response, "plane"));
         validateMeasurements(response);
+        validateInputIdEcho(request, response, metadata);
     }
 
     public boolean isValidSagittalSync(Map<String, Object> response) {
@@ -186,6 +187,53 @@ public class SagittalRealBaselineContractValidator {
                 }
             }
         }
+    }
+
+    private void validateInputIdEcho(PipelineRunRequestDto request, Map<String, Object> response, Map<String, Object> metadata) {
+        String requestInputId = request.inputId() == null ? "" : request.inputId().trim();
+        if (requestInputId.isBlank()) {
+            return;
+        }
+        String responseInputId = text(response, "inputId");
+        if (!responseInputId.isBlank()) {
+            requireEquals(requestInputId, responseInputId, "inputId");
+        }
+        if (response.containsKey("inputPath") || response.containsKey("input_path")) {
+            fail("respuesta por inputId no debe exponer inputPath");
+        }
+        if (metadata.containsKey("sourcePath") || metadata.containsKey("source_path")) {
+            fail("metadata no debe exponer sourcePath en respuestas por inputId");
+        }
+        metadata.forEach((key, value) -> {
+            if (isUnsafePathValue(value)) {
+                fail("metadata no debe exponer rutas internas en respuestas por inputId");
+            }
+        });
+    }
+
+    private boolean isUnsafePathValue(Object value) {
+        if (value instanceof String stringValue) {
+            String normalized = stringValue.replace('\\', '/').toLowerCase(Locale.ROOT);
+            return normalized.startsWith("/tmp/")
+                || normalized.startsWith("/content/")
+                || normalized.contains("models/final")
+                || normalized.matches("^[a-z]:/.*");
+        }
+        if (value instanceof Iterable<?> iterable) {
+            for (Object item : iterable) {
+                if (isUnsafePathValue(item)) {
+                    return true;
+                }
+            }
+        }
+        if (value instanceof Map<?, ?> map) {
+            for (Object item : map.values()) {
+                if (isUnsafePathValue(item)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private void validateSpacing(Map<String, Object> metadata) {

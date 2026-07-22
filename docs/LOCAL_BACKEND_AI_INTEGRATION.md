@@ -59,9 +59,30 @@ curl http://localhost:8080/api/ai/models
 ```
 
 ```bash
+curl -X POST http://localhost:8080/api/ai/inputs \
+  -F "file=@fixture.mha" \
+  -F "caseId=case-001" \
+  -F "plane=sagittal"
+```
+
+La respuesta trae un `inputId` opaco:
+
+```json
+{
+  "inputId": "inp_case_001_sagittal",
+  "caseId": "case-001",
+  "plane": "sagittal",
+  "format": "mha",
+  "size": 123456
+}
+```
+
+Luego ejecutar pipeline usando ese `inputId`, no una ruta interna:
+
+```bash
 curl -X POST http://localhost:8080/api/ai/pipeline/run \
   -H "Content-Type: application/json" \
-  -d '{"caseId":"case-001","plane":"sagittal","modelKey":"baseline","inputPath":"studies/case-001"}'
+  -d '{"caseId":"case-001","plane":"sagittal","modelKey":"sagittal_spider","inputId":"inp_case_001_sagittal","metadata":{"inferenceMode":"real_baseline","allowContractFallback":false}}'
 ```
 
 ```bash
@@ -80,7 +101,9 @@ bash scripts/smoke_backend.sh
 
 `POST /api/ai/pipeline/run` entra en modo estricto cuando `metadata.inferenceMode=real_baseline` y `metadata.allowContractFallback=false`. Si `allowContractFallback` falta, el backend agrega `false`.
 
-En modo estricto el backend exige `plane=sagittal`, normaliza `modelKey=sagittal_spider`, requiere `inputPath`, valida `modelVersion` y `artifactHash`, no genera fallback demo, y no devuelve `pipeline_degraded_fallback` como exito. Las rutas internas del AI Module se eliminan y los assets publicos se reescriben a `/api/ai/assets/{runId}/{plane}/{assetName}`.
+En modo estricto el backend exige `plane=sagittal`, normaliza `modelKey=sagittal_spider`, requiere `inputId` o `inputPath`, valida `modelVersion` y `artifactHash`, no genera fallback demo, y no devuelve `pipeline_degraded_fallback` como exito. Las rutas internas del AI Module se eliminan y los assets publicos se reescriben a `/api/ai/assets/{runId}/{plane}/{assetName}`.
+
+El flujo recomendado es `POST /api/ai/inputs` -> `inputId` -> `POST /api/ai/pipeline/run` con `inputId` top-level -> assets por `/api/ai/assets/{runId}/{plane}/{assetName}` -> revision profesional. En modo estricto se acepta `inputId` o `inputPath`, pero no ambos; `inputId` es preferido. El backend no convierte `inputId` a path, no expone `inputPath`, `metadata.sourcePath` ni rutas internas, y el frontend nunca llama directo al AI Module. El ciclo de vida del `inputId` queda a cargo del AI Module.
 
 El E2E real es opt-in:
 

@@ -19,8 +19,12 @@ import ar.edu.uade.pfi.backend.config.ApiExceptionHandler;
 import ar.edu.uade.pfi.backend.config.SagittalRealBaselineProperties;
 import ar.edu.uade.pfi.backend.controller.AiBackendController;
 import ar.edu.uade.pfi.backend.controller.AiModelSyncController;
+import ar.edu.uade.pfi.backend.dto.AiInputResponseDto;
 import ar.edu.uade.pfi.backend.dto.PipelineRunRequestDto;
 import ar.edu.uade.pfi.backend.dto.ReviewStatusDto;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -34,6 +38,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.server.ResponseStatusException;
 
 class SagittalRealBaselineIntegrationContractTest {
+    private static final String INPUT_ID = "inp_test_sagittal_001";
     private final SagittalRealBaselineProperties expected = new SagittalRealBaselineProperties(
         "sagittal_spider",
         "sagittal-spider-final-v1",
@@ -54,6 +59,7 @@ class SagittalRealBaselineIntegrationContractTest {
             "sagittal",
             "baseline",
             "input-123",
+            null,
             Map.of("inferenceMode", "real_baseline", "traceId", "trace-001")
         ));
 
@@ -70,6 +76,7 @@ class SagittalRealBaselineIntegrationContractTest {
             "sagittal",
             "baseline",
             "input-123",
+            null,
             Map.of("inferenceMode", "real_baseline", "allowContractFallback", true)
         ));
 
@@ -93,6 +100,76 @@ class SagittalRealBaselineIntegrationContractTest {
                     """))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.status").value("error"));
+    }
+
+    @Test
+    void strictRealBaselineAcceptsInputIdAndForwardsItTopLevel() throws Exception {
+        AiServiceOperations ai = mock(AiServiceOperations.class);
+        when(ai.runPipeline(any())).thenReturn(validPipelineResponseForInputId());
+
+        strictMockMvc(ai, mockReviewStore()).perform(post("/api/ai/pipeline/run")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(inputIdRequestJson()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.inputId").value(INPUT_ID))
+            .andExpect(jsonPath("$.inputPath").doesNotExist())
+            .andExpect(jsonPath("$.metadata.sourcePath").doesNotExist());
+
+        ArgumentCaptor<PipelineRunRequestDto> captor = ArgumentCaptor.forClass(PipelineRunRequestDto.class);
+        verify(ai).runPipeline(captor.capture());
+        assertEquals(INPUT_ID, captor.getValue().inputId());
+        assertTrue(captor.getValue().inputPath() == null || captor.getValue().inputPath().isBlank());
+        assertEquals("sagittal_spider", captor.getValue().modelKey());
+        assertEquals(false, captor.getValue().metadata().get("allowContractFallback"));
+    }
+
+    @Test
+    void strictRealBaselineRejectsAmbiguousInputIdAndInputPath() throws Exception {
+        strictMockMvc(mock(AiServiceOperations.class), mockReviewStore()).perform(post("/api/ai/pipeline/run")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "caseId": "case-001",
+                      "plane": "sagittal",
+                      "modelKey": "baseline",
+                      "inputPath": "input-sag-001",
+                      "inputId": "inp_test_sagittal_001",
+                      "metadata": {"inferenceMode": "real_baseline"}
+                    }
+                    """))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("Enviar solamente inputId o inputPath, no ambos."));
+    }
+
+    @Test
+    void strictRealBaselineRejectsDemoInputPathAndDemoInputId() throws Exception {
+        MockMvc mockMvc = strictMockMvc(mock(AiServiceOperations.class), mockReviewStore());
+
+        mockMvc.perform(post("/api/ai/pipeline/run")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "caseId": "case-001",
+                      "plane": "sagittal",
+                      "modelKey": "baseline",
+                      "inputPath": "demo/case-001",
+                      "metadata": {"inferenceMode": "real_baseline"}
+                    }
+                    """))
+            .andExpect(status().isBadRequest());
+
+        mockMvc.perform(post("/api/ai/pipeline/run")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "caseId": "case-001",
+                      "plane": "sagittal",
+                      "modelKey": "baseline",
+                      "inputId": "demo/case-001",
+                      "metadata": {"inferenceMode": "real_baseline"}
+                    }
+                    """))
+            .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -269,6 +346,54 @@ class SagittalRealBaselineIntegrationContractTest {
     }
 
     @Test
+    void inputIdResponseMustEchoWhenPresentAndMustNotExposeInputPath() {
+        validator.validatePipelineResponse(inputIdStrictRequest(), validPipelineResponseForInputId());
+
+        Map<String, Object> mismatch = validPipelineResponseForInputId();
+        mismatch.put("inputId", "inp_other");
+        assertThrows(AiContractViolationException.class, () -> validator.validatePipelineResponse(inputIdStrictRequest(), mismatch));
+
+        Map<String, Object> exposedPath = validPipelineResponseForInputId();
+        exposedPath.put("inputPath", "/tmp/private/input.mha");
+        assertThrows(AiContractViolationException.class, () -> validator.validatePipelineResponse(inputIdStrictRequest(), exposedPath));
+
+        Map<String, Object> exposedSourcePath = validPipelineResponseForInputId();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> metadata = (Map<String, Object>) exposedSourcePath.get("metadata");
+        metadata.put("sourcePath", "/content/private/input.mha");
+        assertThrows(AiContractViolationException.class, () -> validator.validatePipelineResponse(inputIdStrictRequest(), exposedSourcePath));
+    }
+
+    @Test
+    void presenterPreservesOpaqueInputIdAndRemovesInternalPaths() {
+        Map<String, Object> response = validPipelineResponseForInputId();
+        response.put("inputPath", "/tmp/private/input.mha");
+        Map<String, Object> presented = presenter.present(response);
+
+        assertEquals(INPUT_ID, presented.get("inputId"));
+        assertFalse(presented.containsKey("inputPath"));
+        assertFalse(presented.toString().contains("/tmp"));
+        assertFalse(presented.toString().contains("sourcePath"));
+    }
+
+    @Test
+    void uploadResponseSerializesInputIdWithoutInputPath() throws Exception {
+        String json = new ObjectMapper().writeValueAsString(new AiInputResponseDto(INPUT_ID, "case-001", "sagittal", "mha", 123));
+
+        assertTrue(json.contains("\"inputId\""));
+        assertFalse(json.contains("inputPath"));
+    }
+
+    @Test
+    void e2eScriptUsesInputIdAndDoesNotAssignUploadInputIdToInputPath() throws Exception {
+        String script = Files.readString(Path.of("scripts/run_sagittal_real_backend_e2e.ps1"));
+
+        assertTrue(script.contains("inputId = $upload.inputId"));
+        assertFalse(script.contains("inputPath = $pipelineInput"));
+        assertFalse(script.contains("$pipelineInput = if ($upload.inputPath)"));
+    }
+
+    @Test
     void upstreamRawAssetsAreValidButNeverPresentedOrProxied() {
         Map<String, Object> response = validPipelineResponse();
 
@@ -388,7 +513,14 @@ class SagittalRealBaselineIntegrationContractTest {
     }
 
     private PipelineRunRequestDto strictRequest() {
-        return new PipelineRunRequestDto("case-001", "sagittal", "sagittal_spider", "input-sag-001", Map.of(
+        return new PipelineRunRequestDto("case-001", "sagittal", "sagittal_spider", "input-sag-001", null, Map.of(
+            "inferenceMode", "real_baseline",
+            "allowContractFallback", false
+        ));
+    }
+
+    private PipelineRunRequestDto inputIdStrictRequest() {
+        return new PipelineRunRequestDto("case-001", "sagittal", "sagittal_spider", null, INPUT_ID, Map.of(
             "inferenceMode", "real_baseline",
             "allowContractFallback", false
         ));
@@ -402,6 +534,18 @@ class SagittalRealBaselineIntegrationContractTest {
               "modelKey": "sagittal_spider",
               "inputPath": "input-sag-001",
               "metadata": {"inferenceMode": "real_baseline", "allowContractFallback": false}
+            }
+            """;
+    }
+
+    private String inputIdRequestJson() {
+        return """
+            {
+              "caseId": "case-001",
+              "plane": "sagittal",
+              "modelKey": "sagittal-spider-final-v1",
+              "inputId": "inp_test_sagittal_001",
+              "metadata": {"inferenceMode": "real_baseline"}
             }
             """;
     }
@@ -471,6 +615,16 @@ class SagittalRealBaselineIntegrationContractTest {
         response.put("quality", Map.of("foregroundPresent", false));
         response.put("overlayPath", "/tmp/run-001/overlay.png");
         response.put("modelPath", "/models/final/model.pt");
+        return response;
+    }
+
+    private Map<String, Object> validPipelineResponseForInputId() {
+        Map<String, Object> response = validPipelineResponse();
+        response.put("inputId", INPUT_ID);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> metadata = (Map<String, Object>) response.get("metadata");
+        metadata.remove("sourcePath");
+        metadata.remove("outputFiles");
         return response;
     }
 

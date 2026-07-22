@@ -30,12 +30,18 @@ $upload = Invoke-RestMethod -Method Post -Uri "$baseUrl/api/ai/inputs" -Headers 
     plane = "sagittal"
 }
 
-$pipelineInput = if ($upload.inputPath) { $upload.inputPath } elseif ($upload.inputId) { $upload.inputId } else { throw "Upload no devolvio inputPath ni inputId." }
+if ([string]::IsNullOrWhiteSpace($upload.inputId) -or !$upload.inputId.StartsWith("inp_")) {
+    throw "Upload no devolvio un inputId valido."
+}
+if ($upload.PSObject.Properties.Name -contains "inputPath") {
+    throw "Upload no debe exponer inputPath."
+}
+
 $body = @{
     caseId = $caseId
     plane = "sagittal"
     modelKey = "sagittal_spider"
-    inputPath = $pipelineInput
+    inputId = $upload.inputId
     metadata = @{
         inferenceMode = "real_baseline"
         allowContractFallback = $false
@@ -48,6 +54,9 @@ $result = Invoke-RestMethod -Method Post -Uri "$baseUrl/api/ai/pipeline/run" -He
 
 if ($result.modelVersion -ne "sagittal-spider-final-v1") { throw "modelVersion inesperado." }
 if ($result.artifactHash -ne "cf11dcc0ad77a7c787e64a796a2fd7398ef906add461cef4b3d61f1a5238e944") { throw "artifactHash inesperado." }
+if ($result.inputId -ne $upload.inputId) { throw "inputId inesperado en resultado." }
+if ($result.PSObject.Properties.Name -contains "inputPath") { throw "Pipeline no debe exponer inputPath." }
+if ($result.metadata.PSObject.Properties.Name -contains "sourcePath") { throw "Pipeline no debe exponer metadata.sourcePath." }
 if ($result.inferenceMode -ne "real_baseline") { throw "inferenceMode inesperado." }
 if ($result.allowContractFallback -ne $false) { throw "allowContractFallback no es false." }
 if ($result.metadata.selectedAxis -ne 2) { throw "selectedAxis inesperado." }

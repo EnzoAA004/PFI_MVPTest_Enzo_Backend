@@ -9,11 +9,13 @@ public record PipelineRunRequestDto(
     @NotBlank String plane,
     String modelKey,
     String inputPath,
+    String inputId,
     Map<String, Object> metadata
 ) {
     public PipelineRunRequestDto {
         String normalizedPlane = plane == null ? "" : plane.trim().toLowerCase();
         modelKey = normalizeModelKey(modelKey, normalizedPlane);
+        inputId = inputId == null ? null : inputId.trim();
         inputPath = normalizeInputPath(inputPath, caseId, metadata);
         metadata = metadata == null ? Map.of("source", "backend-default-contract") : metadata;
     }

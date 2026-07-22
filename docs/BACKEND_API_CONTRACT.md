@@ -71,12 +71,14 @@ Request:
   "caseId": "case-001",
   "plane": "sagittal",
   "modelKey": "baseline",
-  "inputPath": "studies/case-001",
+  "inputId": "inp_case_001_sagittal",
   "metadata": {
     "source": "local-test"
   }
 }
 ```
+
+Para el flujo recomendado, primero subir el archivo con `POST /api/ai/inputs`, conservar el `inputId` opaco devuelto por el AI Module, y enviarlo como campo top-level en `POST /api/ai/pipeline/run`. El backend no transforma ese `inputId` en `inputPath`, no persiste rutas internas y no las devuelve al frontend.
 
 Response esperada:
 
@@ -109,7 +111,7 @@ Response esperada:
 
 ```json
 {
-  "inputId": "input-001",
+  "inputId": "inp_case_001_sagittal",
   "caseId": "case-001",
   "plane": "sagittal",
   "format": "npy",
@@ -117,7 +119,7 @@ Response esperada:
 }
 ```
 
-El backend valida extension, plano y tamano antes de reenviar. La respuesta no expone paths internos.
+El backend valida extension, plano y tamano antes de reenviar. La respuesta no expone paths internos ni `inputPath`. El ciclo de vida del `inputId` depende del registro del AI Module.
 
 ## POST /api/ai/multiplanar/run
 
@@ -279,7 +281,9 @@ En modo estricto:
 
 - `plane` debe ser `sagittal`;
 - `modelKey` se normaliza a `sagittal_spider`;
-- `inputPath` es obligatorio y no se autocompleta con `demo/<caseId>`;
+- `inputId` o `inputPath` es obligatorio, pero no ambos;
+- `inputId` es el flujo recomendado y debe venir de `POST /api/ai/inputs`;
+- `inputId` o `inputPath` no puede apuntar a `demo/<caseId>`;
 - los errores 4xx del AI Module se preservan como errores 4xx;
 - timeout devuelve `504`;
 - conexion rechazada o error 5xx upstream devuelve `502`;
@@ -295,7 +299,15 @@ El contrato sagital esperado se configura por variables:
 - `PFI_SAGITTAL_EXPECTED_RELEASE_CONTENT_SHA256=7420ad4271fe634c970b2a543d1ef8fb1437888c99ca8bd5733a06e5f63e3e7e`
 - `PFI_SAGITTAL_EXPECTED_RELEASE_MANIFEST_SHA256=d36d0c4fe183ba9a98f0a3471486be5dee1cf1fa820dc32b3a50177ce322be21`
 
-La respuesta estricta se sanitiza antes de llegar al frontend: se eliminan rutas internas (`/tmp`, `/content`, rutas Windows, `models/final`, `metadata.sourcePath`, `metadata.outputFiles`) y los assets publicos se reescriben como `/api/ai/assets/{runId}/{plane}/{assetName}`. No se publican `mask.npy` ni `confidence.npy`.
+La respuesta estricta se sanitiza antes de llegar al frontend: se eliminan rutas internas (`/tmp`, `/content`, rutas Windows, `models/final`, `inputPath`, `metadata.sourcePath`, `metadata.outputFiles`) y los assets publicos se reescriben como `/api/ai/assets/{runId}/{plane}/{assetName}`. No se publican `mask.npy` ni `confidence.npy`. Si la corrida usa `inputId` y el AI Module lo devuelve, debe coincidir con el `inputId` enviado.
+
+Flujo frontend recomendado:
+
+1. `POST /api/ai/inputs` con multipart.
+2. Guardar solo el `inputId` opaco de la respuesta.
+3. `POST /api/ai/pipeline/run` con `caseId`, `plane=sagittal`, `modelKey=sagittal_spider`, `inputId` y `metadata.inferenceMode=real_baseline`.
+4. Consumir assets via `/api/ai/assets/{runId}/{plane}/{assetName}`.
+5. Registrar revision profesional. La salida es soporte tecnico revisable, no diagnostico clinico.
 
 ## POST /api/ai/models/sync
 

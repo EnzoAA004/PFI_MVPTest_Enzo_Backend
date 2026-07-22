@@ -199,7 +199,7 @@ public class AiServiceClient implements AiServiceOperations {
             return request;
         }
         Map<String, Object> metadata = mergedTraceMetadata(request.metadata(), traceId);
-        return new PipelineRunRequestDto(request.caseId(), request.plane(), request.modelKey(), request.inputPath(), metadata);
+        return new PipelineRunRequestDto(request.caseId(), request.plane(), request.modelKey(), request.inputPath(), request.inputId(), metadata);
     }
 
     private MultiplanarRunRequestDto withTraceMetadata(MultiplanarRunRequestDto request) {
