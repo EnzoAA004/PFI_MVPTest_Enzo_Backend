@@ -6,8 +6,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -43,6 +45,7 @@ class SagittalRealBaselineIntegrationContractTest {
     private final PipelineRunRequestNormalizer normalizer = new PipelineRunRequestNormalizer(expected);
     private final SagittalRealBaselineContractValidator validator = new SagittalRealBaselineContractValidator(expected);
     private final AiPipelineResponsePresenter presenter = new AiPipelineResponsePresenter();
+    private final AiModelReadinessResolver readinessResolver = new AiModelReadinessResolver(expected);
 
     @Test
     void realBaselineMissingFallbackBecomesStrictFalseAndKeepsTraceId() {
@@ -121,6 +124,7 @@ class SagittalRealBaselineIntegrationContractTest {
             .andExpect(jsonPath("$.assets['overlay.png']").value("/api/ai/assets/run-001/sagittal/overlay.png"))
             .andExpect(jsonPath("$.assets['mask-preview.png']").value("/api/ai/assets/run-001/sagittal/mask-preview.png"))
             .andExpect(jsonPath("$.assets['mask.npy']").doesNotExist())
+            .andExpect(jsonPath("$.assets['confidence.npy']").doesNotExist())
             .andExpect(jsonPath("$.metadata.sourcePath").doesNotExist())
             .andExpect(jsonPath("$.metadata.outputFiles").doesNotExist())
             .andExpect(jsonPath("$.overlayPath").value("/api/ai/assets/run-001/sagittal/overlay.png"))
@@ -211,7 +215,7 @@ class SagittalRealBaselineIntegrationContractTest {
     @Test
     void modelSyncAcceptsVerifiedStatusesAndRejectsBadHashes() throws Exception {
         AiServiceOperations ai = mock(AiServiceOperations.class);
-        when(ai.syncModels(false)).thenReturn(syncResponse("synced_verified", expected.modelSha256()));
+        when(ai.syncModels(false)).thenReturn(syncResponse("models_sync_completed", "synced_verified", expected.modelSha256()));
 
         MockMvc mockMvc = MockMvcBuilders
             .standaloneSetup(new AiModelSyncController(ai, null, validator))
@@ -222,11 +226,33 @@ class SagittalRealBaselineIntegrationContractTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.sagittalReadyForRealInference").value(true));
 
-        Map<String, Object> existing = syncResponse("existing_release_verified", expected.modelSha256());
+        Map<String, Object> existing = syncResponse("models_sync_completed", "existing_release_verified", expected.modelSha256());
         validator.validateSagittalSync(existing);
-        assertThrows(AiContractViolationException.class, () -> validator.validateSagittalSync(syncResponse("synced_verified", "wrong")));
-        assertThrows(AiContractViolationException.class, () -> validator.validateSagittalSync(syncResponse("sync_failed", expected.modelSha256())));
+        assertThrows(AiContractViolationException.class, () -> validator.validateSagittalSync(syncResponse("models_sync_completed", "synced_verified", "wrong")));
+        assertThrows(AiContractViolationException.class, () -> validator.validateSagittalSync(syncResponse("models_sync_completed", "sync_failed", expected.modelSha256())));
         verify(ai).syncModels(false);
+    }
+
+    @Test
+    void modelSyncRejectsInvalidRootMissingItemStatusAbsentItemAndAxialOnlySuccess() {
+        assertThrows(AiContractViolationException.class, () ->
+            validator.validateSagittalSync(syncResponse("synced_verified", "synced_verified", expected.modelSha256())));
+        Map<String, Object> noItemStatus = syncResponse("models_sync_completed", "", expected.modelSha256());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> item = (Map<String, Object>) ((List<?>) noItemStatus.get("items")).get(0);
+        item.remove("status");
+        assertThrows(AiContractViolationException.class, () -> validator.validateSagittalSync(noItemStatus));
+        assertThrows(AiContractViolationException.class, () -> validator.validateSagittalSync(new LinkedHashMap<>(Map.of(
+            "status", "models_sync_completed",
+            "items", List.of(Map.of("modelKey", "axial_t2_alkafri", "status", "synced_verified"))
+        ))));
+        assertThrows(AiContractViolationException.class, () -> validator.validateSagittalSync(new LinkedHashMap<>(Map.of(
+            "status", "models_sync_completed",
+            "items", List.of(
+                Map.of("modelKey", "axial_t2_alkafri", "status", "synced_verified"),
+                syncItem("sync_failed", expected.modelSha256())
+            )
+        ))));
     }
 
     @Test
@@ -242,8 +268,111 @@ class SagittalRealBaselineIntegrationContractTest {
         assertFalse(presented.toString().contains("confidence.npy"));
     }
 
+    @Test
+    void upstreamRawAssetsAreValidButNeverPresentedOrProxied() {
+        Map<String, Object> response = validPipelineResponse();
+
+        validator.validatePipelineResponse(strictRequest(), response);
+        Map<String, Object> presented = presenter.present(response);
+
+        assertFalse(presented.toString().contains("mask.npy"));
+        assertFalse(presented.toString().contains("confidence.npy"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> assets = (Map<String, Object>) presented.get("assets");
+        assertEquals(3, assets.size());
+        assertTrue(assets.containsKey("input.png"));
+        assertTrue(assets.containsKey("overlay.png"));
+        assertTrue(assets.containsKey("mask-preview.png"));
+    }
+
+    @Test
+    void upstreamAssetsRejectUnknownMismatchedNameRunIdOrPlane() {
+        assertThrows(AiContractViolationException.class, () -> validator.validatePipelineResponse(
+            strictRequest(), responseWithAsset("debug.txt", Map.of("runId", "run-001", "plane", "sagittal", "assetName", "debug.txt"))
+        ));
+        assertThrows(AiContractViolationException.class, () -> validator.validatePipelineResponse(
+            strictRequest(), responseWithAsset("overlay.png", Map.of("runId", "other-run", "plane", "sagittal", "assetName", "overlay.png"))
+        ));
+        assertThrows(AiContractViolationException.class, () -> validator.validatePipelineResponse(
+            strictRequest(), responseWithAsset("overlay.png", Map.of("runId", "run-001", "plane", "axial", "assetName", "overlay.png"))
+        ));
+        assertThrows(AiContractViolationException.class, () -> validator.validatePipelineResponse(
+            strictRequest(), responseWithAsset("overlay.png", Map.of("runId", "run-001", "plane", "sagittal", "assetName", "input.png"))
+        ));
+    }
+
+    @Test
+    void backendAssetProxyStillForbidsRawAssets() throws Exception {
+        strictMockMvc(mock(AiServiceOperations.class), mockReviewStore())
+            .perform(get("/api/ai/assets/run-001/sagittal/mask.npy"))
+            .andExpect(status().isForbidden());
+
+        strictMockMvc(mock(AiServiceOperations.class), mockReviewStore())
+            .perform(get("/api/ai/assets/run-001/sagittal/confidence.npy"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void readinessDerivesSagittalAndAxialFromVerifyModels() throws Exception {
+        AiServiceOperations ai = mock(AiServiceOperations.class);
+        when(ai.readiness()).thenReturn(Map.of("status", "ready"));
+        when(ai.verifyModels()).thenReturn(verifyModels(List.of(sagittalVerified(), axialVerified()), List.of(), List.of(), List.of()));
+
+        strictMockMvc(ai, mockReviewStore()).perform(get("/api/ai/readiness"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.backendReady").value(true))
+            .andExpect(jsonPath("$.aiModuleAvailable").value(true))
+            .andExpect(jsonPath("$.degradedMode").value(false))
+            .andExpect(jsonPath("$.sagittalReadyForRealInference").value(true))
+            .andExpect(jsonPath("$.axialReadyForRealInference").value(true))
+            .andExpect(jsonPath("$.sha256").doesNotExist())
+            .andExpect(jsonPath("$.version").doesNotExist());
+
+        verify(ai, times(1)).verifyModels();
+    }
+
+    @Test
+    void readinessKeepsSagittalIndependentFromAxialAndRejectsBadSagittalEvidence() {
+        assertEquals(new AiModelReadinessResolver.ModelReadiness(true, false),
+            readinessResolver.resolve(verifyModels(List.of(sagittalVerified()), List.of(), List.of(), List.of())));
+        assertFalse(readinessResolver.resolve(verifyModels(List.of(mutate(sagittalVerified(), "sha256", "wrong")), List.of(), List.of(), List.of()))
+            .sagittalReadyForRealInference());
+        assertFalse(readinessResolver.resolve(verifyModels(List.of(mutate(sagittalVerified(), "baselineReady", false)), List.of(), List.of(), List.of()))
+            .sagittalReadyForRealInference());
+        assertFalse(readinessResolver.resolve(verifyModels(List.of(sagittalVerified()), List.of(), List.of(Map.of("modelKey", "sagittal_spider")), List.of()))
+            .sagittalReadyForRealInference());
+    }
+
+    @Test
+    void readinessVerifyModelsFailureKeepsAiAvailableButDegraded() throws Exception {
+        AiServiceOperations ai = mock(AiServiceOperations.class);
+        when(ai.readiness()).thenReturn(Map.of("status", "ready"));
+        when(ai.verifyModels()).thenThrow(new ResponseStatusException(HttpStatus.BAD_GATEWAY, "verify unavailable"));
+
+        strictMockMvc(ai, mockReviewStore()).perform(get("/api/ai/readiness"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.aiModuleAvailable").value(true))
+            .andExpect(jsonPath("$.degradedMode").value(true))
+            .andExpect(jsonPath("$.sagittalReadyForRealInference").value(false))
+            .andExpect(jsonPath("$.axialReadyForRealInference").value(false))
+            .andExpect(jsonPath("$.modelVerificationStatus").value("model_artifact_verification_unavailable"));
+    }
+
+    @Test
+    void readinessAiModuleDownKeepsBothModelFlagsFalse() throws Exception {
+        AiServiceOperations ai = mock(AiServiceOperations.class);
+        when(ai.readiness()).thenThrow(new ResponseStatusException(HttpStatus.BAD_GATEWAY, "down"));
+
+        strictMockMvc(ai, mockReviewStore()).perform(get("/api/ai/readiness"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.aiModuleAvailable").value(false))
+            .andExpect(jsonPath("$.degradedMode").value(true))
+            .andExpect(jsonPath("$.sagittalReadyForRealInference").value(false))
+            .andExpect(jsonPath("$.axialReadyForRealInference").value(false));
+    }
+
     private MockMvc strictMockMvc(AiServiceOperations ai, ReviewStoreService reviews) {
-        AiBackendService service = new AiBackendService(ai, reviews, null, normalizer, validator, presenter);
+        AiBackendService service = new AiBackendService(ai, reviews, null, normalizer, validator, presenter, readinessResolver);
         return MockMvcBuilders
             .standaloneSetup(new AiBackendController(service))
             .setControllerAdvice(new ApiExceptionHandler())
@@ -330,7 +459,9 @@ class SagittalRealBaselineIntegrationContractTest {
         response.put("assets", new LinkedHashMap<>(Map.of(
             "input.png", Map.of("runId", "run-001", "plane", "sagittal", "assetName", "input.png"),
             "overlay.png", Map.of("runId", "run-001", "plane", "sagittal", "assetName", "overlay.png"),
-            "mask-preview.png", Map.of("runId", "run-001", "plane", "sagittal", "assetName", "mask-preview.png")
+            "mask-preview.png", Map.of("runId", "run-001", "plane", "sagittal", "assetName", "mask-preview.png"),
+            "mask.npy", Map.of("runId", "run-001", "plane", "sagittal", "assetName", "mask.npy"),
+            "confidence.npy", Map.of("runId", "run-001", "plane", "sagittal", "assetName", "confidence.npy")
         )));
         response.put("measurements", Map.of(
             "status", "real_baseline_ready",
@@ -343,24 +474,77 @@ class SagittalRealBaselineIntegrationContractTest {
         return response;
     }
 
-    private Map<String, Object> syncResponse(String status, String modelSha256) {
+    private Map<String, Object> responseWithAsset(String key, Object value) {
+        Map<String, Object> response = validPipelineResponse();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> assets = (Map<String, Object>) response.get("assets");
+        assets.put(key, value);
+        return response;
+    }
+
+    private Map<String, Object> syncResponse(String rootStatus, String itemStatus, String modelSha256) {
         return new LinkedHashMap<>(Map.of(
-            "status", status,
-            "items", List.of(new LinkedHashMap<>(Map.ofEntries(
-                Map.entry("modelKey", expected.modelKey()),
-                Map.entry("source", "gcs_verified_release"),
-                Map.entry("releaseId", expected.releaseId()),
-                Map.entry("releaseContentSha256", expected.releaseContentSha256()),
-                Map.entry("releaseManifestSha256", expected.releaseManifestSha256()),
-                Map.entry("modelSha256", modelSha256),
-                Map.entry("artifactSynced", true),
-                Map.entry("manifestSynced", true),
-                Map.entry("modelCardSynced", true),
-                Map.entry("releaseMetadataVerified", true),
-                Map.entry("gcsReadOnly", true),
-                Map.entry("filesReplaced", 0),
-                Map.entry("releaseMetadataReplaced", 3)
-            )))
+            "status", rootStatus,
+            "items", List.of(syncItem(itemStatus, modelSha256), Map.of("modelKey", "axial_t2_alkafri"))
         ));
+    }
+
+    private Map<String, Object> syncItem(String itemStatus, String modelSha256) {
+        Map<String, Object> item = new LinkedHashMap<>(Map.ofEntries(
+            Map.entry("modelKey", expected.modelKey()),
+            Map.entry("source", "gcs_verified_release"),
+            Map.entry("releaseId", expected.releaseId()),
+            Map.entry("releaseContentSha256", expected.releaseContentSha256()),
+            Map.entry("releaseManifestSha256", expected.releaseManifestSha256()),
+            Map.entry("modelSha256", modelSha256),
+            Map.entry("artifactSynced", true),
+            Map.entry("manifestSynced", true),
+            Map.entry("modelCardSynced", true),
+            Map.entry("releaseMetadataVerified", true),
+            Map.entry("gcsReadOnly", true),
+            Map.entry("filesReplaced", 0),
+            Map.entry("releaseMetadataReplaced", 0)
+        ));
+        if (!itemStatus.isBlank()) {
+            item.put("status", itemStatus);
+        }
+        return item;
+    }
+
+    private Map<String, Object> verifyModels(List<Object> verifiedModels, List<Object> missingArtifacts, List<Object> missingManifest, List<Object> unverifiedArtifacts) {
+        return Map.of(
+            "verifiedModels", verifiedModels,
+            "missingArtifacts", missingArtifacts,
+            "missingManifestOrBaselineEvidence", missingManifest,
+            "unverifiedArtifacts", unverifiedArtifacts
+        );
+    }
+
+    private Map<String, Object> sagittalVerified() {
+        return new LinkedHashMap<>(Map.of(
+            "modelKey", expected.modelKey(),
+            "availableForRealInference", true,
+            "baselineReady", true,
+            "verified", true,
+            "sha256", expected.modelSha256(),
+            "version", expected.modelVersion()
+        ));
+    }
+
+    private Map<String, Object> axialVerified() {
+        return new LinkedHashMap<>(Map.of(
+            "modelKey", "axial_t2_alkafri",
+            "availableForRealInference", true,
+            "baselineReady", true,
+            "verified", true,
+            "sha256", "axial-sha-does-not-matter",
+            "version", "axial-version"
+        ));
+    }
+
+    private Map<String, Object> mutate(Map<String, Object> source, String key, Object value) {
+        Map<String, Object> copy = new LinkedHashMap<>(source);
+        copy.put(key, value);
+        return copy;
     }
 }

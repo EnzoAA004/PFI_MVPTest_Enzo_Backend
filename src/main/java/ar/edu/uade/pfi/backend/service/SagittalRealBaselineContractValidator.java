@@ -5,10 +5,12 @@ import ar.edu.uade.pfi.backend.dto.PipelineRunRequestDto;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.stereotype.Component;
 
 @Component
 public class SagittalRealBaselineContractValidator {
+    private static final Set<String> ALLOWED_UPSTREAM_ASSETS = Set.of("input.png", "overlay.png", "mask-preview.png", "mask.npy", "confidence.npy");
     private final SagittalRealBaselineProperties expected;
 
     public SagittalRealBaselineContractValidator(SagittalRealBaselineProperties expected) {
@@ -75,11 +77,12 @@ public class SagittalRealBaselineContractValidator {
     }
 
     public void validateSagittalSync(Map<String, Object> response) {
-        String status = text(response, "status");
-        if (!"synced_verified".equals(status) && !"existing_release_verified".equals(status)) {
-            fail("models/sync no devolvio un estado verificado para el release sagital");
-        }
+        requireEquals("models_sync_completed", text(response, "status"), "models/sync root status");
         Map<String, Object> item = findSagittalItem(response);
+        String itemStatus = text(item, "status");
+        if (!"synced_verified".equals(itemStatus) && !"existing_release_verified".equals(itemStatus)) {
+            fail("models/sync no devolvio item sagital verificado");
+        }
         requireEquals(expected.modelKey(), text(item, "modelKey"), "modelKey");
         requireEquals("gcs_verified_release", text(item, "source"), "source");
         requireEquals(expected.releaseId(), text(item, "releaseId"), "releaseId");
@@ -139,8 +142,7 @@ public class SagittalRealBaselineContractValidator {
         Map<String, Object> assets = requireMap(response, "assets");
         requireAsset(assets, "input.png", runId, plane);
         requireAsset(assets, "overlay.png", runId, plane);
-        rejectAsset(assets, "mask.npy");
-        rejectAsset(assets, "confidence.npy");
+        assets.forEach((assetName, value) -> validateAssetEntry(assetName, value, runId, plane));
     }
 
     private void requireAsset(Map<String, Object> assets, String assetName, String runId, String plane) {
@@ -148,11 +150,25 @@ public class SagittalRealBaselineContractValidator {
         if (value == null) {
             fail("assets debe contener " + assetName);
         }
+        validateAssetEntry(assetName, value, runId, plane);
+    }
+
+    private void validateAssetEntry(String assetName, Object value, String runId, String plane) {
+        if (!ALLOWED_UPSTREAM_ASSETS.contains(assetName)) {
+            fail("asset upstream desconocido: " + assetName);
+        }
         if (value instanceof Map<?, ?> map) {
             @SuppressWarnings("unchecked")
             Map<String, Object> asset = (Map<String, Object>) map;
             requireEquals(runId, text(asset, "runId"), "asset.runId");
             requireEquals(plane, text(asset, "plane"), "asset.plane");
+            String declaredName = text(asset, "assetName");
+            if (declaredName.isBlank()) {
+                declaredName = text(asset, "name");
+            }
+            if (!declaredName.isBlank()) {
+                requireEquals(assetName, declaredName, "asset.assetName");
+            }
         }
     }
 
@@ -297,12 +313,6 @@ public class SagittalRealBaselineContractValidator {
     private void rejectFallbackStatus(Object status) {
         if (status != null && status.toString().toLowerCase(Locale.ROOT).contains("fallback")) {
             fail("status no debe contener fallback");
-        }
-    }
-
-    private void rejectAsset(Map<String, Object> assets, String assetName) {
-        if (assets.containsKey(assetName)) {
-            fail("assets no debe publicar " + assetName);
         }
     }
 

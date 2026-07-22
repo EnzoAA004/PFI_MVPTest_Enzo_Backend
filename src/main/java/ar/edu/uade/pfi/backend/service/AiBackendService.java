@@ -40,13 +40,14 @@ public class AiBackendService {
     private final PipelineRunRequestNormalizer pipelineRunRequestNormalizer;
     private final SagittalRealBaselineContractValidator sagittalContractValidator;
     private final AiPipelineResponsePresenter pipelineResponsePresenter;
+    private final AiModelReadinessResolver modelReadinessResolver;
 
     public AiBackendService(AiServiceOperations aiServiceClient, ReviewStoreService reviewStoreService) {
-        this(aiServiceClient, reviewStoreService, null, null, null, null);
+        this(aiServiceClient, reviewStoreService, null, null, null, null, null);
     }
 
     public AiBackendService(AiServiceOperations aiServiceClient, ReviewStoreService reviewStoreService, AuditService auditService) {
-        this(aiServiceClient, reviewStoreService, auditService, null, null, null);
+        this(aiServiceClient, reviewStoreService, auditService, null, null, null, null);
     }
 
     @Autowired
@@ -56,7 +57,8 @@ public class AiBackendService {
         AuditService auditService,
         PipelineRunRequestNormalizer pipelineRunRequestNormalizer,
         SagittalRealBaselineContractValidator sagittalContractValidator,
-        AiPipelineResponsePresenter pipelineResponsePresenter
+        AiPipelineResponsePresenter pipelineResponsePresenter,
+        AiModelReadinessResolver modelReadinessResolver
     ) {
         this.aiServiceClient = aiServiceClient;
         this.reviewStoreService = reviewStoreService;
@@ -64,6 +66,7 @@ public class AiBackendService {
         this.pipelineRunRequestNormalizer = pipelineRunRequestNormalizer;
         this.sagittalContractValidator = sagittalContractValidator;
         this.pipelineResponsePresenter = pipelineResponsePresenter;
+        this.modelReadinessResolver = modelReadinessResolver;
     }
 
     public Map<String, Object> health() {
@@ -93,9 +96,8 @@ public class AiBackendService {
             response.put("proxiedByBackend", true);
             response.put("aiModuleAvailable", true);
             response.put("degradedMode", false);
-            response.putIfAbsent("backendReady", true);
-            response.putIfAbsent("sagittalReadyForRealInference", false);
-            response.putIfAbsent("axialReadyForRealInference", false);
+            response.put("backendReady", true);
+            applyModelReadiness(response);
             return response;
         } catch (RuntimeException ex) {
             return normalizeForFrontend(Map.ofEntries(
@@ -430,6 +432,27 @@ public class AiBackendService {
     private void audit(String actor, String action, String entityId, String traceId, Map<String, Object> metadata) {
         if (auditService == null) return;
         auditService.record(actor, action, entityId, traceId, metadata);
+    }
+
+    private void applyModelReadiness(Map<String, Object> readinessResponse) {
+        if (modelReadinessResolver == null) {
+            readinessResponse.put("sagittalReadyForRealInference", false);
+            readinessResponse.put("axialReadyForRealInference", false);
+            return;
+        }
+        try {
+            Map<String, Object> verification = normalizeForFrontend(aiServiceClient.verifyModels());
+            AiModelReadinessResolver.ModelReadiness readiness = modelReadinessResolver.resolve(verification);
+            readinessResponse.put("sagittalReadyForRealInference", readiness.sagittalReadyForRealInference());
+            readinessResponse.put("axialReadyForRealInference", readiness.axialReadyForRealInference());
+        } catch (RuntimeException ex) {
+            readinessResponse.put("degradedMode", true);
+            readinessResponse.put("sagittalReadyForRealInference", false);
+            readinessResponse.put("axialReadyForRealInference", false);
+            readinessResponse.put("readyForRealInference", false);
+            readinessResponse.put("modelVerificationStatus", "model_artifact_verification_unavailable");
+            readinessResponse.put("modelVerificationMessage", ex.getMessage());
+        }
     }
 
     private PipelineRunRequestDto normalizePipelineRequest(PipelineRunRequestDto request) {
