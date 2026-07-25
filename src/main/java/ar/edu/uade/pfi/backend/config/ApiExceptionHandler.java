@@ -15,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.server.ResponseStatusException;
 
 @RestControllerAdvice
@@ -59,6 +60,17 @@ public class ApiExceptionHandler {
             .map(error -> error.getField() + ": " + error.getDefaultMessage())
             .orElse("Payload invalido");
         return buildError(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", message, request, ex);
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<Map<String, Object>> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException ex, HttpServletRequest request) {
+        return buildError(
+            HttpStatus.PAYLOAD_TOO_LARGE,
+            "INPUT_TOO_LARGE",
+            "El archivo medico supera el tamano maximo permitido para carga. Limite por defecto: 200MB.",
+            request,
+            ex
+        );
     }
 
     @ExceptionHandler(RuntimeException.class)

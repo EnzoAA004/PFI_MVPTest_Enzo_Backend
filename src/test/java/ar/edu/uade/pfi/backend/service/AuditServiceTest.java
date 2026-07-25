@@ -94,6 +94,7 @@ class AuditServiceTest {
                       "caseId": "CASE-AUDIT",
                       "sagittalInputId": "input-audit-sag",
                       "axialInputId": "input-audit-ax",
+                      "allowContractFallback": true,
                       "metadata": {"inferenceMode": "real_baseline"}
                     }
                     """))

@@ -6,9 +6,8 @@ import static org.mockito.Mockito.when;
 
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.HttpStatus;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.web.server.ResponseStatusException;
 
 class AiBackendServiceInputValidationTest {
     @Test
@@ -22,12 +21,11 @@ class AiBackendServiceInputValidationTest {
             org.mockito.Mockito.mock(ReviewStoreService.class)
         );
 
-        ResponseStatusException ex = assertThrows(
-            ResponseStatusException.class,
+        MaxUploadSizeExceededException ex = assertThrows(
+            MaxUploadSizeExceededException.class,
             () -> service.uploadInput(file, "CASE-001", "sagittal")
         );
 
-        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
-        assertEquals("El archivo supera el tamano maximo permitido por el backend.", ex.getReason());
+        assertEquals(AiBackendService.MAX_INPUT_UPLOAD_BYTES, ex.getMaxUploadSize());
     }
 }

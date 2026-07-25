@@ -5,6 +5,7 @@ import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -19,8 +20,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.stereotype.Controller;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 class AiInputUploadControllerTest {
     private AiServiceOperations aiServiceClient;
@@ -62,6 +66,28 @@ class AiInputUploadControllerTest {
     }
 
     @Test
+    void uploadInputAcceptsMhaLargerThanOneMbAndBelowTwoHundredMb() throws Exception {
+        byte[] payload = new byte[1024 * 1024 + 1];
+        MockMultipartFile file = new MockMultipartFile(
+            "file",
+            "case-001-sagittal.mha",
+            "application/octet-stream",
+            payload
+        );
+        when(aiServiceClient.uploadInput(any(), eq("CASE-001"), eq("sagittal")))
+            .thenReturn(new AiInputResponseDto("input-mha-123", "CASE-001", "sagittal", "mha", payload.length));
+
+        mockMvc.perform(multipart("/api/ai/inputs")
+                .file(file)
+                .param("caseId", "CASE-001")
+                .param("plane", "sagittal"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.inputId").value("input-mha-123"))
+            .andExpect(jsonPath("$.format").value("mha"))
+            .andExpect(jsonPath("$.size").value(payload.length));
+    }
+
+    @Test
     void uploadInputRejectsUnsupportedExtensionWithSemanticError() throws Exception {
         MockMultipartFile file = new MockMultipartFile(
             "file",
@@ -77,5 +103,30 @@ class AiInputUploadControllerTest {
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.code").value("BAD_REQUEST"))
             .andExpect(jsonPath("$.message").value(containsString("Formato de input invalido")));
+    }
+
+    @Test
+    void maxUploadSizeExceededReturnsInputTooLargeWithoutInternalError() throws Exception {
+        MockMvc oversizedMvc = MockMvcBuilders.standaloneSetup(new OversizedUploadController())
+            .setControllerAdvice(new ApiExceptionHandler())
+            .build();
+
+        oversizedMvc.perform(post("/api/ai/inputs")
+                .header("X-Trace-Id", "trace-upload-too-large"))
+            .andExpect(status().isPayloadTooLarge())
+            .andExpect(jsonPath("$.code").value("INPUT_TOO_LARGE"))
+            .andExpect(jsonPath("$.message").value(containsString("supera el tamano maximo")))
+            .andExpect(jsonPath("$.traceId").value("trace-upload-too-large"))
+            .andExpect(jsonPath("$.humanReviewRequired").value(true))
+            .andExpect(jsonPath("$.notClinicalDiagnosis").value(true))
+            .andExpect(content().string(not(containsString("INTERNAL_ERROR"))));
+    }
+
+    @Controller
+    private static class OversizedUploadController {
+        @PostMapping("/api/ai/inputs")
+        void upload() {
+            throw new MaxUploadSizeExceededException(200L * 1024L * 1024L);
+        }
     }
 }

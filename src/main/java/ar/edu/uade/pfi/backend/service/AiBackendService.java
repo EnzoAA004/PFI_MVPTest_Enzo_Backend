@@ -23,6 +23,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -372,7 +373,7 @@ public class AiBackendService {
             throw badRequest("Plano invalido. Valores permitidos: sagittal, axial.");
         }
         if (file.getSize() > MAX_INPUT_UPLOAD_BYTES) {
-            throw badRequest("El archivo supera el tamano maximo permitido por el backend.");
+            throw new MaxUploadSizeExceededException(MAX_INPUT_UPLOAD_BYTES);
         }
         String extension = inputExtension(file.getOriginalFilename());
         if (!ALLOWED_INPUT_EXTENSIONS.contains(extension)) {
