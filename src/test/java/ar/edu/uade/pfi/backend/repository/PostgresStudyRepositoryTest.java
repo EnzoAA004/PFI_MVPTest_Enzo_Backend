@@ -2,6 +2,7 @@ package ar.edu.uade.pfi.backend.repository;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import ar.edu.uade.pfi.backend.domain.InputResource;
@@ -105,5 +106,134 @@ class PostgresStudyRepositoryTest {
         assertEquals(2, byMultiplanarRunId.artifacts().size());
         assertTrue(byMultiplanarRunId.artifacts().stream().allMatch(artifact -> artifact.artifactRef().endsWith(".png")));
         assertTrue(byMultiplanarRunId.artifacts().stream().noneMatch(artifact -> artifact.artifactRef().contains("\\") || artifact.artifactRef().contains("/") || artifact.artifactRef().contains("..")));
+    }
+
+    @Test
+    void saveRunIsIdempotentForSameMultiplanarRunIdAndReplacesArtifactsUsingPersistedId() throws Exception {
+        PostgresStudyRepository repository = new PostgresStudyRepository(
+            new ObjectMapper(),
+            postgres.getJdbcUrl() + "&user=" + postgres.getUsername() + "&password=" + postgres.getPassword(),
+            true
+        );
+        Instant now = Instant.parse("2026-07-16T16:00:00Z");
+        Study study = repository.saveStudy(new Study(UUID.randomUUID().toString(), "CASE-IDEMPOTENT", "ready", now, now));
+        String firstRunId = UUID.randomUUID().toString();
+        String secondRunId = UUID.randomUUID().toString();
+
+        StudyRun first = repository.saveRun(studyRun(
+            firstRunId,
+            study.id(),
+            "multi-idempotent",
+            "trace-first",
+            "run-sag-first",
+            List.of(new RunArtifact(UUID.randomUUID().toString(), firstRunId, "run-sag-first", "sagittal", "overlay.png", "image/png", "overlay.png", now))
+        ));
+        StudyRun second = repository.saveRun(studyRun(
+            secondRunId,
+            study.id(),
+            "multi-idempotent",
+            "trace-second",
+            "run-sag-second",
+            List.of(
+                new RunArtifact(UUID.randomUUID().toString(), secondRunId, "run-sag-second", "sagittal", "input.png", "image/png", "input.png", now),
+                new RunArtifact(UUID.randomUUID().toString(), secondRunId, "run-sag-second", "sagittal", "mask-preview.png", "image/png", "mask-preview.png", now)
+            )
+        ));
+        StudyRun third = repository.saveRun(studyRun(
+            UUID.randomUUID().toString(),
+            study.id(),
+            "multi-idempotent",
+            "trace-third",
+            "run-sag-third",
+            List.of(new RunArtifact(UUID.randomUUID().toString(), UUID.randomUUID().toString(), "run-sag-third", "sagittal", "overlay.png", "image/png", "overlay.png", now))
+        ));
+
+        StudyRun recovered = repository.findRunByMultiplanarRunId("multi-idempotent").orElseThrow();
+
+        assertEquals(firstRunId, first.id());
+        assertEquals(firstRunId, second.id());
+        assertEquals(firstRunId, third.id());
+        assertEquals(firstRunId, recovered.id());
+        assertEquals(1, countRows("domain_study_runs", "multiplanar_run_id = 'multi-idempotent'"));
+        assertEquals("trace-third", recovered.traceId());
+        assertEquals("run-sag-third", recovered.sagittalRunId());
+        assertEquals(1, recovered.artifacts().size());
+        assertTrue(recovered.artifacts().stream().allMatch(artifact -> artifact.studyRunId().equals(firstRunId)));
+        assertTrue(recovered.artifacts().stream().noneMatch(artifact -> artifact.assetName().equals("input.png")));
+        assertTrue(recovered.artifacts().stream().anyMatch(artifact -> artifact.assetName().equals("overlay.png")));
+    }
+
+    @Test
+    void saveRunRollsBackParentUpdateAndArtifactReplacementWhenArtifactInsertFails() throws Exception {
+        PostgresStudyRepository repository = new PostgresStudyRepository(
+            new ObjectMapper(),
+            postgres.getJdbcUrl() + "&user=" + postgres.getUsername() + "&password=" + postgres.getPassword(),
+            true
+        );
+        Instant now = Instant.parse("2026-07-16T17:00:00Z");
+        Study study = repository.saveStudy(new Study(UUID.randomUUID().toString(), "CASE-ROLLBACK", "ready", now, now));
+        String persistedRunId = UUID.randomUUID().toString();
+        repository.saveRun(studyRun(
+            persistedRunId,
+            study.id(),
+            "multi-rollback",
+            "trace-before",
+            "run-sag-before",
+            List.of(new RunArtifact(UUID.randomUUID().toString(), persistedRunId, "run-sag-before", "sagittal", "overlay.png", "image/png", "overlay.png", now))
+        ));
+
+        assertThrows(IllegalStateException.class, () -> repository.saveRun(studyRun(
+                UUID.randomUUID().toString(),
+                study.id(),
+                "multi-rollback",
+                "trace-after",
+                "run-sag-after",
+                List.of(new RunArtifact("not-a-uuid", UUID.randomUUID().toString(), "run-sag-after", "sagittal", "input.png", "image/png", "input.png", now))
+            )));
+
+        StudyRun recovered = repository.findRunByMultiplanarRunId("multi-rollback").orElseThrow();
+        assertEquals(persistedRunId, recovered.id());
+        assertEquals("trace-before", recovered.traceId());
+        assertEquals("run-sag-before", recovered.sagittalRunId());
+        assertEquals(1, recovered.artifacts().size());
+        assertEquals("overlay.png", recovered.artifacts().get(0).assetName());
+        assertEquals(persistedRunId, recovered.artifacts().get(0).studyRunId());
+    }
+
+    private StudyRun studyRun(String id, String studyId, String multiplanarRunId, String traceId, String sagittalRunId, List<RunArtifact> artifacts) {
+        Instant now = Instant.parse("2026-07-16T18:00:00Z");
+        return new StudyRun(
+            id,
+            studyId,
+            multiplanarRunId,
+            traceId,
+            "real_baseline",
+            "mixed",
+            "sagittal_spider",
+            "axial_t2_alkafri",
+            "sha256:sag-checkpoint",
+            "",
+            sagittalRunId,
+            "",
+            Map.of("workspace", "workspace.json"),
+            Map.of("humanReviewRequired", true, "notClinicalDiagnosis", true),
+            artifacts,
+            "completed",
+            "pending",
+            "",
+            null,
+            "",
+            now,
+            now
+        );
+    }
+
+    private int countRows(String table, String where) throws Exception {
+        try (var connection = DriverManager.getConnection(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+             var statement = connection.prepareStatement("SELECT COUNT(*) FROM " + table + " WHERE " + where);
+             var rs = statement.executeQuery()) {
+            rs.next();
+            return rs.getInt(1);
+        }
     }
 }

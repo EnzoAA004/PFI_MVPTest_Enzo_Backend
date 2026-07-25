@@ -104,61 +104,131 @@ public class PostgresStudyRepository implements StudyRepository {
     @Override
     public StudyRun saveRun(StudyRun run) {
         try (Connection connection = connection()) {
-            try (PreparedStatement statement = connection.prepareStatement("""
-                INSERT INTO domain_study_runs(
-                    id, study_id, multiplanar_run_id, trace_id, requested_inference_mode, effective_inference_mode,
-                    sagittal_model_key, axial_model_key, sagittal_artifact_hash, axial_artifact_hash,
-                    sagittal_run_id, axial_run_id, assets, metrics_snapshot, status,
-                    review_status, reviewer, reviewed_at, comments, created_at, updated_at
-                )
-                VALUES (
-                    ?::uuid, ?::uuid, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?,
-                    ?, ?, ?, ?, ?, ?
-                )
-                ON CONFLICT (multiplanar_run_id) DO UPDATE SET
-                  trace_id = EXCLUDED.trace_id,
-                  effective_inference_mode = EXCLUDED.effective_inference_mode,
-                  assets = EXCLUDED.assets,
-                  metrics_snapshot = EXCLUDED.metrics_snapshot,
-                  status = EXCLUDED.status,
-                  review_status = EXCLUDED.review_status,
-                  reviewer = EXCLUDED.reviewer,
-                  reviewed_at = EXCLUDED.reviewed_at,
-                  comments = EXCLUDED.comments,
-                  updated_at = EXCLUDED.updated_at
-                """)) {
-                statement.setString(1, run.id());
-                statement.setString(2, run.studyId());
-                statement.setString(3, run.multiplanarRunId());
-                statement.setString(4, run.traceId());
-                statement.setString(5, run.requestedInferenceMode());
-                statement.setString(6, run.effectiveInferenceMode());
-                statement.setString(7, run.sagittalModelKey());
-                statement.setString(8, run.axialModelKey());
-                statement.setString(9, run.sagittalArtifactHash());
-                statement.setString(10, run.axialArtifactHash());
-                statement.setString(11, run.sagittalRunId());
-                statement.setString(12, run.axialRunId());
-                statement.setString(13, objectMapper.writeValueAsString(run.assets()));
-                statement.setString(14, objectMapper.writeValueAsString(run.metricsSnapshot()));
-                statement.setString(15, run.status());
-                statement.setString(16, run.reviewStatus());
-                statement.setString(17, run.reviewer());
-                statement.setTimestamp(18, run.reviewedAt() == null ? null : Timestamp.from(run.reviewedAt()));
-                statement.setString(19, run.comments());
-                statement.setTimestamp(20, Timestamp.from(run.createdAt()));
-                statement.setTimestamp(21, Timestamp.from(run.updatedAt()));
-                statement.executeUpdate();
+            connection.setAutoCommit(false);
+            try {
+                String persistedStudyRunId = upsertRun(connection, run);
+                List<RunArtifact> persistedArtifacts = normalizeArtifacts(run.artifacts(), persistedStudyRunId);
+                try (PreparedStatement delete = connection.prepareStatement("DELETE FROM domain_run_artifacts WHERE study_run_id = ?::uuid")) {
+                    delete.setString(1, persistedStudyRunId);
+                    delete.executeUpdate();
+                }
+                for (RunArtifact artifact : persistedArtifacts) saveArtifact(connection, artifact);
+                connection.commit();
+                return withPersistedId(run, persistedStudyRunId, persistedArtifacts);
+            } catch (Exception ex) {
+                connection.rollback();
+                throw ex;
+            } finally {
+                connection.setAutoCommit(true);
             }
-            try (PreparedStatement delete = connection.prepareStatement("DELETE FROM domain_run_artifacts WHERE study_run_id = ?::uuid")) {
-                delete.setString(1, run.id());
-                delete.executeUpdate();
-            }
-            for (RunArtifact artifact : run.artifacts()) saveArtifact(connection, artifact);
-            return run;
         } catch (Exception ex) {
             throw new IllegalStateException("Could not save study run", ex);
         }
+    }
+
+    private String upsertRun(Connection connection, StudyRun run) throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement("""
+            INSERT INTO domain_study_runs(
+                id, study_id, multiplanar_run_id, trace_id, requested_inference_mode, effective_inference_mode,
+                sagittal_model_key, axial_model_key, sagittal_artifact_hash, axial_artifact_hash,
+                sagittal_run_id, axial_run_id, assets, metrics_snapshot, status,
+                review_status, reviewer, reviewed_at, comments, created_at, updated_at
+            )
+            VALUES (
+                ?::uuid, ?::uuid, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?,
+                ?, ?, ?, ?, ?, ?
+            )
+            ON CONFLICT (multiplanar_run_id) DO UPDATE SET
+              trace_id = EXCLUDED.trace_id,
+              requested_inference_mode = EXCLUDED.requested_inference_mode,
+              effective_inference_mode = EXCLUDED.effective_inference_mode,
+              sagittal_model_key = EXCLUDED.sagittal_model_key,
+              axial_model_key = EXCLUDED.axial_model_key,
+              sagittal_artifact_hash = EXCLUDED.sagittal_artifact_hash,
+              axial_artifact_hash = EXCLUDED.axial_artifact_hash,
+              sagittal_run_id = EXCLUDED.sagittal_run_id,
+              axial_run_id = EXCLUDED.axial_run_id,
+              assets = EXCLUDED.assets,
+              metrics_snapshot = EXCLUDED.metrics_snapshot,
+              status = EXCLUDED.status,
+              review_status = EXCLUDED.review_status,
+              reviewer = EXCLUDED.reviewer,
+              reviewed_at = EXCLUDED.reviewed_at,
+              comments = EXCLUDED.comments,
+              updated_at = EXCLUDED.updated_at
+            RETURNING id
+            """)) {
+            statement.setString(1, run.id());
+            statement.setString(2, run.studyId());
+            statement.setString(3, run.multiplanarRunId());
+            statement.setString(4, run.traceId());
+            statement.setString(5, run.requestedInferenceMode());
+            statement.setString(6, run.effectiveInferenceMode());
+            statement.setString(7, run.sagittalModelKey());
+            statement.setString(8, run.axialModelKey());
+            statement.setString(9, run.sagittalArtifactHash());
+            statement.setString(10, run.axialArtifactHash());
+            statement.setString(11, run.sagittalRunId());
+            statement.setString(12, run.axialRunId());
+            statement.setString(13, objectMapper.writeValueAsString(run.assets()));
+            statement.setString(14, objectMapper.writeValueAsString(run.metricsSnapshot()));
+            statement.setString(15, run.status());
+            statement.setString(16, run.reviewStatus());
+            statement.setString(17, run.reviewer());
+            statement.setTimestamp(18, run.reviewedAt() == null ? null : Timestamp.from(run.reviewedAt()));
+            statement.setString(19, run.comments());
+            statement.setTimestamp(20, Timestamp.from(run.createdAt()));
+            statement.setTimestamp(21, Timestamp.from(run.updatedAt()));
+            try (ResultSet rs = statement.executeQuery()) {
+                if (!rs.next()) throw new IllegalStateException("Could not obtain persisted study run id");
+                return rs.getObject("id", UUID.class).toString();
+            }
+        }
+    }
+
+    private List<RunArtifact> normalizeArtifacts(List<RunArtifact> artifacts, String persistedStudyRunId) {
+        if (artifacts == null || artifacts.isEmpty()) return List.of();
+        List<RunArtifact> normalized = new ArrayList<>();
+        for (RunArtifact artifact : artifacts) {
+            normalized.add(new RunArtifact(
+                artifact.id(),
+                persistedStudyRunId,
+                artifact.runId(),
+                artifact.plane(),
+                artifact.assetName(),
+                artifact.contentType(),
+                artifact.artifactRef(),
+                artifact.createdAt()
+            ));
+        }
+        return normalized;
+    }
+
+    private StudyRun withPersistedId(StudyRun run, String persistedStudyRunId, List<RunArtifact> artifacts) {
+        return new StudyRun(
+            persistedStudyRunId,
+            run.studyId(),
+            run.multiplanarRunId(),
+            run.traceId(),
+            run.requestedInferenceMode(),
+            run.effectiveInferenceMode(),
+            run.sagittalModelKey(),
+            run.axialModelKey(),
+            run.sagittalArtifactHash(),
+            run.axialArtifactHash(),
+            run.sagittalRunId(),
+            run.axialRunId(),
+            run.assets(),
+            run.metricsSnapshot(),
+            artifacts,
+            run.status(),
+            run.reviewStatus(),
+            run.reviewer(),
+            run.reviewedAt(),
+            run.comments(),
+            run.createdAt(),
+            run.updatedAt()
+        );
     }
 
     @Override

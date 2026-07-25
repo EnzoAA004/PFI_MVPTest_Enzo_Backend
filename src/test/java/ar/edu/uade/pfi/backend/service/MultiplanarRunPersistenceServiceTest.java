@@ -3,7 +3,14 @@ package ar.edu.uade.pfi.backend.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import ar.edu.uade.pfi.backend.client.AiServiceOperations;
+import ar.edu.uade.pfi.backend.config.ApiExceptionHandler;
+import ar.edu.uade.pfi.backend.controller.AiMultiplanarController;
 import ar.edu.uade.pfi.backend.domain.Study;
 import ar.edu.uade.pfi.backend.domain.StudyRun;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunRequestDto;
@@ -13,6 +20,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -133,6 +143,45 @@ class MultiplanarRunPersistenceServiceTest {
         assertEquals("move_axis_0_to_last", sagittalMetrics.get("inputOrientationTransform"));
         assertEquals(true, sagittalMetrics.get("humanReviewRequired"));
         assertEquals(true, sagittalMetrics.get("notClinicalDiagnosis"));
+    }
+
+    @Test
+    void twoConsecutiveMultiplanarPostRequestsRemainIdempotent() throws Exception {
+        PostgresStudyRepository repository = new PostgresStudyRepository(
+            new ObjectMapper(),
+            postgres.getJdbcUrl() + "&user=" + postgres.getUsername() + "&password=" + postgres.getPassword(),
+            true
+        );
+        StudyRunService studyRunService = new StudyRunService(repository);
+        MultiplanarRunPersistenceService persistence = new MultiplanarRunPersistenceService(studyRunService);
+        AiServiceOperations ai = org.mockito.Mockito.mock(AiServiceOperations.class);
+        when(ai.runMultiplanar(any())).thenReturn(sagittalOnlyResponse(), sagittalOnlyResponse());
+        MockMvc mockMvc = MockMvcBuilders
+            .standaloneSetup(new AiMultiplanarController(ai, persistence, null))
+            .setControllerAdvice(new ApiExceptionHandler())
+            .build();
+
+        String body = """
+            {
+              "caseId": "CASE-BE-SAG-ONLY",
+              "sagittalInputId": "input-sag-only",
+              "allowContractFallback": false,
+              "metadata": {
+                "inferenceMode": "real_baseline",
+                "axialMode": "optional_not_provided"
+              }
+            }
+            """;
+
+        mockMvc.perform(post("/api/ai/multiplanar/run").contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isOk());
+        mockMvc.perform(post("/api/ai/multiplanar/run").contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isOk());
+
+        StudyRun recovered = studyRunService.findRunByMultiplanarRunId("multi-sag-only").orElseThrow();
+        assertEquals("trace-sag-only", recovered.traceId());
+        assertEquals("run-sag-only", recovered.sagittalRunId());
+        assertTrue(recovered.artifacts().stream().allMatch(artifact -> artifact.studyRunId().equals(recovered.id())));
     }
 
     private MultiplanarRunResponseDto response() {
