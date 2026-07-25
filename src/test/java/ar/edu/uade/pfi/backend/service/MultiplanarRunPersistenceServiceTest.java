@@ -73,6 +73,68 @@ class MultiplanarRunPersistenceServiceTest {
         assertTrue(byRunId.artifacts().stream().noneMatch(artifact -> artifact.artifactRef().contains("/") || artifact.artifactRef().contains("\\") || artifact.artifactRef().contains("..")));
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void persistsSagittalOnlyRunWithoutAxialInputRunOrAssets() {
+        PostgresStudyRepository repository = new PostgresStudyRepository(
+            new ObjectMapper(),
+            postgres.getJdbcUrl() + "&user=" + postgres.getUsername() + "&password=" + postgres.getPassword(),
+            true
+        );
+        StudyRunService studyRunService = new StudyRunService(repository);
+        MultiplanarRunPersistenceService persistence = new MultiplanarRunPersistenceService(studyRunService);
+
+        MultiplanarRunRequestDto request = new MultiplanarRunRequestDto(
+            "CASE-BE-SAG-ONLY",
+            "input-sag-only",
+            null,
+            null,
+            null,
+            "sagittal_spider",
+            "axial_t2_alkafri",
+            false,
+            Map.of(
+                "inferenceMode", "real_baseline",
+                "requestedInferenceMode", "real_baseline",
+                "allowContractFallback", false,
+                "axialMode", "optional_not_provided"
+            )
+        );
+        MultiplanarRunResponseDto response = sagittalOnlyResponse();
+
+        persistence.persistSuccessfulRun(request, response);
+
+        Study study = studyRunService.findStudyByCaseId("CASE-BE-SAG-ONLY").orElseThrow();
+        StudyRun byRunId = studyRunService.findRunByMultiplanarRunId("multi-sag-only").orElseThrow();
+        StudyRun byTraceId = studyRunService.findRunByTraceId("trace-sag-only").orElseThrow();
+
+        assertEquals(study.id(), byRunId.studyId());
+        assertEquals(byRunId.id(), byTraceId.id());
+        assertEquals("trace-sag-only", byRunId.traceId());
+        assertEquals("real_baseline", byRunId.requestedInferenceMode());
+        assertEquals("mixed", byRunId.effectiveInferenceMode());
+        assertEquals("sagittal_spider", byRunId.sagittalModelKey());
+        assertEquals("axial_t2_alkafri", byRunId.axialModelKey());
+        assertEquals(MultiplanarRealBaselineContractValidator.SAGITTAL_ARTIFACT_HASH, byRunId.sagittalArtifactHash());
+        assertEquals("", byRunId.axialArtifactHash());
+        assertEquals("run-sag-only", byRunId.sagittalRunId());
+        assertEquals("", byRunId.axialRunId());
+        assertEquals(1, studyRunService.findInputs(study).size());
+        assertTrue(byRunId.artifacts().stream().allMatch(artifact -> artifact.plane().equals("sagittal")));
+        assertTrue(byRunId.artifacts().stream().anyMatch(artifact -> artifact.assetName().equals("overlay.png")));
+
+        Map<String, Object> sagittalMetrics = (Map<String, Object>) byRunId.metricsSnapshot().get("sagittal");
+        assertEquals("input-sag-only", sagittalMetrics.get("inputId"));
+        assertEquals("sagittal-spider-final-v1", sagittalMetrics.get("modelVersion"));
+        assertEquals(MultiplanarRealBaselineContractValidator.SAGITTAL_ARTIFACT_HASH, sagittalMetrics.get("artifactHash"));
+        assertEquals(9, ((Number) sagittalMetrics.get("selectedSlice")).intValue());
+        assertEquals(2, ((Number) sagittalMetrics.get("selectedAxis")).intValue());
+        assertEquals(17, ((Number) sagittalMetrics.get("sliceCount")).intValue());
+        assertEquals("move_axis_0_to_last", sagittalMetrics.get("inputOrientationTransform"));
+        assertEquals(true, sagittalMetrics.get("humanReviewRequired"));
+        assertEquals(true, sagittalMetrics.get("notClinicalDiagnosis"));
+    }
+
     private MultiplanarRunResponseDto response() {
         return new MultiplanarRunResponseDto(
             "multi-be006",
@@ -108,6 +170,71 @@ class MultiplanarRunPersistenceServiceTest {
             ),
             Map.of("workspace", "workspace.json"),
             Map.of("status", "pendiente")
+        );
+    }
+
+    private MultiplanarRunResponseDto sagittalOnlyResponse() {
+        return new MultiplanarRunResponseDto(
+            "multiplanar_run_ready",
+            "multiplanar-run-v1",
+            "multi-sag-only",
+            "trace-sag-only",
+            "CASE-BE-SAG-ONLY",
+            "sagittal_only_with_optional_axial",
+            "real_baseline",
+            "mixed",
+            new MultiplanarRunResponseDto.PlanesDto(
+                new MultiplanarRunResponseDto.PlaneDto(
+                    "run-sag-only",
+                    "CASE-BE-SAG-ONLY",
+                    "sagittal",
+                    "sagittal_spider",
+                    "sagittal-spider-final-v1",
+                    MultiplanarRealBaselineContractValidator.SAGITTAL_ARTIFACT_HASH,
+                    "completed",
+                    "real_baseline",
+                    "real_baseline",
+                    "real_baseline",
+                    false,
+                    "input-sag-only",
+                    Map.of("artifactHash", MultiplanarRealBaselineContractValidator.SAGITTAL_ARTIFACT_HASH),
+                    Map.of(
+                        "inferenceMode", "real_baseline",
+                        "artifactHash", MultiplanarRealBaselineContractValidator.SAGITTAL_ARTIFACT_HASH,
+                        "realInferenceAvailable", true
+                    ),
+                    List.of(Map.of("label", "sagittal")),
+                    List.of(),
+                    List.of(Map.of("label", "canal_lumbar")),
+                    List.of(Map.of("name", "L4_left_pedicle")),
+                    Map.of("status", "real_baseline_ready", "canalAreaMm2", 82.4),
+                    Map.of("quality", 0.94),
+                    Map.of("confidence", 0.94),
+                    Map.of("input.png", "input.png", "overlay.png", "overlay.png"),
+                    Map.of(
+                        "selectedSlice", 9,
+                        "selectedAxis", 2,
+                        "sliceCount", 17,
+                        "inputShapeNative", List.of(17, 512, 512),
+                        "inputShapeCanonical", List.of(512, 512, 17),
+                        "inputOrientationTransform", "move_axis_0_to_last",
+                        "inPlaneSpacing", List.of(0.7, 0.7),
+                        "inPlaneSpacingUnit", "mm"
+                    ),
+                    true,
+                    true,
+                    false
+                ),
+                null
+            ),
+            Map.of("workspace", "workspace.json"),
+            null,
+            Map.of("sagittalRunReady", true, "axialRunReady", false, "dualRunReady", false),
+            Map.of("status", "pending"),
+            Map.of("axialMode", "optional_not_provided"),
+            true,
+            true,
+            false
         );
     }
 }

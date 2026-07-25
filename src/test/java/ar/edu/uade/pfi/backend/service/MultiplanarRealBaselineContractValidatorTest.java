@@ -24,6 +24,20 @@ class MultiplanarRealBaselineContractValidatorTest {
     }
 
     @Test
+    void strictRealBaselineSagittalOnlyValidResponsePassesWithAxialUnavailable() throws Exception {
+        Map<String, Object> response = fixtureMap();
+        response.put("effectiveInferenceMode", "mixed");
+        response.put("quality", Map.of(
+            "sagittalRunReady", true,
+            "axialRunReady", false,
+            "dualRunReady", false
+        ));
+        planes(response).remove("axial");
+
+        assertDoesNotThrow(() -> validator.validate(strictSagittalOnlyRequest(), presenter.present(read(response))));
+    }
+
+    @Test
     void sagittalFinalModelVersionArtifactInferenceFallbackAndInputIdAreStrict() throws Exception {
         assertFails(mutateSagittal("modelVersion", "wrong-version"));
         assertFails(mutateSagittal("artifactHash", "wrong-hash"));
@@ -63,15 +77,11 @@ class MultiplanarRealBaselineContractValidatorTest {
     }
 
     @Test
-    void rootMixedDegradedOrUnsafeClinicalFlagsFail() throws Exception {
-        assertFails(mutateRoot("effectiveInferenceMode", "mixed"));
+    void rootDegradedOrUnsafeClinicalFlagsFailButMixedWorkspaceIsAllowed() throws Exception {
+        assertDoesNotThrow(() -> validator.validate(strictRequest(), presenter.present(read(mutateRoot("effectiveInferenceMode", "mixed")))));
         assertFails(mutateRoot("degradedMode", true));
         assertFails(mutateRoot("notClinicalDiagnosis", false));
         assertFails(mutateRoot("humanReviewRequired", false));
-
-        Map<String, Object> response = fixtureMap();
-        planes(response).remove("axial");
-        assertFails(response);
     }
 
     private Map<String, Object> mutateRoot(String key, Object value) throws Exception {
@@ -113,6 +123,25 @@ class MultiplanarRealBaselineContractValidatorTest {
             "axial_t2_alkafri",
             false,
             Map.of("inferenceMode", "real_baseline", "requestedInferenceMode", "real_baseline", "allowContractFallback", false)
+        );
+    }
+
+    private MultiplanarRunRequestDto strictSagittalOnlyRequest() {
+        return new MultiplanarRunRequestDto(
+            "CASE-001",
+            "inp_sagittal_001",
+            null,
+            null,
+            null,
+            "sagittal_spider",
+            "axial_t2_alkafri",
+            false,
+            Map.of(
+                "inferenceMode", "real_baseline",
+                "requestedInferenceMode", "real_baseline",
+                "allowContractFallback", false,
+                "axialMode", "optional_not_provided"
+            )
         );
     }
 

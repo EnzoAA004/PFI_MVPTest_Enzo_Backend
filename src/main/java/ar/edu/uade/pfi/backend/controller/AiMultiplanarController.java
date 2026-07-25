@@ -107,9 +107,11 @@ public class AiMultiplanarController {
             validateStrictInputs(request);
             sagittalModel = "sagittal_spider";
             axialModel = "axial_t2_alkafri";
+            boolean axialPresent = valueOrNull(request.axialInputId()) != null || valueOrNull(request.axialInputPath()) != null;
             metadata.put("inferenceMode", "real_baseline");
             metadata.put("requestedInferenceMode", "real_baseline");
             metadata.put("allowContractFallback", false);
+            metadata.putIfAbsent("axialMode", axialPresent ? "optional_provided" : "optional_not_provided");
         }
         return new MultiplanarRunRequestDto(
             caseId,
@@ -125,12 +127,18 @@ public class AiMultiplanarController {
     }
 
     private void validateStrictInputs(MultiplanarRunRequestDto request) {
-        requireStrict(valueOrNull(request.sagittalInputId()) != null, "sagittalInputId es obligatorio para real_baseline estricto.");
-        requireStrict(valueOrNull(request.axialInputId()) != null, "axialInputId es obligatorio para real_baseline estricto dual.");
-        requireStrict(!(valueOrNull(request.sagittalInputId()) != null && valueOrNull(request.sagittalInputPath()) != null), "Enviar solamente sagittalInputId o sagittalInputPath, no ambos.");
-        requireStrict(!(valueOrNull(request.axialInputId()) != null && valueOrNull(request.axialInputPath()) != null), "Enviar solamente axialInputId o axialInputPath, no ambos.");
+        boolean sagittalInputIdPresent = valueOrNull(request.sagittalInputId()) != null;
+        boolean sagittalInputPathPresent = valueOrNull(request.sagittalInputPath()) != null;
+        boolean axialInputIdPresent = valueOrNull(request.axialInputId()) != null;
+        boolean axialInputPathPresent = valueOrNull(request.axialInputPath()) != null;
+
+        requireStrict(sagittalInputIdPresent || sagittalInputPathPresent, "sagittalInputId o sagittalInputPath es obligatorio para real_baseline estricto.");
+        requireStrict(!(sagittalInputIdPresent && sagittalInputPathPresent), "Enviar solamente sagittalInputId o sagittalInputPath, no ambos.");
+        requireStrict(!(axialInputIdPresent && axialInputPathPresent), "Enviar solamente axialInputId o axialInputPath, no ambos.");
         requireStrict(!startsDemo(request.sagittalInputId()) && !startsDemo(request.sagittalInputPath()), "Inputs demo no permitidos para sagital real_baseline estricto.");
-        requireStrict(!startsDemo(request.axialInputId()) && !startsDemo(request.axialInputPath()), "Inputs demo no permitidos para axial real_baseline estricto.");
+        if (axialInputIdPresent || axialInputPathPresent) {
+            requireStrict(!startsDemo(request.axialInputId()) && !startsDemo(request.axialInputPath()), "Inputs demo no permitidos para axial real_baseline estricto.");
+        }
     }
 
     private void requireStrict(boolean condition, String message) {
@@ -174,6 +182,8 @@ public class AiMultiplanarController {
         metadata.put("axialInferenceMode", axial == null ? "" : axial.effectiveInferenceMode());
         metadata.put("sagittalInputIdPresent", request.sagittalInputId() != null);
         metadata.put("axialInputIdPresent", request.axialInputId() != null);
+        metadata.put("axialInferenceRequested", request.axialInputId() != null || request.axialInputPath() != null);
+        metadata.put("dualRunReady", axial != null && "real_baseline".equals(axial.normalizedEffectiveInferenceMode()));
         metadata.put("traceId", response.traceId());
         metadata.put("humanReviewRequired", response.humanReviewRequired());
         if (sagittal != null && sagittal.metadata() != null) {

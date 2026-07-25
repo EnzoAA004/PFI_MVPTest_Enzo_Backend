@@ -2,6 +2,7 @@ package ar.edu.uade.pfi.backend.service;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -144,6 +145,43 @@ class AuditServiceTest {
         assertTrue(String.valueOf(safe.get("asset")).contains("[redacted]"));
     }
 
+    @Test
+    void recordsSagittalOnlyRealBaselineAsSuccessfulWithoutAxialCompletion() throws Exception {
+        AiServiceOperations ai = org.mockito.Mockito.mock(AiServiceOperations.class);
+        when(ai.runMultiplanar(any())).thenReturn(sagittalOnlyResponse());
+
+        MockMvc runMvc = MockMvcBuilders
+            .standaloneSetup(new AiMultiplanarController(ai, null, auditService))
+            .setControllerAdvice(new ApiExceptionHandler(auditService))
+            .build();
+        runMvc.perform(post("/api/ai/multiplanar/run")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "caseId": "CASE-AUDIT-SAG-ONLY",
+                      "sagittalInputId": "input-audit-sag-only",
+                      "allowContractFallback": false,
+                      "metadata": {
+                        "inferenceMode": "real_baseline",
+                        "axialMode": "optional_not_provided"
+                      }
+                    }
+                    """))
+            .andExpect(status().isOk());
+
+        List<DomainAuditEvent> events = repository.findAuditEventsByTraceId("trace-audit-sag-only");
+        assertTrue(events.stream().anyMatch(event -> event.action().equals("multiplanar.real_baseline.completed")));
+        DomainAuditEvent event = events.stream()
+            .filter(item -> item.action().equals("multiplanar.real_baseline.completed"))
+            .findFirst()
+            .orElseThrow();
+        assertEquals(true, event.metadata().get("sagittalInputIdPresent"));
+        assertEquals(false, event.metadata().get("axialInputIdPresent"));
+        assertEquals("real_baseline", event.metadata().get("sagittalInferenceMode"));
+        assertEquals("", event.metadata().get("axialInferenceMode"));
+        assertEquals(false, event.metadata().get("dualRunReady"));
+    }
+
     private void seedRun() {
         StudyRunService service = new StudyRunService(repository);
         Study study = service.createStudy("CASE-AUDIT-REVIEW", "created");
@@ -197,6 +235,71 @@ class AuditServiceTest {
             ),
             Map.of("workspace", "workspace.json"),
             Map.of("status", "pendiente")
+        );
+    }
+
+    private MultiplanarRunResponseDto sagittalOnlyResponse() {
+        return new MultiplanarRunResponseDto(
+            "multiplanar_run_ready",
+            "multiplanar-run-v1",
+            "multi-audit-sag-only",
+            "trace-audit-sag-only",
+            "CASE-AUDIT-SAG-ONLY",
+            "sagittal_only_with_optional_axial",
+            "real_baseline",
+            "mixed",
+            new MultiplanarRunResponseDto.PlanesDto(
+                new MultiplanarRunResponseDto.PlaneDto(
+                    "run-sag-audit-only",
+                    "CASE-AUDIT-SAG-ONLY",
+                    "sagittal",
+                    "sagittal_spider",
+                    "sagittal-spider-final-v1",
+                    MultiplanarRealBaselineContractValidator.SAGITTAL_ARTIFACT_HASH,
+                    "completed",
+                    "real_baseline",
+                    "real_baseline",
+                    "real_baseline",
+                    false,
+                    "input-audit-sag-only",
+                    Map.of("artifactHash", MultiplanarRealBaselineContractValidator.SAGITTAL_ARTIFACT_HASH),
+                    Map.of(
+                        "inferenceMode", "real_baseline",
+                        "artifactHash", MultiplanarRealBaselineContractValidator.SAGITTAL_ARTIFACT_HASH,
+                        "realInferenceAvailable", true
+                    ),
+                    List.of(Map.of("seriesId", "series-sag")),
+                    List.of(),
+                    List.of(Map.of("label", "canal_lumbar")),
+                    List.of(Map.of("name", "L4_left_pedicle")),
+                    Map.of("status", "real_baseline_ready"),
+                    Map.of("sliceIndex", 9),
+                    Map.of("confidence", 0.94),
+                    Map.of("input.png", "input.png", "overlay.png", "overlay.png"),
+                    Map.of(
+                        "selectedSlice", 9,
+                        "selectedAxis", 2,
+                        "sliceCount", 17,
+                        "inputShapeNative", List.of(17, 512, 512),
+                        "inputShapeCanonical", List.of(512, 512, 17),
+                        "inputOrientationTransform", "move_axis_0_to_last",
+                        "inPlaneSpacing", List.of(0.7, 0.7),
+                        "inPlaneSpacingUnit", "mm"
+                    ),
+                    true,
+                    true,
+                    false
+                ),
+                null
+            ),
+            Map.of("workspace", "workspace.json"),
+            null,
+            Map.of("sagittalRunReady", true, "axialRunReady", false, "dualRunReady", false),
+            Map.of("status", "pending"),
+            Map.of("axialMode", "optional_not_provided"),
+            true,
+            true,
+            false
         );
     }
 }

@@ -141,6 +141,90 @@ class MultiplanarRunResponsePresenterTest {
         )).planes().sagittal().effectiveInferenceMode());
     }
 
+    @Test
+    void sagittalOnlyResponseDoesNotRequireAxialPlane() throws Exception {
+        MultiplanarRunResponseDto response = fixture();
+        MultiplanarRunResponseDto presented = presenter.present(new MultiplanarRunResponseDto(
+            response.status(),
+            response.schemaVersion(),
+            response.runId(),
+            response.traceId(),
+            response.caseId(),
+            response.workspaceMode(),
+            response.requestedInferenceMode(),
+            "mixed",
+            new MultiplanarRunResponseDto.PlanesDto(response.planes().sagittal(), null),
+            response.assets(),
+            response.threeD(),
+            Map.of("sagittalRunReady", true, "axialRunReady", false, "dualRunReady", false),
+            response.review(),
+            response.metadata(),
+            true,
+            true,
+            false
+        ));
+
+        assertNotNull(presented.planes().sagittal());
+        assertEquals(null, presented.planes().axial());
+        assertEquals("mixed", presented.effectiveInferenceMode());
+        assertEquals("/api/ai/assets/run-sag-001/sagittal/overlay.png", presented.planes().sagittal().assets().get("overlay.png"));
+    }
+
+    @Test
+    void axialCandidateIsNotPresentedAsRealBaseline() {
+        MultiplanarRunResponseDto.PlaneDto axialCandidate = new MultiplanarRunResponseDto.PlaneDto(
+            "run-ax-candidate",
+            "CASE-1",
+            "axial",
+            "axial_t2_alkafri",
+            "axial-candidate-v0",
+            "candidate-hash",
+            "candidate_below_quality_gate",
+            "candidate_below_quality_gate",
+            "real_baseline",
+            null,
+            false,
+            "inp-ax",
+            Map.of("trainingStatus", "candidate_below_quality_gate", "availableForRealInference", false),
+            Map.of("realInferenceAvailable", false),
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            Map.of("confidence", 0.41),
+            Map.of("overlay.png", Map.of()),
+            Map.of("baselineReady", false),
+            true,
+            true,
+            false
+        );
+
+        MultiplanarRunResponseDto presented = presenter.present(new MultiplanarRunResponseDto(
+            "multiplanar_run_ready",
+            "v1",
+            "multi-1",
+            "trace-1",
+            "CASE-1",
+            "sagittal_only_with_optional_axial",
+            "real_baseline",
+            "mixed",
+            new MultiplanarRunResponseDto.PlanesDto(null, axialCandidate),
+            null,
+            null,
+            Map.of("axialRunReady", false),
+            null,
+            null,
+            true,
+            true,
+            false
+        ));
+
+        assertEquals("candidate_below_quality_gate", presented.planes().axial().effectiveInferenceMode());
+        assertFalse("real_baseline".equals(presented.planes().axial().effectiveInferenceMode()));
+    }
+
     private MultiplanarRunResponseDto fixture() throws Exception {
         String json = Files.readString(Path.of("src/test/resources/contracts/ai-module-multiplanar-real-baseline.json"));
         MultiplanarRunResponseDto response = objectMapper.readValue(json, MultiplanarRunResponseDto.class);

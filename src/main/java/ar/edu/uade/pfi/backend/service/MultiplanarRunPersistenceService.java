@@ -99,9 +99,29 @@ public class MultiplanarRunPersistenceService {
     private Map<String, Object> metricsSnapshot(MultiplanarRunResponseDto response) {
         Map<String, Object> metrics = new LinkedHashMap<>();
         if (response.planes() != null) {
-            metrics.put("sagittal", planeMetrics(response.planes().sagital()));
+            metrics.put("sagittal", sagittalMetrics(response, response.planes().sagital()));
             metrics.put("axial", planeMetrics(response.planes().axial()));
         }
+        metrics.put("humanReviewRequired", response.humanReviewRequired());
+        metrics.put("notClinicalDiagnosis", response.notClinicalDiagnosis());
+        return metrics;
+    }
+
+    private Map<String, Object> sagittalMetrics(MultiplanarRunResponseDto response, MultiplanarRunResponseDto.PlaneDto plane) {
+        Map<String, Object> metrics = new LinkedHashMap<>(planeMetrics(plane));
+        if (plane == null) return metrics;
+        metrics.put("modelKey", valueOrEmpty(plane.modelKey()));
+        metrics.put("modelVersion", valueOrEmpty(plane.modelVersion()));
+        metrics.put("artifactHash", artifactHash(plane));
+        metrics.put("inputId", valueOrEmpty(plane.inputId()));
+        if (plane.metadata() != null) {
+            metrics.put("selectedSlice", plane.metadata().get("selectedSlice"));
+            metrics.put("selectedAxis", plane.metadata().get("selectedAxis"));
+            metrics.put("sliceCount", plane.metadata().get("sliceCount"));
+            metrics.put("inputOrientationTransform", plane.metadata().get("inputOrientationTransform"));
+        }
+        metrics.put("humanReviewRequired", plane.humanReviewRequired() == null ? response.humanReviewRequired() : plane.humanReviewRequired());
+        metrics.put("notClinicalDiagnosis", plane.notClinicalDiagnosis() == null ? response.notClinicalDiagnosis() : plane.notClinicalDiagnosis());
         return metrics;
     }
 

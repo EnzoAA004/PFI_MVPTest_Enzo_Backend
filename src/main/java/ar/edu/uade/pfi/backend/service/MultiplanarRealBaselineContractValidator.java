@@ -29,14 +29,15 @@ public class MultiplanarRealBaselineContractValidator {
         requireNotBlank(response.runId(), "runId root");
         requireEquals(request.caseId(), response.caseId(), "caseId root");
         requireEquals("real_baseline", response.requestedInferenceMode(), "requestedInferenceMode root");
-        requireEquals("real_baseline", response.effectiveInferenceMode(), "effectiveInferenceMode root");
         requireTrue(Boolean.TRUE.equals(response.humanReviewRequired()), "humanReviewRequired root debe ser true");
         requireTrue(Boolean.TRUE.equals(response.notClinicalDiagnosis()), "notClinicalDiagnosis root debe ser true");
         requireTrue(!Boolean.TRUE.equals(response.degradedMode()), "degradedMode root no puede ser true");
         require(response.planes() != null, "planes es obligatorio");
 
         validateSagittal(request, response.planes().sagittal());
-        validateAxial(request, response.planes().axial());
+        if (axialRequested(request)) {
+            validateAxial(request, response.planes().axial());
+        }
     }
 
     public void validateSagittal(MultiplanarRunRequestDto request, MultiplanarRunResponseDto.PlaneDto plane) {
@@ -49,7 +50,7 @@ public class MultiplanarRealBaselineContractValidator {
         requireEquals("real_baseline", textOr(plane.inferenceMode(), plane.normalizedEffectiveInferenceMode()), "inferenceMode sagittal");
         requireEquals("real_baseline", plane.requestedInferenceMode(), "requestedInferenceMode sagittal");
         requireTrue(Boolean.FALSE.equals(plane.allowContractFallback()), "allowContractFallback sagittal debe ser false");
-        if (!blank(plane.inputId())) requireEquals(request.sagittalInputId(), plane.inputId(), "inputId sagittal");
+        if (!blank(request.sagittalInputId()) && !blank(plane.inputId())) requireEquals(request.sagittalInputId(), plane.inputId(), "inputId sagittal");
         requireEquals("real_baseline", textFrom(plane.aiOutput(), "inferenceMode"), "aiOutput.inferenceMode sagittal");
         requireEquals(SAGITTAL_ARTIFACT_HASH, textFrom(plane.aiOutput(), "artifactHash"), "aiOutput.artifactHash sagittal");
         requireTrue(Boolean.TRUE.equals(boolFrom(plane.aiOutput(), "realInferenceAvailable")), "aiOutput.realInferenceAvailable sagittal debe ser true");
@@ -72,6 +73,10 @@ public class MultiplanarRealBaselineContractValidator {
         requireTrue(Boolean.TRUE.equals(boolFrom(plane.aiOutput(), "realInferenceAvailable")), "aiOutput.realInferenceAvailable axial debe ser true");
         requireTrue(Boolean.TRUE.equals(plane.humanReviewRequired()), "humanReviewRequired axial debe ser true");
         requireTrue(Boolean.TRUE.equals(plane.notClinicalDiagnosis()), "notClinicalDiagnosis axial debe ser true");
+    }
+
+    private boolean axialRequested(MultiplanarRunRequestDto request) {
+        return request != null && (!blank(request.axialInputId()) || !blank(request.axialInputPath()));
     }
 
     private void validateSagittalOrientation(Map<String, Object> metadata) {

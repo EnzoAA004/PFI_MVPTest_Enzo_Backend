@@ -142,29 +142,70 @@ class AiMultiplanarRunTest {
     }
 
     @Test
-    void strictRealBaselineRejectsMissingInputIdsAmbiguousInputsAndDemoPaths() throws Exception {
+    void strictRealBaselineSagittalOnlyNormalizesAndCallsAiModule() throws Exception {
+        AiServiceOperations ai = org.mockito.Mockito.mock(AiServiceOperations.class);
+        when(ai.runMultiplanar(any())).thenReturn(sagittalOnlyFixture());
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new AiMultiplanarController(ai))
+            .setControllerAdvice(new ApiExceptionHandler())
+            .build();
+
+        mockMvc.perform(post("/api/ai/multiplanar/run")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "caseId": "CASE-001",
+                      "sagittalInputId": "inp_sagittal_001",
+                      "sagittalModelKey": "sagittal_spider",
+                      "allowContractFallback": false,
+                      "metadata": {
+                        "inferenceMode": "real_baseline",
+                        "axialMode": "optional_not_provided"
+                      }
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.effectiveInferenceMode").value("mixed"))
+            .andExpect(jsonPath("$.planes.sagittal.effectiveInferenceMode").value("real_baseline"))
+            .andExpect(jsonPath("$.planes.sagittal.modelKey").value("sagittal_spider"))
+            .andExpect(jsonPath("$.planes.axial").doesNotExist())
+            .andExpect(jsonPath("$.humanReviewRequired").value(true))
+            .andExpect(jsonPath("$.notClinicalDiagnosis").value(true));
+
+        ArgumentCaptor<MultiplanarRunRequestDto> request = ArgumentCaptor.forClass(MultiplanarRunRequestDto.class);
+        verify(ai).runMultiplanar(request.capture());
+        assertEquals("inp_sagittal_001", request.getValue().sagittalInputId());
+        assertEquals(null, request.getValue().axialInputId());
+        assertEquals("sagittal_spider", request.getValue().sagittalModelKey());
+        assertEquals("axial_t2_alkafri", request.getValue().axialModelKey());
+        assertEquals(false, request.getValue().allowContractFallback());
+        assertEquals(false, request.getValue().metadata().get("allowContractFallback"));
+        assertEquals("optional_not_provided", request.getValue().metadata().get("axialMode"));
+    }
+
+    @Test
+    void strictRealBaselineRejectsMissingSagittalAmbiguousInputsAndDemoPaths() throws Exception {
         MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new AiMultiplanarController(org.mockito.Mockito.mock(AiServiceOperations.class)))
             .setControllerAdvice(new ApiExceptionHandler())
             .build();
 
         mockMvc.perform(post("/api/ai/multiplanar/run")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(strictBody("", "inp_axial_001", null, null)))
+                .content(strictBody("", "", null, null)))
             .andExpect(status().isBadRequest());
 
         mockMvc.perform(post("/api/ai/multiplanar/run")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(strictBody("inp_sagittal_001", "", null, null)))
+                .content(strictBody("inp_sagittal_001", "", "some/path", null)))
             .andExpect(status().isBadRequest());
 
         mockMvc.perform(post("/api/ai/multiplanar/run")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(strictBody("inp_sagittal_001", "inp_axial_001", "some/path", null)))
+                .content(strictBody("inp_sagittal_001", "inp_axial_001", null, "some/axial/path")))
             .andExpect(status().isBadRequest());
 
         mockMvc.perform(post("/api/ai/multiplanar/run")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(strictBody("demo/sag", "inp_axial_001", null, null)))
+                .content(strictBody("demo/sag", "", null, null)))
             .andExpect(status().isBadRequest());
     }
 
@@ -209,6 +250,23 @@ class AiMultiplanarRunTest {
     private MultiplanarRunResponseDto contractFixture() throws Exception {
         String json = Files.readString(Path.of("src/test/resources/contracts/ai-module-multiplanar-real-baseline.json"));
         return objectMapper.readValue(json, MultiplanarRunResponseDto.class);
+    }
+
+    @SuppressWarnings("unchecked")
+    private MultiplanarRunResponseDto sagittalOnlyFixture() throws Exception {
+        Map<String, Object> response = objectMapper.readValue(
+            Files.readString(Path.of("src/test/resources/contracts/ai-module-multiplanar-real-baseline.json")),
+            Map.class
+        );
+        response.put("effectiveInferenceMode", "mixed");
+        Map<String, Object> planes = (Map<String, Object>) response.get("planes");
+        planes.remove("axial");
+        response.put("quality", Map.of(
+            "sagittalRunReady", true,
+            "axialRunReady", false,
+            "dualRunReady", false
+        ));
+        return objectMapper.convertValue(response, MultiplanarRunResponseDto.class);
     }
 
     private String strictBody(String sagittalInputId, String axialInputId, String sagittalInputPath, String axialInputPath) {
