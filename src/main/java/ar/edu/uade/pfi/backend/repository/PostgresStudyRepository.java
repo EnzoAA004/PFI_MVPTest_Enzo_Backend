@@ -211,7 +211,11 @@ public class PostgresStudyRepository implements StudyRepository {
                 artifact.assetName(),
                 artifact.contentType(),
                 artifact.artifactRef(),
-                artifact.createdAt()
+                artifact.createdAt(),
+                artifact.storageStatus(),
+                artifact.storageKind(),
+                artifact.sizeBytes(),
+                artifact.sha256()
             ));
         }
         return normalized;
@@ -538,8 +542,11 @@ public class PostgresStudyRepository implements StudyRepository {
 
     private void saveArtifact(Connection connection, RunArtifact artifact) throws Exception {
         try (PreparedStatement statement = connection.prepareStatement("""
-            INSERT INTO domain_run_artifacts(id, study_run_id, run_id, plane, asset_name, content_type, artifact_ref, created_at)
-            VALUES (?::uuid, ?::uuid, ?, ?, ?, ?, ?, ?)
+            INSERT INTO domain_run_artifacts(
+                id, study_run_id, run_id, plane, asset_name, content_type, artifact_ref, created_at,
+                storage_status, storage_kind, size_bytes, sha256
+            )
+            VALUES (?::uuid, ?::uuid, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """)) {
             statement.setString(1, artifact.id());
             statement.setString(2, artifact.studyRunId());
@@ -549,7 +556,57 @@ public class PostgresStudyRepository implements StudyRepository {
             statement.setString(6, artifact.contentType());
             statement.setString(7, artifact.artifactRef());
             statement.setTimestamp(8, Timestamp.from(artifact.createdAt()));
+            statement.setString(9, artifact.storageStatus());
+            statement.setString(10, artifact.storageKind());
+            if (artifact.sizeBytes() == null) statement.setObject(11, null);
+            else statement.setLong(11, artifact.sizeBytes());
+            statement.setString(12, artifact.sha256());
             statement.executeUpdate();
+        }
+    }
+
+    @Override
+    public Optional<RunArtifact> findArtifactByRunPlaneAndName(String runId, String plane, String assetName) {
+        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+            SELECT id, study_run_id, run_id, plane, asset_name, content_type, artifact_ref, created_at,
+                   storage_status, storage_kind, size_bytes, sha256
+            FROM domain_run_artifacts
+            WHERE run_id = ? AND plane = ? AND asset_name = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+            """)) {
+            statement.setString(1, runId);
+            statement.setString(2, plane);
+            statement.setString(3, assetName);
+            try (ResultSet rs = statement.executeQuery()) {
+                return rs.next() ? Optional.of(readArtifact(rs)) : Optional.empty();
+            }
+        } catch (Exception ex) {
+            throw new IllegalStateException("Could not find run artifact", ex);
+        }
+    }
+
+    @Override
+    public RunArtifact updateArtifactStorage(String artifactId, String storageStatus, String storageKind, Long sizeBytes, String sha256) {
+        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+            UPDATE domain_run_artifacts
+            SET storage_status = ?, storage_kind = ?, size_bytes = ?, sha256 = ?
+            WHERE id = ?::uuid
+            RETURNING id, study_run_id, run_id, plane, asset_name, content_type, artifact_ref, created_at,
+                      storage_status, storage_kind, size_bytes, sha256
+            """)) {
+            statement.setString(1, storageStatus);
+            statement.setString(2, storageKind);
+            if (sizeBytes == null) statement.setObject(3, null);
+            else statement.setLong(3, sizeBytes);
+            statement.setString(4, sha256);
+            statement.setString(5, artifactId);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (!rs.next()) throw new IllegalArgumentException("Artifact not found");
+                return readArtifact(rs);
+            }
+        } catch (Exception ex) {
+            throw new IllegalStateException("Could not update run artifact storage", ex);
         }
     }
 
@@ -642,27 +699,37 @@ public class PostgresStudyRepository implements StudyRepository {
 
     private List<RunArtifact> findArtifacts(Connection connection, String studyRunId) throws Exception {
         try (PreparedStatement statement = connection.prepareStatement("""
-            SELECT id, study_run_id, run_id, plane, asset_name, content_type, artifact_ref, created_at
+            SELECT id, study_run_id, run_id, plane, asset_name, content_type, artifact_ref, created_at,
+                   storage_status, storage_kind, size_bytes, sha256
             FROM domain_run_artifacts WHERE study_run_id = ?::uuid ORDER BY plane, asset_name
             """)) {
             statement.setString(1, studyRunId);
             try (ResultSet rs = statement.executeQuery()) {
                 List<RunArtifact> artifacts = new ArrayList<>();
                 while (rs.next()) {
-                    artifacts.add(new RunArtifact(
-                        rs.getObject("id", UUID.class).toString(),
-                        rs.getObject("study_run_id", UUID.class).toString(),
-                        rs.getString("run_id"),
-                        rs.getString("plane"),
-                        rs.getString("asset_name"),
-                        rs.getString("content_type"),
-                        rs.getString("artifact_ref"),
-                        rs.getTimestamp("created_at").toInstant()
-                    ));
+                    artifacts.add(readArtifact(rs));
                 }
                 return artifacts;
             }
         }
+    }
+
+    private RunArtifact readArtifact(ResultSet rs) throws Exception {
+        long sizeBytes = rs.getLong("size_bytes");
+        return new RunArtifact(
+            rs.getObject("id", UUID.class).toString(),
+            rs.getObject("study_run_id", UUID.class).toString(),
+            rs.getString("run_id"),
+            rs.getString("plane"),
+            rs.getString("asset_name"),
+            rs.getString("content_type"),
+            rs.getString("artifact_ref"),
+            rs.getTimestamp("created_at").toInstant(),
+            rs.getString("storage_status"),
+            rs.getString("storage_kind"),
+            rs.wasNull() ? null : sizeBytes,
+            rs.getString("sha256")
+        );
     }
 
     private Map<String, Object> readJsonMap(String json) throws Exception {

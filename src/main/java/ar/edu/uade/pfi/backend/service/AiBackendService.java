@@ -12,11 +12,16 @@ import ar.edu.uade.pfi.backend.dto.ReviewExportResponseDto;
 import ar.edu.uade.pfi.backend.dto.ReviewSnapshotDto;
 import ar.edu.uade.pfi.backend.dto.ReviewStatusDto;
 import ar.edu.uade.pfi.backend.dto.ReviewUpdateRequestDto;
+import ar.edu.uade.pfi.backend.repository.StudyRepository;
 import ar.edu.uade.pfi.backend.util.ResponseNormalizer;
+import ar.edu.uade.pfi.backend.domain.RunArtifact;
+import ar.edu.uade.pfi.backend.domain.RunAssetContent;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -42,13 +47,39 @@ public class AiBackendService {
     private final SagittalRealBaselineContractValidator sagittalContractValidator;
     private final AiPipelineResponsePresenter pipelineResponsePresenter;
     private final AiModelReadinessResolver modelReadinessResolver;
+    private final StudyRepository studyRepository;
+    private final RunAssetContentStorage assetContentStorage;
+    private final RunAssetSnapshotService runAssetSnapshotService;
 
     public AiBackendService(AiServiceOperations aiServiceClient, ReviewStoreService reviewStoreService) {
-        this(aiServiceClient, reviewStoreService, null, null, null, null, null);
+        this(aiServiceClient, reviewStoreService, null, null, null, null, null, null, (RunAssetContentStorage) null, null);
     }
 
     public AiBackendService(AiServiceOperations aiServiceClient, ReviewStoreService reviewStoreService, AuditService auditService) {
-        this(aiServiceClient, reviewStoreService, auditService, null, null, null, null);
+        this(aiServiceClient, reviewStoreService, auditService, null, null, null, null, null, (RunAssetContentStorage) null, null);
+    }
+
+    public AiBackendService(
+        AiServiceOperations aiServiceClient,
+        ReviewStoreService reviewStoreService,
+        AuditService auditService,
+        PipelineRunRequestNormalizer pipelineRunRequestNormalizer,
+        SagittalRealBaselineContractValidator sagittalContractValidator,
+        AiPipelineResponsePresenter pipelineResponsePresenter,
+        AiModelReadinessResolver modelReadinessResolver
+    ) {
+        this(
+            aiServiceClient,
+            reviewStoreService,
+            auditService,
+            pipelineRunRequestNormalizer,
+            sagittalContractValidator,
+            pipelineResponsePresenter,
+            modelReadinessResolver,
+            null,
+            (RunAssetContentStorage) null,
+            null
+        );
     }
 
     @Autowired
@@ -59,7 +90,36 @@ public class AiBackendService {
         PipelineRunRequestNormalizer pipelineRunRequestNormalizer,
         SagittalRealBaselineContractValidator sagittalContractValidator,
         AiPipelineResponsePresenter pipelineResponsePresenter,
-        AiModelReadinessResolver modelReadinessResolver
+        AiModelReadinessResolver modelReadinessResolver,
+        StudyRepository studyRepository,
+        ObjectProvider<RunAssetContentStorage> assetContentStorageProvider,
+        ObjectProvider<RunAssetSnapshotService> runAssetSnapshotServiceProvider
+    ) {
+        this(
+            aiServiceClient,
+            reviewStoreService,
+            auditService,
+            pipelineRunRequestNormalizer,
+            sagittalContractValidator,
+            pipelineResponsePresenter,
+            modelReadinessResolver,
+            studyRepository,
+            assetContentStorageProvider.getIfAvailable(),
+            runAssetSnapshotServiceProvider.getIfAvailable()
+        );
+    }
+
+    public AiBackendService(
+        AiServiceOperations aiServiceClient,
+        ReviewStoreService reviewStoreService,
+        AuditService auditService,
+        PipelineRunRequestNormalizer pipelineRunRequestNormalizer,
+        SagittalRealBaselineContractValidator sagittalContractValidator,
+        AiPipelineResponsePresenter pipelineResponsePresenter,
+        AiModelReadinessResolver modelReadinessResolver,
+        StudyRepository studyRepository,
+        RunAssetContentStorage assetContentStorage,
+        RunAssetSnapshotService runAssetSnapshotService
     ) {
         this.aiServiceClient = aiServiceClient;
         this.reviewStoreService = reviewStoreService;
@@ -68,6 +128,9 @@ public class AiBackendService {
         this.sagittalContractValidator = sagittalContractValidator;
         this.pipelineResponsePresenter = pipelineResponsePresenter;
         this.modelReadinessResolver = modelReadinessResolver;
+        this.studyRepository = studyRepository;
+        this.assetContentStorage = assetContentStorage;
+        this.runAssetSnapshotService = runAssetSnapshotService;
     }
 
     public Map<String, Object> health() {
@@ -245,6 +308,21 @@ public class AiBackendService {
         String normalizedPlane = normalized(plane);
         String normalizedAssetName = trimmed(assetName);
         validateAssetRequest(normalizedRunId, normalizedPlane, normalizedAssetName);
+        Optional<RunArtifact> artifact = studyRepository == null
+            ? Optional.empty()
+            : studyRepository.findArtifactByRunPlaneAndName(normalizedRunId, normalizedPlane, normalizedAssetName);
+        if (artifact.isPresent() && assetContentStorage != null) {
+            Optional<RunAssetContent> stored = assetContentStorage.find(artifact.get().id());
+            if (stored.isPresent()) {
+                return durableAsset(stored.get(), "postgres");
+            }
+            RunArtifact backfilled = runAssetSnapshotService == null ? artifact.get() : runAssetSnapshotService.backfill(artifact.get(), "");
+            Optional<RunAssetContent> backfilledContent = assetContentStorage.find(backfilled.id());
+            if (backfilledContent.isPresent()) {
+                return durableAsset(backfilledContent.get(), "ai-module-backfill");
+            }
+            throw new AssetContentUnavailableException(normalizedRunId, normalizedPlane, normalizedAssetName);
+        }
         ResponseEntity<byte[]> upstream = aiServiceClient.getAsset(normalizedRunId, normalizedPlane, normalizedAssetName);
         HttpHeaders headers = new HttpHeaders();
         String contentType = upstream.getHeaders().getFirst(HttpHeaders.CONTENT_TYPE);
@@ -252,6 +330,16 @@ public class AiBackendService {
             headers.add(HttpHeaders.CONTENT_TYPE, contentType);
         }
         return new ResponseEntity<>(upstream.getBody(), headers, upstream.getStatusCode());
+    }
+
+    private ResponseEntity<byte[]> durableAsset(RunAssetContent content, String source) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.add(HttpHeaders.CONTENT_TYPE, "image/png");
+        headers.add(HttpHeaders.CONTENT_LENGTH, String.valueOf(content.sizeBytes()));
+        headers.add(HttpHeaders.ETAG, "\"" + content.sha256() + "\"");
+        headers.add(HttpHeaders.CACHE_CONTROL, "private, max-age=86400");
+        headers.add("X-PFI-Asset-Source", source);
+        return new ResponseEntity<>(content.content(), headers, HttpStatus.OK);
     }
 
     public Map<String, Object> getAgentReport(String runId) {

@@ -232,14 +232,19 @@ public class StudyWorklistService {
     private Map<String, List<Map<String, Object>>> artifactsByPlane(List<RunArtifact> artifacts) {
         Map<String, List<Map<String, Object>>> byPlane = new LinkedHashMap<>();
         for (RunArtifact artifact : artifacts) {
-            byPlane.computeIfAbsent(artifact.plane(), ignored -> new ArrayList<>()).add(Map.of(
-                "plane", artifact.plane(),
-                "runId", artifact.runId(),
-                "assetName", artifact.assetName(),
-                "contentType", artifact.contentType(),
-                "proxyUrl", "/api/ai/assets/" + artifact.runId() + "/" + artifact.plane() + "/" + artifact.assetName(),
-                "createdAt", artifact.createdAt().toString()
-            ));
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("plane", artifact.plane());
+            item.put("runId", artifact.runId());
+            item.put("assetName", artifact.assetName());
+            item.put("contentType", artifact.contentType());
+            item.put("proxyUrl", "/api/ai/assets/" + artifact.runId() + "/" + artifact.plane() + "/" + artifact.assetName());
+            item.put("storageStatus", artifact.storageStatus());
+            item.put("storageKind", artifact.storageKind());
+            item.put("sizeBytes", artifact.sizeBytes());
+            item.put("sha256", artifact.sha256());
+            item.put("available", artifact.available());
+            item.put("createdAt", artifact.createdAt().toString());
+            byPlane.computeIfAbsent(artifact.plane(), ignored -> new ArrayList<>()).add(item);
         }
         return byPlane;
     }

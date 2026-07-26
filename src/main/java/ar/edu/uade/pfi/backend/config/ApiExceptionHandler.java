@@ -3,6 +3,7 @@ package ar.edu.uade.pfi.backend.config;
 import ar.edu.uade.pfi.backend.service.AuditService;
 import ar.edu.uade.pfi.backend.service.AiContractViolationException;
 import ar.edu.uade.pfi.backend.service.AiMultiplanarContractViolationException;
+import ar.edu.uade.pfi.backend.service.AssetContentUnavailableException;
 import ar.edu.uade.pfi.backend.service.DatabaseUnavailableException;
 import ar.edu.uade.pfi.backend.service.StudyNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -58,6 +59,15 @@ public class ApiExceptionHandler {
     @ExceptionHandler(StudyNotFoundException.class)
     public ResponseEntity<Map<String, Object>> handleStudyNotFound(StudyNotFoundException ex, HttpServletRequest request) {
         return buildError(HttpStatus.NOT_FOUND, "STUDY_NOT_FOUND", "Estudio no encontrado", request, ex);
+    }
+
+    @ExceptionHandler(AssetContentUnavailableException.class)
+    public ResponseEntity<Map<String, Object>> handleAssetContentUnavailable(AssetContentUnavailableException ex, HttpServletRequest request) {
+        ResponseEntity<Map<String, Object>> response = buildError(HttpStatus.NOT_FOUND, "ASSET_CONTENT_UNAVAILABLE", ex.getMessage(), request, ex);
+        response.getBody().put("runId", ex.runId());
+        response.getBody().put("plane", ex.plane());
+        response.getBody().put("assetName", ex.assetName());
+        return response;
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

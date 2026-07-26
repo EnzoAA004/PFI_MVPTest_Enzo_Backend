@@ -121,6 +121,18 @@ Response esperada:
 
 El backend valida extension, plano y tamano antes de reenviar. La respuesta no expone paths internos ni `inputPath`. El ciclo de vida del `inputId` depende del registro del AI Module.
 
+## GET /api/ai/assets/{planeRunId}/{plane}/{assetName}
+
+Sirve assets publicos derivados de una corrida real. El frontend nunca llama directo al AI Module.
+
+- `assetName` permitido: `input.png`, `overlay.png`, `mask-preview.png`.
+- Rechaza traversal, `.npy`, `.pt/.pth`, HTML/JSON u otros nombres antes de exponer contenido.
+- Si el payload fue preservado en PostgreSQL responde `200 image/png` con `Content-Length`, `ETag`, `Cache-Control: private` y `X-PFI-Asset-Source: postgres`.
+- Si existe metadata pero falta payload, intenta un backfill unico desde el AI Module; si resulta exitoso responde con `X-PFI-Asset-Source: ai-module-backfill`.
+- Si el output temporal ya no existe responde `404` con `code=ASSET_CONTENT_UNAVAILABLE`, `runId`, `plane`, `assetName`, `traceId`, `humanReviewRequired=true` y `notClinicalDiagnosis=true`.
+
+El backend preserva solo PNG de revision deidentificados (`input.png`, `overlay.png`, `mask-preview.png`) hasta `PFI_ASSET_STORAGE_MAX_BYTES` bytes, default `5242880` (5 MB). No persiste MHA/MHD/DICOM, uploads raw, `.npy`, `.pt/.pth`, notebooks, checkpoints ni paths internos.
+
 ## POST /api/ai/multiplanar/run
 
 Reenvia `POST /multiplanar/run` al AI Module usando inputs registrados por plano.

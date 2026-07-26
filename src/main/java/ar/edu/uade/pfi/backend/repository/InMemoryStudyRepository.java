@@ -104,6 +104,71 @@ public class InMemoryStudyRepository implements StudyRepository {
     }
 
     @Override
+    public Optional<RunArtifact> findArtifactByRunPlaneAndName(String runId, String plane, String assetName) {
+        return runsById.values().stream()
+            .flatMap(run -> run.artifacts().stream())
+            .filter(artifact -> artifact.runId().equals(runId) && artifact.plane().equals(plane) && artifact.assetName().equals(assetName))
+            .findFirst();
+    }
+
+    @Override
+    public RunArtifact updateArtifactStorage(String artifactId, String storageStatus, String storageKind, Long sizeBytes, String sha256) {
+        for (StudyRun run : runsById.values()) {
+            List<RunArtifact> updatedArtifacts = new ArrayList<>();
+            RunArtifact updated = null;
+            for (RunArtifact artifact : run.artifacts()) {
+                if (artifact.id().equals(artifactId)) {
+                    updated = new RunArtifact(
+                        artifact.id(),
+                        artifact.studyRunId(),
+                        artifact.runId(),
+                        artifact.plane(),
+                        artifact.assetName(),
+                        artifact.contentType(),
+                        artifact.artifactRef(),
+                        artifact.createdAt(),
+                        storageStatus,
+                        storageKind,
+                        sizeBytes,
+                        sha256
+                    );
+                    updatedArtifacts.add(updated);
+                } else {
+                    updatedArtifacts.add(artifact);
+                }
+            }
+            if (updated != null) {
+                runsById.put(run.id(), new StudyRun(
+                    run.id(),
+                    run.studyId(),
+                    run.multiplanarRunId(),
+                    run.traceId(),
+                    run.requestedInferenceMode(),
+                    run.effectiveInferenceMode(),
+                    run.sagittalModelKey(),
+                    run.axialModelKey(),
+                    run.sagittalArtifactHash(),
+                    run.axialArtifactHash(),
+                    run.sagittalRunId(),
+                    run.axialRunId(),
+                    run.assets(),
+                    run.metricsSnapshot(),
+                    updatedArtifacts,
+                    run.status(),
+                    run.reviewStatus(),
+                    run.reviewer(),
+                    run.reviewedAt(),
+                    run.comments(),
+                    run.createdAt(),
+                    run.updatedAt()
+                ));
+                return updated;
+            }
+        }
+        throw new IllegalArgumentException("Artifact not found");
+    }
+
+    @Override
     public RunReview saveReview(String multiplanarRunId, String reviewStatus, String reviewer, Instant reviewedAt, String comments, List<MeasurementCorrection> corrections) {
         StudyRun existing = findRunByMultiplanarRunId(multiplanarRunId).orElseThrow();
         StudyRun updated = new StudyRun(

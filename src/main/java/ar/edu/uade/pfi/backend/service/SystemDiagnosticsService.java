@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -15,6 +16,7 @@ public class SystemDiagnosticsService {
     private final AiServiceOperations aiServiceClient;
     private final PostgresReviewStoreService postgresReviewStoreService;
     private final AuthService authService;
+    private final RunAssetContentStorage assetContentStorage;
     private final boolean authEnabled;
     private final String persistenceMode;
 
@@ -22,12 +24,29 @@ public class SystemDiagnosticsService {
         AiServiceOperations aiServiceClient,
         PostgresReviewStoreService postgresReviewStoreService,
         AuthService authService,
+        boolean authEnabled,
+        String persistenceMode
+    ) {
+        this.aiServiceClient = aiServiceClient;
+        this.postgresReviewStoreService = postgresReviewStoreService;
+        this.authService = authService;
+        this.assetContentStorage = null;
+        this.authEnabled = authEnabled;
+        this.persistenceMode = persistenceMode;
+    }
+
+    public SystemDiagnosticsService(
+        AiServiceOperations aiServiceClient,
+        PostgresReviewStoreService postgresReviewStoreService,
+        AuthService authService,
+        ObjectProvider<RunAssetContentStorage> assetContentStorageProvider,
         @Value("${pfi.auth.enabled:true}") boolean authEnabled,
         @Value("${pfi.persistence.mode:memory}") String persistenceMode
     ) {
         this.aiServiceClient = aiServiceClient;
         this.postgresReviewStoreService = postgresReviewStoreService;
         this.authService = authService;
+        this.assetContentStorage = assetContentStorageProvider.getIfAvailable();
         this.authEnabled = authEnabled;
         this.persistenceMode = persistenceMode;
     }
@@ -43,6 +62,7 @@ public class SystemDiagnosticsService {
         result.put("backend", Map.of("available", true, "status", "ok", "service", "pfi-backend"));
         result.put("aiModule", aiModule);
         result.put("database", database);
+        result.put("assetStorage", assetStorageDiagnostics());
         result.put("auth", authEnabled ? authService.diagnostics() : Map.of("enabled", false, "status", "disabled"));
         result.put("persistence", Map.of("mode", persistenceMode, "postgresEnabled", postgresReviewStoreService.enabled()));
         result.put("readiness", aiModule.getOrDefault("readiness", readinessUnavailable("not_checked")));
@@ -52,6 +72,26 @@ public class SystemDiagnosticsService {
         result.put("humanReviewRequired", true);
         result.put("notClinicalDiagnosis", true);
         return result;
+    }
+
+    private Map<String, Object> assetStorageDiagnostics() {
+        if (assetContentStorage == null) {
+            return Map.of(
+                "mode", "none",
+                "available", false,
+                "storedAssetCount", 0,
+                "storedBytes", 0,
+                "missingPayloadCount", 0
+            );
+        }
+        var diagnostics = assetContentStorage.diagnostics();
+        return Map.of(
+            "mode", diagnostics.mode(),
+            "available", diagnostics.available(),
+            "storedAssetCount", diagnostics.storedAssetCount(),
+            "storedBytes", diagnostics.storedBytes(),
+            "missingPayloadCount", diagnostics.missingPayloadCount()
+        );
     }
 
     public Map<String, Object> warmup() {

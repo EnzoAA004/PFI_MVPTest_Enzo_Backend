@@ -131,8 +131,24 @@ CREATE TABLE IF NOT EXISTS domain_run_artifacts (
     asset_name TEXT NOT NULL,
     content_type TEXT NOT NULL,
     artifact_ref TEXT NOT NULL,
+    storage_status TEXT NOT NULL DEFAULT 'upstream_only' CHECK (storage_status IN ('stored', 'upstream_only', 'missing', 'rejected')),
+    storage_kind TEXT NULL,
+    size_bytes BIGINT NULL,
+    sha256 TEXT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (study_run_id, plane, asset_name)
+);
+
+CREATE TABLE IF NOT EXISTS domain_run_asset_payloads (
+    artifact_id UUID PRIMARY KEY REFERENCES domain_run_artifacts(id) ON DELETE CASCADE,
+    content BYTEA NOT NULL,
+    sha256 TEXT NOT NULL,
+    size_bytes BIGINT NOT NULL,
+    storage_kind TEXT NOT NULL DEFAULT 'postgres_bytea',
+    stored_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK (size_bytes > 0),
+    CHECK (size_bytes <= 5242880),
+    CHECK (length(trim(sha256)) > 0)
 );
 
 CREATE TABLE IF NOT EXISTS domain_review_corrections (
@@ -150,6 +166,7 @@ CREATE INDEX IF NOT EXISTS idx_domain_input_resources_study_plane ON domain_inpu
 CREATE INDEX IF NOT EXISTS idx_domain_study_runs_study ON domain_study_runs(study_id);
 CREATE INDEX IF NOT EXISTS idx_domain_study_runs_trace_id ON domain_study_runs(trace_id);
 CREATE INDEX IF NOT EXISTS idx_domain_run_artifacts_run_plane ON domain_run_artifacts(run_id, plane);
+CREATE INDEX IF NOT EXISTS idx_domain_run_asset_payloads_stored_at ON domain_run_asset_payloads(stored_at);
 CREATE INDEX IF NOT EXISTS idx_domain_review_corrections_run ON domain_review_corrections(study_run_id);
 
 CREATE TABLE IF NOT EXISTS domain_audit_events (

@@ -10,22 +10,35 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
 public class MultiplanarRunPersistenceService {
+    private static final Set<String> PUBLIC_ASSETS = Set.of("input.png", "overlay.png", "mask-preview.png");
+
     private final StudyRunService studyRunService;
+    private final RunAssetSnapshotService runAssetSnapshotService;
     private final Clock clock;
 
     @Autowired
+    public MultiplanarRunPersistenceService(StudyRunService studyRunService, RunAssetSnapshotService runAssetSnapshotService) {
+        this(studyRunService, runAssetSnapshotService, Clock.systemUTC());
+    }
+
     public MultiplanarRunPersistenceService(StudyRunService studyRunService) {
-        this(studyRunService, Clock.systemUTC());
+        this(studyRunService, null, Clock.systemUTC());
     }
 
     MultiplanarRunPersistenceService(StudyRunService studyRunService, Clock clock) {
+        this(studyRunService, null, clock);
+    }
+
+    MultiplanarRunPersistenceService(StudyRunService studyRunService, RunAssetSnapshotService runAssetSnapshotService, Clock clock) {
         this.studyRunService = studyRunService;
+        this.runAssetSnapshotService = runAssetSnapshotService;
         this.clock = clock;
     }
 
@@ -42,7 +55,7 @@ public class MultiplanarRunPersistenceService {
         String studyRunId = UUID.randomUUID().toString();
         Instant now = clock.instant();
 
-        studyRunService.createRunWithId(
+        var persistedRun = studyRunService.createRunWithId(
             studyRunId,
             study,
             response.runId(),
@@ -64,6 +77,9 @@ public class MultiplanarRunPersistenceService {
             null,
             ""
         );
+        if (runAssetSnapshotService != null) {
+            runAssetSnapshotService.snapshot(persistedRun);
+        }
     }
 
     private void registerInput(Study study, String plane, String inputId) {
@@ -82,14 +98,14 @@ public class MultiplanarRunPersistenceService {
         if (blank(runId) || assets == null) return;
         for (Object value : assets.values()) {
             String assetName = basename(String.valueOf(value));
-            if (blank(assetName)) continue;
+            if (blank(assetName) || !PUBLIC_ASSETS.contains(assetName)) continue;
             artifacts.add(new RunArtifact(
                 UUID.randomUUID().toString(),
                 studyRunId,
                 runId,
                 plane,
                 assetName,
-                assetName.endsWith(".png") ? "image/png" : "application/octet-stream",
+                "image/png",
                 assetName,
                 now
             ));

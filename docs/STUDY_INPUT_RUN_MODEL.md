@@ -40,7 +40,7 @@ Testcontainers PostgreSQL is the acceptance gate for the real persistence path. 
 - `sagittalRunId`, `axialRunId`: child run ids by plane.
 - `assets`: metadata/asset refs only; no image, mask, or model blobs.
 - `metricsSnapshot`: JSON quality/confidence snapshot captured for the run.
-- `artifacts`: generated output refs by `runId`, `plane`, and `assetName`; no blobs.
+- `artifacts`: generated output refs by `runId`, `plane`, and `assetName`, plus durable storage metadata (`storageStatus`, `storageKind`, `sizeBytes`, `sha256`). `storageStatus` is `stored`, `upstream_only`, `missing`, or `rejected`.
 - `reviewStatus`, `reviewer`, `reviewedAt`, `comments`: professional review state columns. Valid statuses are `pending`, `accepted`, `observed`, `rejected`, and `edited`.
 
 P8-A extends `domain_studies` with nullable worklist metadata: `subject_ref`, `study_date`, `modality`, `description`, plus `review_priority` (`low`, `medium`, `high`, default `medium`). These columns are optional and do not backfill demo identifiers.
@@ -68,7 +68,9 @@ BE-006 persists successful `POST /api/ai/multiplanar/run` responses after the AI
 - `StudyRun` stores `multiplanarRunId`, `traceId`, requested/effective inference modes, model keys, checkpoint/artifact hashes, child run ids, safe asset refs, metrics snapshot, and initial review state.
 - Artifact hashes are resolved from `plane.artifactHash`, `plane.aiOutput.artifactHash`, `plane.modelArtifact.artifactHash`, or `plane.modelArtifact.sha256`.
 - Plane effective modes are stored after normalization from `effectiveInferenceMode`, `inferenceMode`, `aiOutput.inferenceMode`, or `metadata.inferenceMode`.
-- `RunArtifact` rows store refs by `runId`, `plane`, and `assetName`; paths are normalized to basenames and no blobs are stored.
-- Public persisted assets are proxy refs for `input.png`, `overlay.png`, and `mask-preview.png`. Raw assets such as `mask.npy` and `confidence.npy` are not exposed to the browser.
+- `RunArtifact` rows store refs by `runId`, `plane`, and `assetName`; paths are normalized to basenames.
+- `domain_run_asset_payloads` stores durable BYTEA payloads only for PNG review assets (`input.png`, `overlay.png`, `mask-preview.png`) with SHA-256, size, storage kind, and FK to the artifact metadata. The default limit is 5 MB via `PFI_ASSET_STORAGE_MAX_BYTES`.
+- Public persisted assets are proxy refs for `input.png`, `overlay.png`, and `mask-preview.png`. Raw assets such as `mask.npy`, `confidence.npy`, `.pt/.pth`, DICOM/MHA uploads, and internal paths are not exposed to the browser and are not stored as durable asset payloads.
 - Internal paths (`inputPath`, `sourcePath`, `outputFiles`, any `path`, `/tmp`, `/content`, Windows paths, Colab, Google Drive, `models/final`) are removed before public response/persistence.
+- After a successful real run, the backend attempts to snapshot public PNG assets from the AI Module. Asset failures do not turn the run into a fake success; each artifact is marked `stored`, `missing`, or `rejected`. Existing metadata without payload can be lazily backfilled once through `GET /api/ai/assets/...`; if the AI Module no longer has the output, the API returns `ASSET_CONTENT_UNAVAILABLE` and the case should be rerun if that visual evidence is required.
 - If the AI Module call fails, returns mixed/contract/fallback in strict real_baseline, or violates the sagital/axial real contract, the backend does not persist a fake successful run. Error persistence can be added later with an explicit failed-run contract.

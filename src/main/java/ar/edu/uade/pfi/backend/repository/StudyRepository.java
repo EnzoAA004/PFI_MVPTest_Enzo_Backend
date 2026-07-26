@@ -34,6 +34,10 @@ public interface StudyRepository {
 
     List<RunArtifact> findArtifactsByRunId(String studyRunId);
 
+    Optional<RunArtifact> findArtifactByRunPlaneAndName(String runId, String plane, String assetName);
+
+    RunArtifact updateArtifactStorage(String artifactId, String storageStatus, String storageKind, Long sizeBytes, String sha256);
+
     RunReview saveReview(String multiplanarRunId, String reviewStatus, String reviewer, Instant reviewedAt, String comments, List<MeasurementCorrection> corrections);
 
     Optional<RunReview> findReviewByMultiplanarRunId(String multiplanarRunId);
