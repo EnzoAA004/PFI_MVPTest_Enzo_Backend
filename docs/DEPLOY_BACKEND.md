@@ -38,18 +38,25 @@ curl https://url-del-backend/api/ai/health
 
 Opcion Docker:
 
-1. Crear servicio desde este repositorio.
-2. Railway detecta el Dockerfile o permite seleccionarlo.
-3. Configurar variables:
+1. Crear un servicio desde GitHub apuntando a este repositorio.
+2. Railway usa `railway.json` y el `Dockerfile` del repo para autodeploy.
+3. Dejar habilitado el autodeploy del branch elegido en Railway.
+4. Configurar variables:
    - `PFI_AI_SERVICE_URL=https://url-del-ai-module`
-   - `PFI_AI_TIMEOUT_SECONDS=60`
+   - `PFI_AI_TIMEOUT_SECONDS=180`
    - `PFI_CORS_ALLOWED_ORIGINS=https://url-del-frontend`
-4. Railway define `PORT`; Spring Boot lo usa automaticamente.
-5. Probar:
+   - `PFI_AUTH_JWT_SECRET=<secret-largo-generado-en-railway>`
+   - `PFI_PERSISTENCE_MODE=postgres`
+   - `DATABASE_URL=<PostgreSQL URL de Railway>`
+5. Railway define `PORT`; Spring Boot lo usa automaticamente.
+6. El healthcheck configurado es `GET /api/ai/health`.
+7. Probar:
 
 ```bash
-curl https://url-del-backend/api/ai/models
+curl https://url-del-backend/api/ai/health
 ```
+
+No commitear `.env` reales ni secretos. Para Postgres, usar una variable `DATABASE_URL` del plugin/servicio de Railway o copiar la URL interna que Railway exponga para el backend.
 
 ## Docker Local
 
