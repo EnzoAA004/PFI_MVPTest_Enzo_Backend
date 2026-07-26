@@ -88,8 +88,8 @@ public class MultiplanarV2RealBaselineValidator {
         requireTrue(plane.fallbackReason() == null, "fallbackReason sagittal debe ser null");
 
         Map<String, Object> model = plane.model();
-        requireEquals(SAGITTAL_MODEL_KEY, text(model.get("modelKey")), "model.key sagittal");
-        requireEquals(SAGITTAL_MODEL_VERSION, text(model.get("modelVersion")), "model.version sagittal");
+        requireEquals(SAGITTAL_MODEL_KEY, text(model.get("key")), "model.key sagittal");
+        requireEquals(SAGITTAL_MODEL_VERSION, text(model.get("version")), "model.version sagittal");
         requireEquals(SAGITTAL_ARTIFACT_HASH, text(model.get("artifactHash")), "model.artifactHash sagittal");
         requireTrue(Boolean.TRUE.equals(model.get("baselineReady")), "model.baselineReady sagittal debe ser true");
         requireTrue(Boolean.TRUE.equals(model.get("availableForRealInference")), "model.availableForRealInference sagittal debe ser true");
@@ -147,8 +147,8 @@ public class MultiplanarV2RealBaselineValidator {
      * — it must not fire for any other modelKey/modelVersion combination.
      */
     private void validateFrozenSagittalSpiderArtifactCounts(Map<String, Object> model, CanonicalPlaneRun plane) {
-        boolean isFrozenRelease = SAGITTAL_MODEL_KEY.equals(text(model.get("modelKey")))
-            && SAGITTAL_MODEL_VERSION.equals(text(model.get("modelVersion")));
+        boolean isFrozenRelease = SAGITTAL_MODEL_KEY.equals(text(model.get("key")))
+            && SAGITTAL_MODEL_VERSION.equals(text(model.get("version")));
         if (!isFrozenRelease) return;
         requireTrue(plane.masks().size() == FROZEN_MASK_COUNT, "sagittal_spider/sagittal-spider-final-v1 debe tener exactamente 3 masks");
         requireTrue(plane.landmarks().size() == FROZEN_LANDMARK_COUNT, "sagittal_spider/sagittal-spider-final-v1 debe tener exactamente 3 landmarks");

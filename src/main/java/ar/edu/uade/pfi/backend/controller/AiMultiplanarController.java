@@ -182,11 +182,11 @@ public class AiMultiplanarController {
         metadata.put("sagittalRunId", sagittal == null ? "" : sagittal.planeRunId());
         metadata.put("axialRunId", axial == null ? "" : axial.planeRunId());
         metadata.put("caseId", request.caseId());
-        metadata.put("sagittalModelKey", sagittal == null ? request.sagittalModelKey() : String.valueOf(sagittal.model().get("modelKey")));
-        metadata.put("sagittalModelVersion", sagittal == null ? "" : String.valueOf(sagittal.model().get("modelVersion")));
+        metadata.put("sagittalModelKey", sagittal == null ? request.sagittalModelKey() : modelKey(sagittal.model()));
+        metadata.put("sagittalModelVersion", sagittal == null ? "" : modelVersion(sagittal.model()));
         metadata.put("sagittalArtifactHash", sagittal == null ? "" : String.valueOf(sagittal.model().get("artifactHash")));
         metadata.put("sagittalInferenceMode", sagittal == null ? "" : sagittal.effectiveInferenceMode());
-        metadata.put("axialModelKey", axial == null ? request.axialModelKey() : String.valueOf(axial.model().get("modelKey")));
+        metadata.put("axialModelKey", axial == null ? request.axialModelKey() : modelKey(axial.model()));
         metadata.put("axialInferenceMode", axial == null ? "" : axial.effectiveInferenceMode());
         metadata.put("sagittalInputIdPresent", request.sagittalInputId() != null);
         metadata.put("axialInputIdPresent", request.axialInputId() != null);
@@ -195,6 +195,20 @@ public class AiMultiplanarController {
         metadata.put("traceId", response.traceId());
         metadata.put("humanReviewRequired", response.governance().humanReviewRequired());
         return metadata;
+    }
+
+    /**
+     * Model key/version live under different map keys depending on the upstream contract:
+     * v2 stores the wire names "key"/"version" as-is, v1 stores "modelKey"/"modelVersion".
+     */
+    private String modelKey(Map<String, Object> model) {
+        Object value = model.containsKey("key") ? model.get("key") : model.get("modelKey");
+        return String.valueOf(value);
+    }
+
+    private String modelVersion(Map<String, Object> model) {
+        Object value = model.containsKey("version") ? model.get("version") : model.get("modelVersion");
+        return String.valueOf(value);
     }
 
     private String traceId(MultiplanarRunRequestDto request) {

@@ -85,7 +85,7 @@ class AiServiceClientMultiplanarContractDispatchTest {
         assertEquals(1, callCount.get());
         assertEquals("/v2/multiplanar/run", captured.get().url().toString());
         assertEquals("trace-dispatch-1", captured.get().headers().getFirst(TraceIdFilter.TRACE_ID_HEADER));
-        assertEquals("multi-v2-001", response.multiplanarRunId());
+        assertEquals("multi-32d66dabd290b661c709", response.multiplanarRunId());
         assertEquals("pfi.multiplanar-run.v2", response.schemaVersion());
         assertEquals("sagittal_only", response.workspaceMode());
         assertTrue(response.sagittal() != null);
@@ -169,8 +169,8 @@ class AiServiceClientMultiplanarContractDispatchTest {
 
     private MultiplanarRunRequestDto strictSagittalOnlyRequest(String traceId) {
         return new MultiplanarRunRequestDto(
-            "CASE-001",
-            "inp_sagittal_001",
+            "P9A-SPIDER-101-T2",
+            "inp_2822bf9640ab40a289050a30ce2fe6fd",
             null,
             null,
             null,

@@ -51,8 +51,8 @@ public class CanonicalMultiplanarRunLegacyPresenter {
             plane.planeRunId(),
             null,
             plane.plane(),
-            stringValue(plane.model().get("modelKey")),
-            stringValue(plane.model().get("modelVersion")),
+            modelKey(plane.model()),
+            modelVersion(plane.model()),
             stringValue(plane.model().get("artifactHash")),
             plane.status(),
             plane.effectiveInferenceMode(),
@@ -90,5 +90,20 @@ public class CanonicalMultiplanarRunLegacyPresenter {
 
     private String stringValue(Object value) {
         return value == null ? null : String.valueOf(value);
+    }
+
+    /**
+     * Model key/version live under different map keys depending on the upstream contract:
+     * v2 (AiMultiplanarV2ResponseAdapter) stores the wire names "key"/"version" as-is, while
+     * v1 (AiMultiplanarV1ResponseAdapter) stores them as "modelKey"/"modelVersion".
+     */
+    private String modelKey(Map<String, Object> model) {
+        Object value = model.containsKey("key") ? model.get("key") : model.get("modelKey");
+        return stringValue(value);
+    }
+
+    private String modelVersion(Map<String, Object> model) {
+        Object value = model.containsKey("version") ? model.get("version") : model.get("modelVersion");
+        return stringValue(value);
     }
 }

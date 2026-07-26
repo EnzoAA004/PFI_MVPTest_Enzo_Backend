@@ -5,12 +5,10 @@ import java.util.List;
 
 @JsonIgnoreProperties(ignoreUnknown = false)
 public record AiPlaneRunV2Dto(
-    String planeRunId,
-    String plane,
     String status,
+    String plane,
+    String runId,
     String effectiveInferenceMode,
-    Boolean synthetic,
-    String fallbackReason,
     AiPlaneModelV2Dto model,
     AiPlaneInputV2Dto input,
     AiCoordinateSpaceV2Dto coordinateSpace,
@@ -19,5 +17,7 @@ public record AiPlaneRunV2Dto(
     List<AiPlaneMaskV2Dto> masks,
     List<AiPlaneLandmarkV2Dto> landmarks,
     List<AiPlaneMeasurementV2Dto> measurements,
-    AiPlaneQualityV2Dto quality
+    AiPlaneQualityV2Dto quality,
+    Boolean synthetic,
+    String fallbackReason
 ) {}

@@ -138,6 +138,37 @@ cada version de wire, siempre que los adapters preserven los valores originales 
   `ObjectMapper.convertValue` sobre cada sub-DTO tipado, preservando el 100% de los
   campos que el AI Module v2 realmente envio.
 
+### Wire v2 vs modelo interno: nombres que NO coinciden a proposito
+
+El contrato real `pfi.multiplanar-run.v2` (ver
+`ai_service/pfi_ai_service/multiplanar_v2_models.py` en el AI Module) usa `runId` tanto
+en la raiz como dentro de cada plano, y `model.key`/`model.version` para el modelo. El
+backend **no** usa `@JsonAlias` para aceptar variantes: `AiMultiplanarV2ResponseDto` y
+`AiPlaneRunV2Dto` declaran el campo `runId` tal cual llega del AI Module, y es el
+*adapter* (`AiMultiplanarV2ResponseAdapter`), no el DTO, quien traduce al nombre interno:
+
+| Capa                                    | Campo                                    |
+|------------------------------------------|-------------------------------------------|
+| Wire v2 (`AiMultiplanarV2ResponseDto`)   | `runId`                                    |
+| Modelo interno (`CanonicalMultiplanarRun`)| `multiplanarRunId`                        |
+| Wire v2 (`AiPlaneRunV2Dto`)               | `runId`                                    |
+| Modelo interno (`CanonicalPlaneRun`)      | `planeRunId`                               |
+| Wire v2 (`AiPlaneModelV2Dto`)             | `key`, `version`                           |
+| Canonico (`plane.model()` map)            | `"key"`, `"version"` (se preservan tal cual)|
+| Wire v2 (`AiReadinessV2Dto`)              | `sagittal`, `axial`, `dual`                |
+
+`modelKey`/`modelVersion`/`sagittalReady`/`axialReady`/`dualRunReady`/`multiplanarRunId`
+(a nivel raiz del wire)/`planeRunId` (a nivel raiz del plano wire) **no existen** en el
+contrato real y estan explicitamente rechazados por `ignoreUnknown=false` en los DTOs
+v2 — ver `AiMultiplanarV2ResponseContractTest` para los tests de rechazo.
+
+Nota de compatibilidad: como el adapter v1 sigue poblando el mapa canonico `model` con
+`modelKey`/`modelVersion` (nombres v1), los consumidores del mapa canonico
+(`CanonicalMultiplanarRunLegacyPresenter`, `AiMultiplanarController`,
+`MultiplanarRunPersistenceService`) leen primero `"key"`/`"version"` (v2) y caen a
+`"modelKey"`/`"modelVersion"` (v1) solo si el primero no esta presente. Esto es un
+detalle de implementacion del mapa interno, no un `@JsonAlias` en el wire.
+
 ## 5. Validacion estricta
 
 Ambas validaciones solo se ejecutan cuando la request es "estricta"
@@ -211,7 +242,8 @@ tiene ninguna rama `if (v1) ... else (v2) ...`. Persiste en `domain_study_runs`:
 
 - `multiplanar_run_id = canonical.multiplanarRunId()`
 - `trace_id`, `requested_inference_mode`, `effective_inference_mode`
-- `sagittal_model_key`/`axial_model_key` (de `plane.model().get("modelKey")`)
+- `sagittal_model_key`/`axial_model_key` (de `plane.model().get("key")` — wire v2 —,
+  con fallback a `plane.model().get("modelKey")` para runs adaptados desde v1)
 - `sagittal_artifact_hash`/`axial_artifact_hash` (de `plane.model().get("artifactHash")`)
 - `sagittal_run_id`/`axial_run_id` (= `plane.planeRunId()`, nunca `multiplanarRunId`)
 - `status = "completed"`, o `"completed_synthetic"` si `canonical.synthetic()==true`
@@ -224,66 +256,77 @@ canonico.
 
 ### Snapshot de metricas versionado
 
+Ejemplo real (tomado de la evidencia sanitizada 101_t2.mha, ver
+`src/test/resources/contracts/ai-module-multiplanar-v2-real-baseline.json`):
+
 ```json
 {
   "schemaVersion": "pfi.backend-run-snapshot.v2",
   "sourceSchemaVersion": "pfi.multiplanar-run.v2",
   "workspaceMode": "sagittal_only",
   "synthetic": false,
-  "readiness": { "sagittalReady": true, "axialReady": false, "dualRunReady": false },
+  "readiness": { "sagittal": true, "axial": false, "dual": false },
   "governance": {
     "humanReviewRequired": true,
     "notClinicalDiagnosis": true,
     "deidentified": true,
     "diagnosisGenerated": false
   },
-  "threeD": { "enabled": false },
+  "threeD": {
+    "enabled": false,
+    "status": "blocked_missing_axial",
+    "sourcePlaneRunIds": { "sagittal": "bec20aa91f96c9cd", "axial": null },
+    "requiredInputs": ["axial_masks", "spacing", "slice_index_mapping"]
+  },
   "planes": {
     "sagittal": {
       "model": {
-        "modelKey": "sagittal_spider",
-        "modelVersion": "sagittal-spider-final-v1",
+        "key": "sagittal_spider",
+        "version": "sagittal-spider-final-v1",
         "artifactHash": "cf11dcc0ad77a7c787e64a796a2fd7398ef906add461cef4b3d61f1a5238e944",
         "baselineReady": true,
         "availableForRealInference": true,
         "manifestValid": true
       },
       "input": {
-        "inputId": "inp_sagittal_001",
+        "inputId": "inp_2822bf9640ab40a289050a30ce2fe6fd",
         "nativeShape": [352, 384, 17],
         "canonicalShape": [352, 384, 17],
-        "selectedSliceIndex": 8
+        "selectedSliceIndex": 7
       },
-      "coordinateSpace": { "width": 256, "height": 256 },
-      "series": [{ "seriesId": "series-sag-t2", "assetRef": "input.png" }],
+      "coordinateSpace": { "name": "model_256x256", "width": 256, "height": 256 },
+      "series": [{ "id": "series-sag-t2", "plane": "sagittal", "selectedSliceIndex": 7, "sliceCount": 17, "status": "served_single_slice" }],
       "masks": [
-        { "id": "mask_canal", "classKey": "spinal_canal", "assetName": "mask.npy" }
+        { "id": "mask-sagittal-canal", "classKey": "canal", "confidence": 0.9774 }
       ],
       "landmarks": [
-        { "id": "lm_l4_left_pedicle", "labelKey": "L4_left_pedicle", "x": 124.2, "y": 210.5, "z": 42.0, "confidence": 0.94 }
+        { "id": "lm-mask-sagittal-canal-centroid", "labelKey": "canal centroid", "x": 140.0, "y": 149.8, "confidence": null, "source": "derived_from_mask" }
       ],
       "measurements": [
         {
-          "id": "canalAreaMm2",
-          "labelKey": "canal_area",
-          "aiValue": 82.4,
-          "value": 82.4,
+          "id": "sagittal-canal-area",
+          "labelKey": "canal area",
+          "aiValue": 1343.39,
+          "value": 1343.39,
           "unit": "mm2",
-          "confidence": 0.9,
+          "confidence": 0.9774,
           "source": "AI",
-          "status": "reported",
+          "status": "pending_review",
           "plane": "sagittal",
           "level": null,
-          "measurementBasis": "mask_canal",
-          "linkedLandmarkIds": []
+          "measurementBasis": "physical_spacing",
+          "linkedLandmarkIds": ["lm-mask-sagittal-canal-centroid"]
         }
       ],
-      "quality": { "confidence": 0.94, "maskCount": 3, "landmarkCount": 3, "measurementCount": 9 }
+      "quality": { "maskCount": 3, "landmarkCount": 3, "measurementCount": 9, "meanConfidence": 0.9869 }
     },
     "axial": null
   }
 }
 ```
+
+Notese que `landmarks` **no** tiene campo `z` — el contrato real (`PlaneLandmarkV2` en
+`multiplanar_v2_models.py`) solo define `x`/`y`; no se inventa una tercera coordenada.
 
 No incluye paths locales, URLs Cloudflare, tokens, metadata de sujeto ni bytes de
 assets — solo la data de IA ya de-identificada por el propio contrato v2.

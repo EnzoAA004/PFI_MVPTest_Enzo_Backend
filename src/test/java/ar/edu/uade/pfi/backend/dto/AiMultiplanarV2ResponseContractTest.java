@@ -21,7 +21,7 @@ class AiMultiplanarV2ResponseContractTest {
 
             assertEquals("completed", response.status());
             assertEquals("pfi.multiplanar-run.v2", response.schemaVersion());
-            assertEquals("multi-v2-001", response.multiplanarRunId());
+            assertEquals("multi-32d66dabd290b661c709", response.runId());
             assertEquals("sagittal_only", response.workspaceMode());
             assertEquals("real_baseline", response.requestedInferenceMode());
             assertEquals("real_baseline", response.effectiveInferenceMode());
@@ -31,6 +31,9 @@ class AiMultiplanarV2ResponseContractTest {
             assertTrue(response.planes().sagittal() != null);
             assertNull(response.planes().axial());
             var sagittal = response.planes().sagittal();
+            assertEquals("bec20aa91f96c9cd", sagittal.runId());
+            assertEquals("sagittal_spider", sagittal.model().key());
+            assertEquals("sagittal-spider-final-v1", sagittal.model().version());
             assertEquals("cf11dcc0ad77a7c787e64a796a2fd7398ef906add461cef4b3d61f1a5238e944", sagittal.model().artifactHash());
             assertEquals(java.util.List.of(352, 384, 17), sagittal.input().nativeShape());
             assertEquals(java.util.List.of(352, 384, 17), sagittal.input().canonicalShape());
@@ -51,6 +54,11 @@ class AiMultiplanarV2ResponseContractTest {
             assertEquals(java.util.List.of("sagittal"), response.completedPlanes());
             assertEquals(true, response.review().required());
             assertEquals("pending", response.review().status());
+            assertEquals(true, response.review().approvalRequiresHumanConfirmation());
+
+            assertEquals(true, response.readiness().sagittal());
+            assertEquals(false, response.readiness().axial());
+            assertEquals(false, response.readiness().dual());
         }
     }
 
@@ -68,6 +76,51 @@ class AiMultiplanarV2ResponseContractTest {
             {"sagital": {"plane": "sagittal"}}
             """;
         assertThrows(JsonMappingException.class, () -> objectMapper.readValue(jsonWithLegacyAlias, AiMultiplanarV2PlanesDto.class));
+    }
+
+    @Test
+    void rejectsLegacyMultiplanarRunIdOnRootDto() {
+        String json = """
+            {"status":"completed","multiplanarRunId":"multi-legacy-1"}
+            """;
+        assertThrows(JsonMappingException.class, () -> objectMapper.readValue(json, AiMultiplanarV2ResponseDto.class));
+    }
+
+    @Test
+    void rejectsLegacyPlaneRunIdOnPlaneDto() {
+        String json = """
+            {"planeRunId":"run-legacy-1","plane":"sagittal"}
+            """;
+        assertThrows(JsonMappingException.class, () -> objectMapper.readValue(json, AiPlaneRunV2Dto.class));
+    }
+
+    @Test
+    void rejectsLegacyModelKeyAndVersionOnModelDto() {
+        String jsonModelKey = """
+            {"modelKey":"sagittal_spider"}
+            """;
+        assertThrows(JsonMappingException.class, () -> objectMapper.readValue(jsonModelKey, AiPlaneModelV2Dto.class));
+
+        String jsonModelVersion = """
+            {"key":"sagittal_spider","modelVersion":"sagittal-spider-final-v1"}
+            """;
+        assertThrows(JsonMappingException.class, () -> objectMapper.readValue(jsonModelVersion, AiPlaneModelV2Dto.class));
+    }
+
+    @Test
+    void rejectsLegacyReadinessFieldNames() {
+        String json = """
+            {"sagittalReady":true,"axialReady":false,"dualRunReady":false}
+            """;
+        assertThrows(JsonMappingException.class, () -> objectMapper.readValue(json, AiReadinessV2Dto.class));
+    }
+
+    @Test
+    void rejectsMeasurementValuesWrapperOnMeasurementDto() {
+        String json = """
+            {"id":"m1","labelKey":"canal area","measurementValues":{"value":1.0}}
+            """;
+        assertThrows(JsonMappingException.class, () -> objectMapper.readValue(json, AiPlaneMeasurementV2Dto.class));
     }
 
     @Test

@@ -37,7 +37,7 @@ public class AiMultiplanarV2ResponseAdapter {
         return new CanonicalMultiplanarRun(
             text(response.status()),
             text(response.schemaVersion()),
-            text(response.multiplanarRunId()),
+            text(response.runId()),
             text(response.traceId()),
             text(response.caseId()),
             text(response.workspaceMode()),
@@ -64,7 +64,7 @@ public class AiMultiplanarV2ResponseAdapter {
     private CanonicalPlaneRun toPlane(AiPlaneRunV2Dto plane) {
         List<Map<String, Object>> assets = plane.assets() == null ? List.of() : asMapList(plane.assets());
         return new CanonicalPlaneRun(
-            text(plane.planeRunId()),
+            text(plane.runId()),
             text(plane.plane()),
             text(plane.status()),
             text(plane.effectiveInferenceMode()),

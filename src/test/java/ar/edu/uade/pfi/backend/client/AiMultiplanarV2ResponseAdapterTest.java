@@ -27,8 +27,8 @@ class AiMultiplanarV2ResponseAdapterTest {
 
         assertEquals("completed", canonical.status());
         assertEquals("pfi.multiplanar-run.v2", canonical.schemaVersion());
-        assertEquals("multi-v2-001", canonical.multiplanarRunId());
-        assertEquals("CASE-001", canonical.caseId());
+        assertEquals("multi-32d66dabd290b661c709", canonical.multiplanarRunId());
+        assertEquals("P9A-SPIDER-101-T2", canonical.caseId());
         assertEquals("sagittal_only", canonical.workspaceMode());
         assertFalse(canonical.synthetic());
         assertNull(canonical.fallbackReason());
@@ -41,9 +41,11 @@ class AiMultiplanarV2ResponseAdapterTest {
         assertFalse(canonical.governance().diagnosisGenerated());
 
         CanonicalPlaneRun sagittal = canonical.sagittal();
-        assertEquals("run-sag-v2-001", sagittal.planeRunId());
+        assertEquals("bec20aa91f96c9cd", sagittal.planeRunId());
         assertEquals("sagittal", sagittal.plane());
         assertEquals("real_baseline", sagittal.effectiveInferenceMode());
+        assertEquals("sagittal_spider", sagittal.model().get("key"));
+        assertEquals("sagittal-spider-final-v1", sagittal.model().get("version"));
         assertEquals("cf11dcc0ad77a7c787e64a796a2fd7398ef906add461cef4b3d61f1a5238e944", sagittal.model().get("artifactHash"));
         assertEquals(3, sagittal.masks().size());
         assertEquals(3, sagittal.landmarks().size());

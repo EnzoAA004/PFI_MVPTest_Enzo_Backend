@@ -7,7 +7,7 @@ import java.util.List;
 public record AiMultiplanarV2ResponseDto(
     String status,
     String schemaVersion,
-    String multiplanarRunId,
+    String runId,
     String traceId,
     String caseId,
     String workspaceMode,

@@ -137,7 +137,7 @@ class MultiplanarV2RealBaselineValidatorTest {
     @Test
     void frozenArtifactCountIsNotEnforcedForADifferentModelVersion() {
         PlaneFixture plane = new PlaneFixture();
-        plane.model.put("modelVersion", "sagittal-spider-experimental-v2");
+        plane.model.put("version", "sagittal-spider-experimental-v2");
         plane.masks.add(mapOf("id", "extra-mask", "classKey", "extra"));
         // A different release is not held to the frozen 3/3/9 count, but it still must
         // match the pinned modelVersion/hash constants below — so mismatch is expected
@@ -212,8 +212,8 @@ class MultiplanarV2RealBaselineValidatorTest {
         boolean synthetic = false;
         String fallbackReason = null;
         Map<String, Object> model = new LinkedHashMap<>(Map.of(
-            "modelKey", "sagittal_spider",
-            "modelVersion", "sagittal-spider-final-v1",
+            "key", "sagittal_spider",
+            "version", "sagittal-spider-final-v1",
             "artifactHash", MultiplanarV2RealBaselineValidator.SAGITTAL_ARTIFACT_HASH,
             "baselineReady", true,
             "availableForRealInference", true,

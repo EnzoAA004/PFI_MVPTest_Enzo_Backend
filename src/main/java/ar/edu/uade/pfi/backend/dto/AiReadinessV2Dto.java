@@ -2,9 +2,9 @@ package ar.edu.uade.pfi.backend.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
+@JsonIgnoreProperties(ignoreUnknown = false)
 public record AiReadinessV2Dto(
-    Boolean sagittalReady,
-    Boolean axialReady,
-    Boolean dualRunReady
+    Boolean sagittal,
+    Boolean axial,
+    Boolean dual
 ) {}

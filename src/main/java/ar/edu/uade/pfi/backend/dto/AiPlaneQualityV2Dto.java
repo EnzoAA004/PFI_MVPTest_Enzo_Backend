@@ -1,11 +1,15 @@
 package ar.edu.uade.pfi.backend.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import java.util.List;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
+@JsonIgnoreProperties(ignoreUnknown = false)
 public record AiPlaneQualityV2Dto(
-    Double confidence,
     Integer maskCount,
     Integer landmarkCount,
-    Integer measurementCount
+    Integer measurementCount,
+    Double meanConfidence,
+    Double meanForegroundConfidence,
+    Double foregroundRatio,
+    List<String> warnings
 ) {}

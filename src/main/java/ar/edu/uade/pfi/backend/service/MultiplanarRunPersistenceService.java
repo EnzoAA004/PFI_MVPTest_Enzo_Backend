@@ -219,8 +219,14 @@ public class MultiplanarRunPersistenceService {
         return plane == null ? "" : text(plane.model().get("artifactHash"));
     }
 
+    /**
+     * Model key lives under different map keys depending on the upstream contract:
+     * v2 stores the wire name "key" as-is, v1 stores it as "modelKey".
+     */
     private String modelKey(CanonicalPlaneRun plane) {
-        return plane == null ? "" : text(plane.model().get("modelKey"));
+        if (plane == null) return "";
+        Map<String, Object> model = plane.model();
+        return text(model.containsKey("key") ? model.get("key") : model.get("modelKey"));
     }
 
     private String planeRunId(CanonicalPlaneRun plane) {
