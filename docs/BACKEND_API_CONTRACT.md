@@ -137,6 +137,7 @@ El backend preserva solo PNG de revision deidentificados (`input.png`, `overlay.
 
 Reenvia `POST /multiplanar/run` al AI Module usando inputs registrados por plano.
 El request publico acepta `studyMetadata` de-identificada, pero el backend construye un `MultiplanarRunRequestDto` tecnico sanitizado para el AI Module y no envia `subjectRef`, `studyDate`, `description` ni `reviewPriority` upstream.
+Antes de llamar al AI Module, el backend ejecuta un preflight de metadata: normaliza `caseId`, `subjectRef` y `reviewPriority`, consulta si el estudio ya existe y bloquea errores semanticos. El orden del flujo es: request publico -> validar metadata/conflictos -> construir request tecnico sanitizado -> llamar AI Module -> validar respuesta IA -> persistir estudio, inputs, corrida y assets. Un `subjectRef` invalido, un conflicto o una base no disponible no disparan inferencia.
 
 Request:
 
@@ -247,6 +248,7 @@ Response esperada:
 ```
 
 `subjectRef` es opcional para compatibilidad. Si se informa debe tener 3 a 64 caracteres y usar solo letras, numeros, guion, guion bajo o punto. Espacios, `@`, barras y traversal devuelven `400 INVALID_SUBJECT_REFERENCE`. Si un `caseId` ya tiene otro `subjectRef` no nulo, el backend devuelve `409 SUBJECT_REFERENCE_CONFLICT`.
+`reviewPriority` acepta `low|medium|high` o alias `baja|media|alta`; se persiste como `low|medium|high`. Un valor desconocido devuelve `400 INVALID_REVIEW_PRIORITY`. Si la base falla durante el preflight o upsert de metadata, responde `503 DATABASE_UNAVAILABLE`.
 
 `allowContractFallback` se propaga en `metadata`. Si el AI Module rechaza una corrida con fallback deshabilitado, el backend devuelve el error semantico y no genera una respuesta 200 degradada.
 
@@ -537,7 +539,7 @@ No hay fallback demo ni memoria para esos endpoints. Una base vacia devuelve `it
 
 `GET /api/studies/{caseId}/runs` lista corridas persistidas ordenadas por `created_at DESC`. El `runId` publico es siempre `multiplanar_run_id`; `databaseId` conserva el UUID interno.
 
-`PUT /api/studies/{caseId}/metadata` completa o actualiza metadata de-identificada de un estudio existente. Requiere rol profesional (`REVIEWER`, `DOCTOR` o `ADMIN`). `caseId` inexistente devuelve `404 STUDY_NOT_FOUND`; `subjectRef` invalido devuelve `400 INVALID_SUBJECT_REFERENCE`; conflicto de referencia devuelve `409 SUBJECT_REFERENCE_CONFLICT`.
+`PUT /api/studies/{caseId}/metadata` completa o actualiza metadata de-identificada de un estudio existente. Requiere rol profesional (`REVIEWER`, `DOCTOR` o `ADMIN`). `caseId` inexistente devuelve `404 STUDY_NOT_FOUND`; `subjectRef` invalido devuelve `400 INVALID_SUBJECT_REFERENCE`; conflicto de referencia devuelve `409 SUBJECT_REFERENCE_CONFLICT`; prioridad desconocida devuelve `400 INVALID_REVIEW_PRIORITY`; base no disponible devuelve `503 DATABASE_UNAVAILABLE`. La actualizacion de metadata no modifica el lifecycle `status` existente (`ready`, `completed`, etc.).
 
 Request:
 
@@ -558,10 +560,10 @@ Response:
   "status": "ok",
   "study": {
     "caseId": "CASE-SPIDER-101-20260726",
-    "subjectRef": "SPIDER-101",
-    "studyDate": "2026-07-26",
-    "modality": "MRI",
-    "description": "RM lumbar sagital T2",
+    "subjectRef": null,
+    "studyDate": null,
+    "modality": null,
+    "description": null,
     "priority": "media",
     "dataOrigin": "database"
   },
@@ -571,6 +573,8 @@ Response:
 ```
 
 `GET /api/subjects/{subjectRef}/history` consulta historial longitudinal desde `domain_*`, sin seed demo ni tablas legacy. Multiples `caseId` pueden compartir el mismo `subjectRef`; la respuesta se ordena por `studyDate DESC NULLS LAST` y luego `createdAt DESC`. Si no hay estudios devuelve `200` con `studies: []`.
+
+Las tablas legacy `studies` y `study_runs` quedan pendientes de eliminacion fisica. `PostgresStudyCatalogService` esta deshabilitado por defecto y solo se crea con `pfi.legacy.study-catalog.enabled=true`; con la propiedad ausente o `false` no ejecuta `migrate()` ni `seedDemoCatalog()`.
 
 Response:
 

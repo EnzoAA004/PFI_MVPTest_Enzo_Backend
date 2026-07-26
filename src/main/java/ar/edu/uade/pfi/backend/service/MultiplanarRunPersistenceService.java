@@ -47,9 +47,13 @@ public class MultiplanarRunPersistenceService {
         persistSuccessfulRun(request, null, response);
     }
 
+    public StudyRunService.PreparedStudyMetadata prepareStudyMetadata(String caseId, StudyMetadataDto studyMetadata) {
+        return studyRunService.prepareStudyMetadata(caseId, studyMetadata);
+    }
+
     public void persistSuccessfulRun(MultiplanarRunRequestDto request, StudyMetadataDto studyMetadata, MultiplanarRunResponseDto response) {
         if (response == null || blank(response.runId())) return;
-        Study study = studyRunService.upsertStudyMetadata(request.caseId(), "created", studyMetadata);
+        Study study = studyRunService.upsertStudyMetadata(request.caseId(), studyMetadata);
 
         registerInput(study, "sagittal", request.sagittalInputId());
         registerInput(study, "axial", request.axialInputId());

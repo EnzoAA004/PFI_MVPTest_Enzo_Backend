@@ -8,6 +8,7 @@ import ar.edu.uade.pfi.backend.service.AuditService;
 import ar.edu.uade.pfi.backend.service.MultiplanarRealBaselineContractValidator;
 import ar.edu.uade.pfi.backend.service.MultiplanarRunPersistenceService;
 import ar.edu.uade.pfi.backend.service.MultiplanarRunResponsePresenter;
+import ar.edu.uade.pfi.backend.service.StudyRunService.PreparedStudyMetadata;
 import jakarta.validation.Valid;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -72,7 +73,10 @@ public class AiMultiplanarController {
 
     @PostMapping("/run")
     public MultiplanarRunResponseDto run(@Valid @RequestBody MultiplanarRunApiRequestDto request) {
-        MultiplanarRunRequestDto normalized = normalizedRequest(request);
+        PreparedStudyMetadata preparedMetadata = persistenceService == null
+            ? null
+            : persistenceService.prepareStudyMetadata(request.caseId(), request.studyMetadata());
+        MultiplanarRunRequestDto normalized = normalizedRequest(request, preparedMetadata);
         MultiplanarRunResponseDto response;
         try {
             response = aiServiceClient.runMultiplanar(normalized);
@@ -88,14 +92,14 @@ public class AiMultiplanarController {
             throw ex;
         }
         if (persistenceService != null) {
-            persistenceService.persistSuccessfulRun(normalized, request.studyMetadata(), presented);
+            persistenceService.persistSuccessfulRun(normalized, preparedMetadata.metadata(), presented);
         }
         auditSuccess(normalized, presented);
         return presented;
     }
 
-    private MultiplanarRunRequestDto normalizedRequest(MultiplanarRunApiRequestDto request) {
-        String caseId = request.caseId().trim();
+    private MultiplanarRunRequestDto normalizedRequest(MultiplanarRunApiRequestDto request, PreparedStudyMetadata preparedMetadata) {
+        String caseId = preparedMetadata == null ? request.caseId().trim() : preparedMetadata.caseId();
         String sagittalModel = valueOrDefault(request.sagittalModelKey(), "sagittal_spider");
         String axialModel = valueOrDefault(request.axialModelKey(), "axial_t2_alkafri");
         Map<String, Object> metadata = new LinkedHashMap<>();
@@ -122,7 +126,7 @@ public class AiMultiplanarController {
             valueOrNull(request.axialInputPath()),
             sagittalModel,
             axialModel,
-            strict ? false : request.allowContractFallback(),
+            strict ? Boolean.FALSE : request.allowContractFallback(),
             metadata
         );
     }

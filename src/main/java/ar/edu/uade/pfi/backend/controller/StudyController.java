@@ -19,6 +19,7 @@ import ar.edu.uade.pfi.backend.service.StudyNotFoundException;
 import ar.edu.uade.pfi.backend.service.StudyRunService;
 import ar.edu.uade.pfi.backend.service.StudyWorklistService;
 import jakarta.servlet.http.HttpServletRequest;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -78,21 +79,22 @@ public class StudyController {
         if (studyRunService.findStudyByCaseId(caseId).isEmpty()) {
             throw new StudyNotFoundException(caseId);
         }
-        Study study = studyRunService.upsertStudyMetadata(caseId, "created", metadata);
-        return Map.of(
-            "status", "ok",
-            "study", Map.of(
-                "caseId", study.caseId(),
-                "subjectRef", study.subjectRef() == null ? "" : study.subjectRef(),
-                "studyDate", study.studyDate() == null ? "" : study.studyDate().toString(),
-                "modality", study.modality() == null ? "" : study.modality(),
-                "description", study.description() == null ? "" : study.description(),
-                "priority", ar.edu.uade.pfi.backend.service.ReviewStatusMapper.toApiPriority(study.reviewPriority()),
-                "dataOrigin", "database"
-            ),
-            "humanReviewRequired", true,
-            "notClinicalDiagnosis", true
-        );
+        Study study = studyRunService.upsertStudyMetadata(caseId, metadata);
+        Map<String, Object> studyResponse = new LinkedHashMap<>();
+        studyResponse.put("caseId", study.caseId());
+        studyResponse.put("subjectRef", study.subjectRef());
+        studyResponse.put("studyDate", study.studyDate() == null ? null : study.studyDate().toString());
+        studyResponse.put("modality", study.modality());
+        studyResponse.put("description", study.description());
+        studyResponse.put("priority", ar.edu.uade.pfi.backend.service.ReviewStatusMapper.toApiPriority(study.reviewPriority()));
+        studyResponse.put("dataOrigin", "database");
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("status", "ok");
+        response.put("study", studyResponse);
+        response.put("humanReviewRequired", true);
+        response.put("notClinicalDiagnosis", true);
+        return response;
     }
 
     @PostMapping("/demo")

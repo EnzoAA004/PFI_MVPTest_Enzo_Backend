@@ -17,10 +17,13 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class StudyRunService {
+    private static final Logger log = LoggerFactory.getLogger(StudyRunService.class);
     private static final Pattern SUBJECT_REF_PATTERN = Pattern.compile("^[A-Za-z0-9._-]{3,64}$");
 
     private final StudyRepository repository;
@@ -47,13 +50,36 @@ public class StudyRunService {
         ));
     }
 
-    public Study upsertStudyMetadata(String caseId, String status, StudyMetadataDto metadata) {
+    public PreparedStudyMetadata prepareStudyMetadata(String caseId, StudyMetadataDto metadata) {
         String normalizedCaseId = requireCaseId(caseId);
         StudyMetadataDto normalized = normalizeMetadata(metadata);
-        Optional<Study> existing = repository.findStudyByCaseId(normalizedCaseId);
+        Study existing = findStudyForMetadata(normalizedCaseId).orElse(null);
+        if (existing != null
+            && normalized != null
+            && normalized.subjectRef() != null
+            && existing.subjectRef() != null
+            && !existing.subjectRef().equalsIgnoreCase(normalized.subjectRef())) {
+            throw new StudyMetadataException(
+                HttpStatus.CONFLICT,
+                "SUBJECT_REFERENCE_CONFLICT",
+                "El estudio ya tiene una referencia de-identificada distinta."
+            );
+        }
+        return new PreparedStudyMetadata(normalizedCaseId, normalized, existing);
+    }
+
+    public Study upsertStudyMetadata(String caseId, StudyMetadataDto metadata) {
+        return upsertStudyMetadata(caseId, "created", metadata);
+    }
+
+    public Study upsertStudyMetadata(String caseId, String status, StudyMetadataDto metadata) {
+        PreparedStudyMetadata prepared = prepareStudyMetadata(caseId, metadata);
+        String normalizedCaseId = prepared.caseId();
+        StudyMetadataDto normalized = prepared.metadata();
+        Optional<Study> existing = Optional.ofNullable(prepared.existingStudy());
         if (existing.isEmpty()) {
             Instant now = clock.instant();
-            Study created = repository.saveStudy(new Study(
+            Study created = saveStudyForMetadata(new Study(
                 UUID.randomUUID().toString(),
                 normalizedCaseId,
                 status,
@@ -72,18 +98,6 @@ public class StudyRunService {
 
         Study current = existing.get();
         if (normalized == null) return current;
-        if (normalized.subjectRef() != null && current.subjectRef() != null && !current.subjectRef().equalsIgnoreCase(normalized.subjectRef())) {
-            audit("study.subject_ref.conflict", current, normalized, Map.of(
-                "caseId", current.caseId(),
-                "existingSubjectRef", current.subjectRef(),
-                "requestedSubjectRef", normalized.subjectRef()
-            ));
-            throw new StudyMetadataException(
-                HttpStatus.CONFLICT,
-                "SUBJECT_REFERENCE_CONFLICT",
-                "El estudio ya tiene una referencia de-identificada distinta."
-            );
-        }
 
         String subjectRef = firstNonBlank(current.subjectRef(), normalized.subjectRef());
         LocalDate studyDate = normalized.studyDate() == null ? current.studyDate() : normalized.studyDate();
@@ -95,14 +109,13 @@ public class StudyRunService {
                 || !same(current.studyDate(), studyDate)
                 || !same(current.modality(), modality)
                 || !same(current.description(), description)
-                || !same(current.reviewPriority(), reviewPriority)
-                || !same(current.status(), status);
+                || !same(current.reviewPriority(), reviewPriority);
         if (!changed) return current;
 
-        Study updated = repository.saveStudy(new Study(
+        Study updated = saveStudyForMetadata(new Study(
             current.id(),
             current.caseId(),
-            status,
+            current.status(),
             subjectRef,
             studyDate,
             modality,
@@ -261,7 +274,11 @@ public class StudyRunService {
     }
 
     public Optional<Study> findStudyByCaseId(String caseId) {
-        return repository.findStudyByCaseId(caseId);
+        try {
+            return repository.findStudyByCaseId(caseId);
+        } catch (IllegalStateException ex) {
+            throw new DatabaseUnavailableException(ex);
+        }
     }
 
     public List<InputResource> findInputs(Study study) {
@@ -309,7 +326,11 @@ public class StudyRunService {
             case "baja" -> "low";
             case "media" -> "medium";
             case "alta" -> "high";
-            default -> "medium";
+            default -> throw new StudyMetadataException(
+                HttpStatus.BAD_REQUEST,
+                "INVALID_REVIEW_PRIORITY",
+                "reviewPriority debe ser low/medium/high o baja/media/alta."
+            );
         };
     }
 
@@ -334,7 +355,28 @@ public class StudyRunService {
                 base
             ));
         } catch (RuntimeException auditFailure) {
-            // Metadata persistence must not be rolled back because audit storage is unavailable.
+            log.warn(
+                "metadata_audit_failed action={} caseId={} errorType={}",
+                action,
+                study.caseId(),
+                auditFailure.getClass().getSimpleName()
+            );
+        }
+    }
+
+    private Optional<Study> findStudyForMetadata(String caseId) {
+        try {
+            return repository.findStudyByCaseId(caseId);
+        } catch (IllegalStateException ex) {
+            throw new DatabaseUnavailableException(ex);
+        }
+    }
+
+    private Study saveStudyForMetadata(Study study) {
+        try {
+            return repository.saveStudy(study);
+        } catch (IllegalStateException ex) {
+            throw new DatabaseUnavailableException(ex);
         }
     }
 
@@ -360,5 +402,8 @@ public class StudyRunService {
 
     private boolean same(Object left, Object right) {
         return java.util.Objects.equals(left, right);
+    }
+
+    public record PreparedStudyMetadata(String caseId, StudyMetadataDto metadata, Study existingStudy) {
     }
 }

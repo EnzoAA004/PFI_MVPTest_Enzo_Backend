@@ -11,10 +11,12 @@ import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
+@ConditionalOnProperty(name = "pfi.legacy.study-catalog.enabled", havingValue = "true", matchIfMissing = false)
 @Deprecated(since = "P8-E1", forRemoval = false)
 public class PostgresStudyCatalogService {
     private final String jdbcUrl;
