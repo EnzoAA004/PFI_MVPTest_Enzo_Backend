@@ -17,6 +17,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.Date;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -60,17 +61,29 @@ public class PostgresStudyRepository implements StudyRepository {
     @Override
     public Study saveStudy(Study study) {
         try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
-            INSERT INTO domain_studies(id, case_id, status, created_at, updated_at)
-            VALUES (?::uuid, ?, ?, ?, ?)
+            INSERT INTO domain_studies(
+                id, case_id, status, subject_ref, study_date, modality, description, review_priority, created_at, updated_at
+            )
+            VALUES (?::uuid, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (case_id) DO UPDATE SET
               status = EXCLUDED.status,
+              subject_ref = EXCLUDED.subject_ref,
+              study_date = EXCLUDED.study_date,
+              modality = EXCLUDED.modality,
+              description = EXCLUDED.description,
+              review_priority = EXCLUDED.review_priority,
               updated_at = EXCLUDED.updated_at
             """)) {
             statement.setString(1, study.id());
             statement.setString(2, study.caseId());
             statement.setString(3, study.status());
-            statement.setTimestamp(4, Timestamp.from(study.createdAt()));
-            statement.setTimestamp(5, Timestamp.from(study.updatedAt()));
+            statement.setString(4, study.subjectRef());
+            statement.setDate(5, study.studyDate() == null ? null : Date.valueOf(study.studyDate()));
+            statement.setString(6, study.modality());
+            statement.setString(7, study.description());
+            statement.setString(8, study.reviewPriority());
+            statement.setTimestamp(9, Timestamp.from(study.createdAt()));
+            statement.setTimestamp(10, Timestamp.from(study.updatedAt()));
             statement.executeUpdate();
             return study;
         } catch (Exception ex) {
@@ -232,9 +245,28 @@ public class PostgresStudyRepository implements StudyRepository {
     }
 
     @Override
+    public List<Study> findAllStudies() {
+        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+            SELECT id, case_id, status, subject_ref, study_date, modality, description, review_priority, created_at, updated_at
+            FROM domain_studies
+            ORDER BY updated_at DESC, created_at DESC
+            """)) {
+            try (ResultSet rs = statement.executeQuery()) {
+                List<Study> studies = new ArrayList<>();
+                while (rs.next()) studies.add(readStudy(rs));
+                return studies;
+            }
+        } catch (Exception ex) {
+            throw new IllegalStateException("Could not list studies", ex);
+        }
+    }
+
+    @Override
     public Optional<Study> findStudyByCaseId(String caseId) {
         try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
-            SELECT id, case_id, status, created_at, updated_at FROM domain_studies WHERE case_id = ?
+            SELECT id, case_id, status, subject_ref, study_date, modality, description, review_priority, created_at, updated_at
+            FROM domain_studies
+            WHERE case_id = ?
             """)) {
             statement.setString(1, caseId);
             try (ResultSet rs = statement.executeQuery()) {
@@ -243,6 +275,66 @@ public class PostgresStudyRepository implements StudyRepository {
             }
         } catch (Exception ex) {
             throw new IllegalStateException("Could not find study", ex);
+        }
+    }
+
+    @Override
+    public List<StudyRun> findRunsByStudyId(String studyId) {
+        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+            SELECT id, study_id, multiplanar_run_id, trace_id, requested_inference_mode, effective_inference_mode,
+                   sagittal_model_key, axial_model_key, sagittal_artifact_hash, axial_artifact_hash,
+                   sagittal_run_id, axial_run_id, assets, metrics_snapshot, status,
+                   review_status, reviewer, reviewed_at, comments, created_at, updated_at
+            FROM domain_study_runs
+            WHERE study_id = ?::uuid
+            ORDER BY created_at DESC, updated_at DESC
+            """)) {
+            statement.setString(1, studyId);
+            try (ResultSet rs = statement.executeQuery()) {
+                List<StudyRun> runs = new ArrayList<>();
+                while (rs.next()) runs.add(readRun(connection, rs));
+                return runs;
+            }
+        } catch (Exception ex) {
+            throw new IllegalStateException("Could not list study runs", ex);
+        }
+    }
+
+    @Override
+    public Optional<StudyRun> findLatestRunByStudyId(String studyId) {
+        List<StudyRun> runs = findRunsByStudyId(studyId);
+        if (runs.isEmpty()) return Optional.empty();
+        return Optional.of(runs.get(0));
+    }
+
+    @Override
+    public List<MeasurementCorrection> findCorrectionsByStudyRunId(String studyRunId) {
+        try (Connection connection = connection()) {
+            return findCorrections(connection, studyRunId);
+        } catch (Exception ex) {
+            throw new IllegalStateException("Could not find measurement corrections", ex);
+        }
+    }
+
+    @Override
+    public List<DomainAuditEvent> findAuditEventsByStudyId(String studyId) {
+        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+            SELECT DISTINCT event.id, event.actor, event.action, event.entity_id, event.trace_id, event.metadata, event.created_at
+            FROM domain_audit_events event
+            LEFT JOIN domain_study_runs run
+              ON event.entity_id = run.multiplanar_run_id OR event.trace_id = run.trace_id
+            WHERE run.study_id = ?::uuid OR event.entity_id = ?
+            ORDER BY event.created_at, event.action
+            """)) {
+            statement.setString(1, studyId);
+            statement.setString(2, studyId);
+            try (ResultSet rs = statement.executeQuery()) {
+                List<DomainAuditEvent> events = new ArrayList<>();
+                while (rs.next()) events.add(readAuditEvent(rs));
+                return events;
+            }
+        } catch (Exception ex) {
+            throw new IllegalStateException("Could not find study audit events", ex);
         }
     }
 
@@ -471,17 +563,7 @@ public class PostgresStudyRepository implements StudyRepository {
             statement.setString(1, value);
             try (ResultSet rs = statement.executeQuery()) {
                 List<DomainAuditEvent> events = new ArrayList<>();
-                while (rs.next()) {
-                    events.add(new DomainAuditEvent(
-                        rs.getObject("id", UUID.class).toString(),
-                        rs.getString("actor"),
-                        rs.getString("action"),
-                        rs.getString("entity_id"),
-                        rs.getString("trace_id"),
-                        rs.getTimestamp("created_at").toInstant(),
-                        readJsonMap(rs.getString("metadata"))
-                    ));
-                }
+                while (rs.next()) events.add(readAuditEvent(rs));
                 return events;
             }
         } catch (Exception ex) {
@@ -490,12 +572,30 @@ public class PostgresStudyRepository implements StudyRepository {
     }
 
     private Study readStudy(ResultSet rs) throws Exception {
+        Date studyDate = rs.getDate("study_date");
         return new Study(
             rs.getObject("id", UUID.class).toString(),
             rs.getString("case_id"),
             rs.getString("status"),
+            rs.getString("subject_ref"),
+            studyDate == null ? null : studyDate.toLocalDate(),
+            rs.getString("modality"),
+            rs.getString("description"),
+            rs.getString("review_priority"),
             rs.getTimestamp("created_at").toInstant(),
             rs.getTimestamp("updated_at").toInstant()
+        );
+    }
+
+    private DomainAuditEvent readAuditEvent(ResultSet rs) throws Exception {
+        return new DomainAuditEvent(
+            rs.getObject("id", UUID.class).toString(),
+            rs.getString("actor"),
+            rs.getString("action"),
+            rs.getString("entity_id"),
+            rs.getString("trace_id"),
+            rs.getTimestamp("created_at").toInstant(),
+            readJsonMap(rs.getString("metadata"))
         );
     }
 

@@ -23,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
+@Deprecated(since = "P8-A", forRemoval = false)
 public class ReviewStoreService {
     private static final Set<String> ALLOWED_STATUSES = Set.of("pendiente", "aceptado", "observado", "descartado");
     private static final Set<String> ALLOWED_EXPORT_FORMATS = Set.of("json", "csv", "html");

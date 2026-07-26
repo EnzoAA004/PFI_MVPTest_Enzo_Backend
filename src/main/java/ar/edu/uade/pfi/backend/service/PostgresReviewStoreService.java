@@ -23,6 +23,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
+@Deprecated(since = "P8-A", forRemoval = false)
 public class PostgresReviewStoreService {
     private final ObjectMapper objectMapper;
     private final String jdbcUrl;

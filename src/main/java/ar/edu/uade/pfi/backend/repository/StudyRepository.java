@@ -18,9 +18,15 @@ public interface StudyRepository {
 
     StudyRun saveRun(StudyRun run);
 
+    List<Study> findAllStudies();
+
     Optional<Study> findStudyByCaseId(String caseId);
 
     List<InputResource> findInputsByStudyId(String studyId);
+
+    List<StudyRun> findRunsByStudyId(String studyId);
+
+    Optional<StudyRun> findLatestRunByStudyId(String studyId);
 
     Optional<StudyRun> findRunByMultiplanarRunId(String multiplanarRunId);
 
@@ -32,9 +38,13 @@ public interface StudyRepository {
 
     Optional<RunReview> findReviewByMultiplanarRunId(String multiplanarRunId);
 
+    List<MeasurementCorrection> findCorrectionsByStudyRunId(String studyRunId);
+
     DomainAuditEvent saveAuditEvent(DomainAuditEvent event);
 
     List<DomainAuditEvent> findAuditEventsByTraceId(String traceId);
 
     List<DomainAuditEvent> findAuditEventsByEntityId(String entityId);
+
+    List<DomainAuditEvent> findAuditEventsByStudyId(String studyId);
 }

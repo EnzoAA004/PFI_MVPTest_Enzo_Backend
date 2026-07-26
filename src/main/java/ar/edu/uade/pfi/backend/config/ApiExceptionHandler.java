@@ -3,6 +3,8 @@ package ar.edu.uade.pfi.backend.config;
 import ar.edu.uade.pfi.backend.service.AuditService;
 import ar.edu.uade.pfi.backend.service.AiContractViolationException;
 import ar.edu.uade.pfi.backend.service.AiMultiplanarContractViolationException;
+import ar.edu.uade.pfi.backend.service.DatabaseUnavailableException;
+import ar.edu.uade.pfi.backend.service.StudyNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -46,6 +48,16 @@ public class ApiExceptionHandler {
     @ExceptionHandler(AiMultiplanarContractViolationException.class)
     public ResponseEntity<Map<String, Object>> handleAiMultiplanarContractViolation(AiMultiplanarContractViolationException ex, HttpServletRequest request) {
         return buildError(HttpStatus.BAD_GATEWAY, "AI_MULTIPLANAR_CONTRACT_VIOLATION", safeMessage(ex.getMessage(), HttpStatus.BAD_GATEWAY), request, ex);
+    }
+
+    @ExceptionHandler(DatabaseUnavailableException.class)
+    public ResponseEntity<Map<String, Object>> handleDatabaseUnavailable(DatabaseUnavailableException ex, HttpServletRequest request) {
+        return buildError(HttpStatus.SERVICE_UNAVAILABLE, "DATABASE_UNAVAILABLE", safeMessage(ex.getMessage(), HttpStatus.SERVICE_UNAVAILABLE), request, ex);
+    }
+
+    @ExceptionHandler(StudyNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleStudyNotFound(StudyNotFoundException ex, HttpServletRequest request) {
+        return buildError(HttpStatus.NOT_FOUND, "STUDY_NOT_FOUND", "Estudio no encontrado", request, ex);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

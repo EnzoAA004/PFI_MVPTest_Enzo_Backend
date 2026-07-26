@@ -476,3 +476,35 @@ Response:
 ```
 
 La metadata se sanea antes de persistir: no debe contener tokens, secretos, paths internos, blobs ni datos identificables.
+
+## P8-A: Worklist y detalle desde PostgreSQL
+
+Con `pfi.persistence.mode=postgres`, los endpoints de estudios leen exclusivamente las tablas `domain_*`:
+
+- `GET /api/studies`
+- `GET /api/studies/{caseId}`
+- `GET /api/studies/{caseId}/runs`
+
+No hay fallback demo ni memoria para esos endpoints. Una base vacia devuelve `items: []`; una base PostgreSQL no disponible devuelve `503 DATABASE_UNAVAILABLE` con `traceId`, `humanReviewRequired=true` y `notClinicalDiagnosis=true`.
+
+`GET /api/studies` devuelve `source=postgres-domain`, `dataOrigin=database`, `summary` y filas con:
+
+- `caseId`, `subjectRef`, `studyDate`, `status`, `planes`, `primaryPlane`, `latestRunId`, `modelKey`, `modelStatus`, `reviewStatus`, `priority`, `createdAt`, `updatedAt`, `dataOrigin`.
+- Aliases legacy: `plane` equivale a `primaryPlane`; `runId` equivale a `latestRunId`.
+
+`GET /api/studies/{caseId}` agrega inputs, corridas, artefactos agrupados por plano, mediciones por plano, correcciones y auditoria persistida. Las mediciones preservan `aiValue`; las correcciones profesionales se devuelven separadas para no destruir el valor de IA.
+
+`GET /api/studies/{caseId}/runs` lista corridas persistidas ordenadas por `created_at DESC`. El `runId` publico es siempre `multiplanar_run_id`; `databaseId` conserva el UUID interno.
+
+Mapeos de API:
+
+- `reviewStatus`: `pending -> pendiente`, `accepted -> aceptado`, `observed -> observado`, `rejected -> descartado`, `edited -> observado`.
+- `priority`: `high -> alta`, `medium -> media`, `low -> baja`.
+
+Los artefactos no exponen paths internos. Cada asset se publica como proxy relativo:
+
+```text
+/api/ai/assets/{planeRunId}/{plane}/{assetName}
+```
+
+Los endpoints demo quedan reservados a `pfi.demo.enabled=true` y devuelven `dataOrigin=demo`. `ReviewStoreService` y `PostgresReviewStoreService` son legado para endpoints anteriores de review y no alimentan el worklist P8-A.

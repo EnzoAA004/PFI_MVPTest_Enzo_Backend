@@ -9,6 +9,7 @@ import ar.edu.uade.pfi.backend.domain.Study;
 import ar.edu.uade.pfi.backend.domain.StudyRun;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -50,6 +51,13 @@ public class InMemoryStudyRepository implements StudyRepository {
     }
 
     @Override
+    public List<Study> findAllStudies() {
+        return studiesById.values().stream()
+            .sorted(Comparator.comparing(Study::updatedAt).reversed())
+            .toList();
+    }
+
+    @Override
     public Optional<Study> findStudyByCaseId(String caseId) {
         return Optional.ofNullable(studyIdsByCaseId.get(caseId)).map(studiesById::get);
     }
@@ -61,6 +69,19 @@ public class InMemoryStudyRepository implements StudyRepository {
             if (input.studyId().equals(studyId)) inputs.add(input);
         }
         return inputs;
+    }
+
+    @Override
+    public List<StudyRun> findRunsByStudyId(String studyId) {
+        return runsById.values().stream()
+            .filter(run -> run.studyId().equals(studyId))
+            .sorted(Comparator.comparing(StudyRun::createdAt).reversed())
+            .toList();
+    }
+
+    @Override
+    public Optional<StudyRun> findLatestRunByStudyId(String studyId) {
+        return findRunsByStudyId(studyId).stream().findFirst();
     }
 
     @Override
@@ -129,6 +150,11 @@ public class InMemoryStudyRepository implements StudyRepository {
     }
 
     @Override
+    public List<MeasurementCorrection> findCorrectionsByStudyRunId(String studyRunId) {
+        return correctionsByRunId.getOrDefault(studyRunId, List.of());
+    }
+
+    @Override
     public DomainAuditEvent saveAuditEvent(DomainAuditEvent event) {
         auditEventsById.put(event.id(), event);
         return event;
@@ -145,6 +171,14 @@ public class InMemoryStudyRepository implements StudyRepository {
     public List<DomainAuditEvent> findAuditEventsByEntityId(String entityId) {
         return auditEventsById.values().stream()
             .filter(event -> event.entityId().equals(entityId))
+            .toList();
+    }
+
+    @Override
+    public List<DomainAuditEvent> findAuditEventsByStudyId(String studyId) {
+        List<String> runIds = findRunsByStudyId(studyId).stream().map(StudyRun::multiplanarRunId).toList();
+        return auditEventsById.values().stream()
+            .filter(event -> runIds.contains(event.entityId()) || studyId.equals(event.entityId()))
             .toList();
     }
 }

@@ -1,5 +1,7 @@
 package ar.edu.uade.pfi.backend.controller;
 
+import ar.edu.uade.pfi.backend.dto.StudyDetailResponseDto;
+import ar.edu.uade.pfi.backend.dto.StudyListResponseDto;
 import ar.edu.uade.pfi.backend.dto.StudyReviewResponseDto;
 import ar.edu.uade.pfi.backend.dto.StudyReviewResponseDto.AiOutputStateDto;
 import ar.edu.uade.pfi.backend.dto.StudyReviewResponseDto.ContourDto;
@@ -8,6 +10,7 @@ import ar.edu.uade.pfi.backend.dto.StudyReviewResponseDto.MaskDto;
 import ar.edu.uade.pfi.backend.dto.StudyReviewResponseDto.MeasurementDto;
 import ar.edu.uade.pfi.backend.dto.StudyReviewResponseDto.PointDto;
 import ar.edu.uade.pfi.backend.dto.StudyReviewResponseDto.SeriesDto;
+import ar.edu.uade.pfi.backend.dto.StudyRunsResponseDto;
 import ar.edu.uade.pfi.backend.service.ProfessionalAccessAuditService;
 import ar.edu.uade.pfi.backend.service.StudyWorklistService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -31,31 +34,32 @@ public class StudyController {
     }
 
     @GetMapping
-    public Map<String, Object> listStudies(HttpServletRequest request) {
+    public StudyListResponseDto listStudies(HttpServletRequest request) {
         accessAuditService.record(request, "access_worklist", "Worklist de-identificada consultada");
         return studyWorklistService.listStudies();
     }
 
     @GetMapping("/{caseId}")
-    public Map<String, Object> getStudy(@PathVariable String caseId, HttpServletRequest request) {
+    public StudyDetailResponseDto getStudy(@PathVariable String caseId, HttpServletRequest request) {
         accessAuditService.record(request, "access_study_detail", "Detalle de estudio de-identificado consultado caseId=" + caseId);
         return studyWorklistService.getStudy(caseId);
     }
 
     @GetMapping("/{caseId}/runs")
-    public Map<String, Object> getStudyRuns(@PathVariable String caseId, HttpServletRequest request) {
+    public StudyRunsResponseDto getStudyRuns(@PathVariable String caseId, HttpServletRequest request) {
         accessAuditService.record(request, "access_study_runs", "Corridas de estudio consultadas caseId=" + caseId);
         return studyWorklistService.getStudyRuns(caseId);
     }
 
     @PostMapping("/demo")
-    public Map<String, Object> createDemoStudy(HttpServletRequest request) {
+    public StudyDetailResponseDto createDemoStudy(HttpServletRequest request) {
         accessAuditService.record(request, "access_demo_study", "Caso demo generado desde endpoint protegido");
         return studyWorklistService.createDemoStudy();
     }
 
     @GetMapping("/demo-review")
     public StudyReviewResponseDto demoReview(HttpServletRequest request) {
+        studyWorklistService.requireDemoEnabled();
         accessAuditService.record(request, "access_demo_review_contract", "Contrato demo de review workspace consultado");
         return new StudyReviewResponseDto(
             "STUDY-DEMO-0142",

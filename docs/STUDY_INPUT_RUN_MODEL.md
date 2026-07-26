@@ -42,6 +42,8 @@ Testcontainers PostgreSQL is the acceptance gate for the real persistence path. 
 - `metricsSnapshot`: JSON quality/confidence snapshot captured for the run.
 - `artifacts`: generated output refs by `runId`, `plane`, and `assetName`; no blobs.
 - `reviewStatus`, `reviewer`, `reviewedAt`, `comments`: professional review state columns. Valid statuses are `pending`, `accepted`, `observed`, `rejected`, and `edited`.
+
+P8-A extends `domain_studies` with nullable worklist metadata: `subject_ref`, `study_date`, `modality`, `description`, plus `review_priority` (`low`, `medium`, `high`, default `medium`). These columns are optional and do not backfill demo identifiers.
 - `MeasurementCorrection`: minimal review correction snapshot with `measurementId`, `label`, `beforeValue`, `afterValue`, `comment`, and `createdAt`. Full measurement versioning remains scoped to BE-008.
 - `status`, `createdAt`, `updatedAt`: workflow state and timestamps.
 
