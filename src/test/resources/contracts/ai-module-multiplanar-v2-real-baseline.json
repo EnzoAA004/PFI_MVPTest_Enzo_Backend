@@ -1,0 +1,83 @@
+{
+  "status": "completed",
+  "schemaVersion": "pfi.multiplanar-run.v2",
+  "multiplanarRunId": "multi-v2-001",
+  "traceId": "trace-v2-001",
+  "caseId": "CASE-001",
+  "workspaceMode": "sagittal_only",
+  "requestedInferenceMode": "real_baseline",
+  "effectiveInferenceMode": "real_baseline",
+  "synthetic": false,
+  "fallbackReason": null,
+  "requestedPlanes": ["sagittal"],
+  "completedPlanes": ["sagittal"],
+  "planes": {
+    "sagittal": {
+      "planeRunId": "run-sag-v2-001",
+      "plane": "sagittal",
+      "status": "ready",
+      "effectiveInferenceMode": "real_baseline",
+      "synthetic": false,
+      "fallbackReason": null,
+      "model": {
+        "modelKey": "sagittal_spider",
+        "modelVersion": "sagittal-spider-final-v1",
+        "artifactHash": "cf11dcc0ad77a7c787e64a796a2fd7398ef906add461cef4b3d61f1a5238e944",
+        "baselineReady": true,
+        "availableForRealInference": true,
+        "manifestValid": true
+      },
+      "input": {
+        "inputId": "inp_sagittal_001",
+        "nativeShape": [352, 384, 17],
+        "canonicalShape": [352, 384, 17],
+        "selectedSliceIndex": 8
+      },
+      "coordinateSpace": {"width": 256, "height": 256},
+      "series": [{"seriesId": "series-sag-t2", "assetRef": "input.png"}],
+      "assets": [
+        {"assetName": "input.png", "role": "input_preview", "contentType": "image/png", "generated": true, "relativePath": "/assets/run-sag-v2-001/sagittal/input.png"},
+        {"assetName": "overlay.png", "role": "overlay_preview", "contentType": "image/png", "generated": true, "relativePath": "/assets/run-sag-v2-001/sagittal/overlay.png"},
+        {"assetName": "mask.npy", "role": "mask_raw", "contentType": "application/octet-stream", "generated": true, "relativePath": "/assets/run-sag-v2-001/sagittal/mask.npy"},
+        {"assetName": "confidence.npy", "role": "confidence_raw", "contentType": "application/octet-stream", "generated": true, "relativePath": "/assets/run-sag-v2-001/sagittal/confidence.npy"}
+      ],
+      "masks": [
+        {"id": "mask_canal", "classKey": "spinal_canal", "assetName": "mask.npy"},
+        {"id": "mask_vertebra_l4", "classKey": "vertebra_l4", "assetName": "mask.npy"},
+        {"id": "mask_vertebra_l5", "classKey": "vertebra_l5", "assetName": "mask.npy"}
+      ],
+      "landmarks": [
+        {"id": "lm_l4_left_pedicle", "labelKey": "L4_left_pedicle", "x": 124.2, "y": 210.5, "z": 42.0, "confidence": 0.94},
+        {"id": "lm_l5_left_pedicle", "labelKey": "L5_left_pedicle", "x": 128.1, "y": 240.3, "z": 42.0, "confidence": 0.91},
+        {"id": "lm_canal_center", "labelKey": "canal_center", "x": 118.0, "y": 225.0, "z": 42.0, "confidence": 0.9}
+      ],
+      "measurements": [
+        {"id": "canalAreaMm2", "labelKey": "canal_area", "value": 82.4, "unit": "mm2", "confidence": 0.9, "status": "reported", "measurementBasis": "mask_canal", "linkedLandmarkIds": []},
+        {"id": "canalAreaMm2L5", "labelKey": "canal_area_l5", "value": 79.1, "unit": "mm2", "confidence": 0.9, "status": "reported", "measurementBasis": "mask_canal", "linkedLandmarkIds": []},
+        {"id": "leftForamenMm", "labelKey": "left_foramen", "value": 3.1, "unit": "mm", "confidence": 0.88, "status": "reported", "measurementBasis": "landmark_pair", "linkedLandmarkIds": ["lm_l4_left_pedicle"]},
+        {"id": "rightForamenMm", "labelKey": "right_foramen", "value": 3.4, "unit": "mm", "confidence": 0.88, "status": "reported", "measurementBasis": "landmark_pair", "linkedLandmarkIds": []},
+        {"id": "discHeightL4L5", "labelKey": "disc_height_l4_l5", "value": 8.2, "unit": "mm", "confidence": 0.85, "status": "reported", "measurementBasis": "landmark_pair", "linkedLandmarkIds": ["lm_l4_left_pedicle", "lm_l5_left_pedicle"]},
+        {"id": "vertebralBodyHeightL4", "labelKey": "vertebral_body_height_l4", "value": 26.1, "unit": "mm", "confidence": 0.86, "status": "reported", "measurementBasis": "mask_vertebra_l4", "linkedLandmarkIds": []},
+        {"id": "vertebralBodyHeightL5", "labelKey": "vertebral_body_height_l5", "value": 25.4, "unit": "mm", "confidence": 0.86, "status": "reported", "measurementBasis": "mask_vertebra_l5", "linkedLandmarkIds": []},
+        {"id": "canalDiameterAp", "labelKey": "canal_diameter_ap", "value": 12.6, "unit": "mm", "confidence": 0.87, "status": "reported", "measurementBasis": "mask_canal", "linkedLandmarkIds": []},
+        {"id": "canalDiameterTransverse", "labelKey": "canal_diameter_transverse", "value": 15.9, "unit": "mm", "confidence": 0.87, "status": "reported", "measurementBasis": "mask_canal", "linkedLandmarkIds": []}
+      ],
+      "quality": {"confidence": 0.94, "maskCount": 3, "landmarkCount": 3, "measurementCount": 9}
+    },
+    "axial": null
+  },
+  "threeD": {"enabled": false},
+  "quality": {"workspaceConfidence": 0.94},
+  "review": {"required": true, "status": "pending"},
+  "governance": {
+    "humanReviewRequired": true,
+    "notClinicalDiagnosis": true,
+    "deidentified": true,
+    "diagnosisGenerated": false
+  },
+  "readiness": {
+    "sagittalReady": true,
+    "axialReady": false,
+    "dualRunReady": false
+  }
+}

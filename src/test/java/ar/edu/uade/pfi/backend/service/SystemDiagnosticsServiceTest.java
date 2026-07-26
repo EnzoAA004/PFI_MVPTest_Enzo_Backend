@@ -9,6 +9,8 @@ import static org.mockito.Mockito.when;
 
 import ar.edu.uade.pfi.backend.auth.AuthService;
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
+import ar.edu.uade.pfi.backend.config.AiMultiplanarContractVersion;
+import ar.edu.uade.pfi.backend.config.AiServiceProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Proxy;
@@ -86,6 +88,42 @@ class SystemDiagnosticsServiceTest {
     }
 
     @Test
+    void diagnosticsExposeMultiplanarContractVersionEndpointAndExpectedSchemaWithoutLeakingBaseUrl() {
+        SystemDiagnosticsService v1Service = new SystemDiagnosticsService(
+            aiClient(Map.of("status", "ok")),
+            new PostgresReviewStoreService(new ObjectMapper(), "memory", ""),
+            null,
+            false,
+            "memory",
+            AiMultiplanarContractVersion.V1
+        );
+        @SuppressWarnings("unchecked")
+        Map<String, Object> v1AiModule = (Map<String, Object>) v1Service.diagnostics().get("aiModule");
+        assertEquals("v1", v1AiModule.get("multiplanarContractVersion"));
+        assertEquals("/multiplanar/run", v1AiModule.get("multiplanarEndpoint"));
+        assertEquals("multiplanar-run-v1", v1AiModule.get("multiplanarSchemaExpected"));
+
+        SystemDiagnosticsService v2Service = new SystemDiagnosticsService(
+            aiClient(Map.of("status", "ok")),
+            new PostgresReviewStoreService(new ObjectMapper(), "memory", ""),
+            null,
+            false,
+            "memory",
+            AiMultiplanarContractVersion.V2
+        );
+        Map<String, Object> v2Diagnostics = v2Service.diagnostics();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> v2AiModule = (Map<String, Object>) v2Diagnostics.get("aiModule");
+        assertEquals("v2", v2AiModule.get("multiplanarContractVersion"));
+        assertEquals("/v2/multiplanar/run", v2AiModule.get("multiplanarEndpoint"));
+        assertEquals("pfi.multiplanar-run.v2", v2AiModule.get("multiplanarSchemaExpected"));
+
+        String serialized = v2Diagnostics.toString();
+        assertFalse(serialized.contains("http://ai-module"));
+        assertFalse(serialized.toLowerCase().contains("http://localhost:8000"));
+    }
+
+    @Test
     void productionConstructorIsAutowiredAndNoDefaultConstructorIsRequired() {
         Constructor<?>[] constructors = SystemDiagnosticsService.class.getDeclaredConstructors();
 
@@ -95,11 +133,12 @@ class SystemDiagnosticsServiceTest {
             .findFirst()
             .orElseThrow();
 
-        assertEquals(6, autowired.getParameterCount());
+        assertEquals(7, autowired.getParameterCount());
         assertEquals(AiServiceOperations.class, autowired.getParameterTypes()[0]);
         assertEquals(PostgresReviewStoreService.class, autowired.getParameterTypes()[1]);
         assertEquals(AuthService.class, autowired.getParameterTypes()[2]);
         assertEquals(ObjectProvider.class, autowired.getParameterTypes()[3]);
+        assertEquals(AiServiceProperties.class, autowired.getParameterTypes()[4]);
     }
 
     @Test
@@ -112,15 +151,22 @@ class SystemDiagnosticsServiceTest {
             context.registerBean(AiServiceOperations.class, () -> aiClient(Map.of("status", "ok")));
             context.registerBean(PostgresReviewStoreService.class, () -> new PostgresReviewStoreService(new ObjectMapper(), "memory", ""));
             context.registerBean(AuthService.class, () -> authService);
+            context.registerBean(AiServiceProperties.class, () -> new AiServiceProperties("http://ai-module", 60, "v1"));
             context.registerBean(SystemDiagnosticsService.class);
 
             context.refresh();
 
             SystemDiagnosticsService service = context.getBean(SystemDiagnosticsService.class);
             assertNotNull(service);
+            Map<String, Object> diagnostics = service.diagnostics();
             @SuppressWarnings("unchecked")
-            Map<String, Object> assetStorage = (Map<String, Object>) service.diagnostics().get("assetStorage");
+            Map<String, Object> assetStorage = (Map<String, Object>) diagnostics.get("assetStorage");
             assertEquals("none", assetStorage.get("mode"));
+            @SuppressWarnings("unchecked")
+            Map<String, Object> aiModule = (Map<String, Object>) diagnostics.get("aiModule");
+            assertEquals("v1", aiModule.get("multiplanarContractVersion"));
+            assertEquals("/multiplanar/run", aiModule.get("multiplanarEndpoint"));
+            assertEquals("multiplanar-run-v1", aiModule.get("multiplanarSchemaExpected"));
         }
     }
 

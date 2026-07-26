@@ -207,21 +207,23 @@ class StudyWorklistServicePostgresTest {
             axialRunId,
             Map.of("workspace", "workspace.json"),
             Map.of(
-                "sagittal", Map.of("measurements", Map.of("values", List.of(Map.of(
-                    "id", "disc-height-l45",
-                    "label", "Disc Height L4-L5",
-                    "value", 13.8,
-                    "unit", "mm",
-                    "confidence", 0.82,
-                    "linkedLandmarks", List.of("lm-l4", "lm-l5")
-                )))),
-                "axial", Map.of("measurements", Map.of("values", axialRunId.isBlank() ? List.of() : List.of(Map.of(
-                    "id", "canal-diameter-l45",
-                    "label", "Central Canal Diameter",
-                    "value", 14.2,
-                    "unit", "mm",
-                    "confidence", 0.76
-                ))))
+                "planes", Map.of(
+                    "sagittal", Map.of("measurements", List.of(Map.of(
+                        "id", "disc-height-l45",
+                        "labelKey", "Disc Height L4-L5",
+                        "value", 13.8,
+                        "unit", "mm",
+                        "confidence", 0.82,
+                        "linkedLandmarkIds", List.of("lm-l4", "lm-l5")
+                    ))),
+                    "axial", Map.of("measurements", axialRunId.isBlank() ? List.of() : List.of(Map.of(
+                        "id", "canal-diameter-l45",
+                        "labelKey", "Central Canal Diameter",
+                        "value", 14.2,
+                        "unit", "mm",
+                        "confidence", 0.76
+                    )))
+                )
             ),
             artifacts,
             "completed",

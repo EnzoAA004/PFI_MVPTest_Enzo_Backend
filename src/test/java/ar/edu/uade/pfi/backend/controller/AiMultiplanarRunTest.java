@@ -1,6 +1,7 @@
 package ar.edu.uade.pfi.backend.controller;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -10,8 +11,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import ar.edu.uade.pfi.backend.client.AiMultiplanarV1ResponseAdapter;
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
 import ar.edu.uade.pfi.backend.config.ApiExceptionHandler;
+import ar.edu.uade.pfi.backend.domain.CanonicalMultiplanarRun;
+import ar.edu.uade.pfi.backend.domain.CanonicalPlaneRun;
 import ar.edu.uade.pfi.backend.domain.DomainAuditEvent;
 import ar.edu.uade.pfi.backend.domain.InputResource;
 import ar.edu.uade.pfi.backend.domain.MeasurementCorrection;
@@ -30,6 +34,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -84,8 +89,7 @@ class AiMultiplanarRunTest {
             .andExpect(jsonPath("$.planes.sagittal.assets['overlay.png']").value("/api/ai/assets/run-sag-123/sagittal/overlay.png"))
             .andExpect(jsonPath("$.planes.axial.runId").value("run-ax-123"))
             .andExpect(jsonPath("$.planes.axial.effectiveInferenceMode").value("real_baseline"))
-            .andExpect(jsonPath("$.planes.axial.assets['mask-preview.png']").value("/api/ai/assets/run-ax-123/axial/mask-preview.png"))
-            .andExpect(jsonPath("$.assets.workspace").value("workspace.json"));
+            .andExpect(jsonPath("$.planes.axial.assets['mask-preview.png']").value("/api/ai/assets/run-ax-123/axial/mask-preview.png"));
 
         ArgumentCaptor<MultiplanarRunRequestDto> request = ArgumentCaptor.forClass(MultiplanarRunRequestDto.class);
         verify(ai).runMultiplanar(request.capture());
@@ -125,6 +129,31 @@ class AiMultiplanarRunTest {
                     """))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.message").value("axial plane requires real_baseline; fallback disabled"));
+    }
+
+    @Test
+    void strictValidationFailureNeverPersistsARun() throws Exception {
+        AiServiceOperations ai = org.mockito.Mockito.mock(AiServiceOperations.class);
+        when(ai.runMultiplanar(any())).thenThrow(new ar.edu.uade.pfi.backend.service.AiMultiplanarContractViolationException("synthetic root debe ser false"));
+        InMemoryStudyRepository repository = new InMemoryStudyRepository();
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(controllerWithPersistence(ai, repository))
+            .setControllerAdvice(new ApiExceptionHandler())
+            .build();
+
+        mockMvc.perform(post("/api/ai/multiplanar/run")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "caseId": "CASE-NO-PERSIST",
+                      "sagittalInputId": "inp_sagittal_001",
+                      "allowContractFallback": false,
+                      "metadata": {"inferenceMode": "real_baseline"}
+                    }
+                    """))
+            .andExpect(status().isBadGateway());
+
+        Optional<Study> study = repository.findStudyByCaseId("CASE-NO-PERSIST");
+        assertTrue(study.isEmpty() || repository.findRunsByStudyId(study.get().id()).isEmpty());
     }
 
     @Test
@@ -336,51 +365,74 @@ class AiMultiplanarRunTest {
             .andExpect(status().isBadRequest());
     }
 
-    private MultiplanarRunResponseDto multiplanarResponse() {
-        return new MultiplanarRunResponseDto(
+    private CanonicalMultiplanarRun multiplanarResponse() {
+        CanonicalPlaneRun sagittal = new CanonicalPlaneRun(
+            "run-sag-123",
+            "sagittal",
+            "completed",
+            "real_baseline",
+            false,
+            null,
+            Map.of("modelKey", "sagittal_spider", "artifactHash", "sha256:sag-checkpoint"),
+            Map.of("inputId", "input-sag-1"),
+            Map.of(),
+            List.of(Map.of("label", "canal_lumbar")),
+            List.of(Map.of("assetName", "overlay.png"), Map.of("assetName", "mask-preview.png")),
+            List.of(),
+            List.of(Map.of("name", "L4_left_pedicle", "x", 124.2, "y", 210.5)),
+            List.of(Map.of("id", "canalAreaMm2", "value", 82.4)),
+            Map.of("sliceIndex", 42)
+        );
+        CanonicalPlaneRun axial = new CanonicalPlaneRun(
+            "run-ax-123",
+            "axial",
+            "completed",
+            "real_baseline",
+            false,
+            null,
+            Map.of("modelKey", "axial_t2_alkafri", "artifactHash", "sha256:ax-checkpoint"),
+            Map.of("inputId", "input-ax-1"),
+            Map.of(),
+            List.of(Map.of("label", "estenosis")),
+            List.of(Map.of("assetName", "overlay.png"), Map.of("assetName", "mask-preview.png")),
+            List.of(),
+            List.of(Map.of("name", "canal_center", "x", 93.3, "y", 118.8)),
+            List.of(Map.of("id", "leftForamenMm", "value", 3.1)),
+            Map.of("sliceIndex", 18)
+        );
+        Map<String, CanonicalPlaneRun> planes = new LinkedHashMap<>();
+        planes.put("sagittal", sagittal);
+        planes.put("axial", axial);
+        return new CanonicalMultiplanarRun(
+            "multiplanar_run_ready",
+            "multiplanar-run-v1",
             "multi-123",
             "trace-123",
+            "CASE-1",
+            "dual_plane_with_3d_context",
             "real_baseline",
-            new MultiplanarRunResponseDto.PlanesDto(
-                new MultiplanarRunResponseDto.PlaneDto(
-                    "run-sag-123",
-                    "sagital",
-                    "sagittal_spider",
-                    "completed",
-                    "real_baseline",
-                    Map.of("artifactHash", "sha256:sag-checkpoint"),
-                    List.of(Map.of("label", "canal_lumbar")),
-                    List.of(Map.of("name", "L4_left_pedicle", "x", 124.2, "y", 210.5)),
-                    Map.of("canalAreaMm2", 82.4),
-                    Map.of("sliceIndex", 42),
-                    Map.of("overlay", "overlay.png", "maskPreview", "mask-preview.png")
-                ),
-                new MultiplanarRunResponseDto.PlaneDto(
-                    "run-ax-123",
-                    "axial",
-                    "axial_t2_alkafri",
-                    "completed",
-                    "real_baseline",
-                    Map.of("artifactHash", "sha256:ax-checkpoint"),
-                    List.of(Map.of("label", "estenosis")),
-                    List.of(Map.of("name", "canal_center", "x", 93.3, "y", 118.8)),
-                    Map.of("leftForamenMm", 3.1),
-                    Map.of("sliceIndex", 18),
-                    Map.of("overlay", "overlay.png", "maskPreview", "mask-preview.png")
-                )
-            ),
-            Map.of("workspace", "workspace.json"),
-            Map.of("status", "pendiente")
+            "real_baseline",
+            List.of("sagittal", "axial"),
+            List.of("sagittal", "axial"),
+            false,
+            null,
+            Map.of(),
+            planes,
+            Map.of(),
+            Map.of(),
+            Map.of("status", "pendiente"),
+            new CanonicalMultiplanarRun.Governance(true, true, true, false)
         );
     }
 
-    private MultiplanarRunResponseDto contractFixture() throws Exception {
+    private CanonicalMultiplanarRun contractFixture() throws Exception {
         String json = Files.readString(Path.of("src/test/resources/contracts/ai-module-multiplanar-real-baseline.json"));
-        return objectMapper.readValue(json, MultiplanarRunResponseDto.class);
+        MultiplanarRunResponseDto dto = objectMapper.readValue(json, MultiplanarRunResponseDto.class);
+        return new AiMultiplanarV1ResponseAdapter().toCanonical(dto);
     }
 
     @SuppressWarnings("unchecked")
-    private MultiplanarRunResponseDto sagittalOnlyFixture() throws Exception {
+    private CanonicalMultiplanarRun sagittalOnlyFixture() throws Exception {
         Map<String, Object> response = objectMapper.readValue(
             Files.readString(Path.of("src/test/resources/contracts/ai-module-multiplanar-real-baseline.json")),
             Map.class
@@ -393,7 +445,8 @@ class AiMultiplanarRunTest {
             "axialRunReady", false,
             "dualRunReady", false
         ));
-        return objectMapper.convertValue(response, MultiplanarRunResponseDto.class);
+        MultiplanarRunResponseDto dto = objectMapper.convertValue(response, MultiplanarRunResponseDto.class);
+        return new AiMultiplanarV1ResponseAdapter().toCanonical(dto);
     }
 
     private String strictBody(String sagittalInputId, String axialInputId, String sagittalInputPath, String axialInputPath) {

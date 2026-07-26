@@ -1,24 +1,30 @@
 package ar.edu.uade.pfi.backend.service;
 
+import ar.edu.uade.pfi.backend.domain.CanonicalMultiplanarRun;
+import ar.edu.uade.pfi.backend.domain.CanonicalPlaneRun;
 import ar.edu.uade.pfi.backend.domain.RunArtifact;
 import ar.edu.uade.pfi.backend.domain.Study;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunRequestDto;
-import ar.edu.uade.pfi.backend.dto.MultiplanarRunResponseDto;
 import ar.edu.uade.pfi.backend.dto.StudyMetadataDto;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+/**
+ * Persists a CanonicalMultiplanarRun (produced by AiServiceClient for either contract
+ * version). There is no v1/v2 branching here: by the time a run reaches this service it
+ * has already been adapted to the canonical shape, so persistence logic is uniform.
+ */
 @Service
 public class MultiplanarRunPersistenceService {
-    private static final Set<String> PUBLIC_ASSETS = Set.of("input.png", "overlay.png", "mask-preview.png");
+    private static final String SNAPSHOT_SCHEMA_VERSION = "pfi.backend-run-snapshot.v2";
 
     private final StudyRunService studyRunService;
     private final RunAssetSnapshotService runAssetSnapshotService;
@@ -43,7 +49,7 @@ public class MultiplanarRunPersistenceService {
         this.clock = clock;
     }
 
-    public void persistSuccessfulRun(MultiplanarRunRequestDto request, MultiplanarRunResponseDto response) {
+    public void persistSuccessfulRun(MultiplanarRunRequestDto request, CanonicalMultiplanarRun response) {
         persistSuccessfulRun(request, null, response);
     }
 
@@ -51,36 +57,36 @@ public class MultiplanarRunPersistenceService {
         return studyRunService.prepareStudyMetadata(caseId, studyMetadata);
     }
 
-    public void persistSuccessfulRun(MultiplanarRunRequestDto request, StudyMetadataDto studyMetadata, MultiplanarRunResponseDto response) {
-        if (response == null || blank(response.runId())) return;
+    public void persistSuccessfulRun(MultiplanarRunRequestDto request, StudyMetadataDto studyMetadata, CanonicalMultiplanarRun response) {
+        if (response == null || blank(response.multiplanarRunId())) return;
         Study study = studyRunService.upsertStudyMetadata(request.caseId(), studyMetadata);
 
         registerInput(study, "sagittal", request.sagittalInputId());
         registerInput(study, "axial", request.axialInputId());
 
-        MultiplanarRunResponseDto.PlaneDto sagittal = response.planes() == null ? null : response.planes().sagittal();
-        MultiplanarRunResponseDto.PlaneDto axial = response.planes() == null ? null : response.planes().axial();
+        CanonicalPlaneRun sagittal = response.sagittal();
+        CanonicalPlaneRun axial = response.axial();
         String studyRunId = UUID.randomUUID().toString();
         Instant now = clock.instant();
 
         var persistedRun = studyRunService.createRunWithId(
             studyRunId,
             study,
-            response.runId(),
+            response.multiplanarRunId(),
             valueOrEmpty(response.traceId()),
-            requestedInferenceMode(request),
-            valueOrDefault(response.effectiveInferenceMode(), requestedInferenceMode(request)),
+            valueOrEmpty(response.requestedInferenceMode()),
+            valueOrDefault(response.effectiveInferenceMode(), response.requestedInferenceMode()),
             valueOrDefault(modelKey(sagittal), request.sagittalModelKey()),
             valueOrDefault(modelKey(axial), request.axialModelKey()),
             artifactHash(sagittal),
             artifactHash(axial),
-            valueOrEmpty(runId(sagittal)),
-            valueOrEmpty(runId(axial)),
-            safeMap(response.assets()),
+            valueOrEmpty(planeRunId(sagittal)),
+            valueOrEmpty(planeRunId(axial)),
+            Map.of(),
             metricsSnapshot(response),
             artifacts(studyRunId, sagittal, axial, now),
-            "completed",
-            reviewStatus(response.review()),
+            response.synthetic() ? "completed_synthetic" : "completed",
+            "pending",
             "",
             null,
             ""
@@ -95,120 +101,138 @@ public class MultiplanarRunPersistenceService {
         studyRunService.createInput(study, plane, inputId, "ai-module-input", 0);
     }
 
-    private List<RunArtifact> artifacts(String studyRunId, MultiplanarRunResponseDto.PlaneDto sagittal, MultiplanarRunResponseDto.PlaneDto axial, Instant now) {
+    private List<RunArtifact> artifacts(String studyRunId, CanonicalPlaneRun sagittal, CanonicalPlaneRun axial, Instant now) {
         List<RunArtifact> artifacts = new ArrayList<>();
-        addArtifacts(artifacts, studyRunId, "sagittal", runId(sagittal), sagittal == null ? null : sagittal.assets(), now);
-        addArtifacts(artifacts, studyRunId, "axial", runId(axial), axial == null ? null : axial.assets(), now);
+        addArtifacts(artifacts, studyRunId, "sagittal", sagittal, now);
+        addArtifacts(artifacts, studyRunId, "axial", axial, now);
         return artifacts;
     }
 
-    private void addArtifacts(List<RunArtifact> artifacts, String studyRunId, String plane, String runId, Map<String, Object> assets, Instant now) {
-        if (blank(runId) || assets == null) return;
-        for (Object value : assets.values()) {
-            String assetName = basename(String.valueOf(value));
-            if (blank(assetName) || !PUBLIC_ASSETS.contains(assetName)) continue;
+    private void addArtifacts(List<RunArtifact> artifacts, String studyRunId, String plane, CanonicalPlaneRun planeRun, Instant now) {
+        if (planeRun == null || blank(planeRun.planeRunId())) return;
+        for (Map<String, Object> asset : planeRun.assets()) {
+            if (!isValidAssetMetadata(asset, planeRun.planeRunId())) continue;
+            String assetName = text(asset.get("assetName"));
+            String contentType = blankOrDefault(text(asset.get("contentType")), "application/octet-stream");
             artifacts.add(new RunArtifact(
                 UUID.randomUUID().toString(),
                 studyRunId,
-                runId,
+                planeRun.planeRunId(),
                 plane,
                 assetName,
-                "image/png",
+                contentType,
                 assetName,
                 now
             ));
         }
     }
 
-    private Map<String, Object> metricsSnapshot(MultiplanarRunResponseDto response) {
-        Map<String, Object> metrics = new LinkedHashMap<>();
-        if (response.planes() != null) {
-            metrics.put("sagittal", sagittalMetrics(response, response.planes().sagital()));
-            metrics.put("axial", planeMetrics(response.planes().axial()));
+    /**
+     * Enforces the v2 asset-metadata contract before it is trusted for persistence:
+     * generated must be true, relativePath must be a same-origin relative asset path
+     * (never a filesystem-absolute path, a foreign host, or a directory traversal) and
+     * must reference the plane it claims to belong to.
+     */
+    private boolean isValidAssetMetadata(Map<String, Object> asset, String planeRunId) {
+        String assetName = text(asset.get("assetName"));
+        if (blank(assetName)) return false;
+        if (!Boolean.TRUE.equals(asset.get("generated"))) return false;
+        String relativePath = text(asset.get("relativePath"));
+        if (blank(relativePath)) return false;
+        String normalized = relativePath.toLowerCase(Locale.ROOT);
+        if (normalized.contains("..")) return false;
+        if (normalized.matches("^[a-z][a-z0-9+.-]*://.*")) return false;
+        if (normalized.matches("^[a-z]:\\\\.*") || normalized.matches("^[a-z]:/.*")) return false;
+        if (normalized.contains("localhost") || normalized.contains("cloudflare") || normalized.contains("host.docker.internal")) return false;
+        return relativePath.contains(planeRunId);
+    }
+
+    private Map<String, Object> metricsSnapshot(CanonicalMultiplanarRun response) {
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("schemaVersion", SNAPSHOT_SCHEMA_VERSION);
+        snapshot.put("sourceSchemaVersion", valueOrEmpty(response.schemaVersion()));
+        snapshot.put("workspaceMode", valueOrEmpty(response.workspaceMode()));
+        snapshot.put("synthetic", response.synthetic());
+        snapshot.put("readiness", response.readiness());
+        snapshot.put("governance", governanceMap(response.governance()));
+        snapshot.put("threeD", response.threeD());
+        Map<String, Object> planes = new LinkedHashMap<>();
+        planes.put("sagittal", planeSnapshot(response.sagittal()));
+        planes.put("axial", planeSnapshot(response.axial()));
+        snapshot.put("planes", planes);
+        return snapshot;
+    }
+
+    private Map<String, Object> planeSnapshot(CanonicalPlaneRun plane) {
+        if (plane == null) return null;
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("model", plane.model());
+        snapshot.put("input", plane.input());
+        snapshot.put("coordinateSpace", plane.coordinateSpace());
+        snapshot.put("series", plane.series());
+        snapshot.put("masks", plane.masks());
+        snapshot.put("landmarks", plane.landmarks());
+        snapshot.put("measurements", transformMeasurements(plane));
+        snapshot.put("quality", plane.quality());
+        return snapshot;
+    }
+
+    private Map<String, Object> governanceMap(CanonicalMultiplanarRun.Governance governance) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("humanReviewRequired", governance.humanReviewRequired());
+        map.put("notClinicalDiagnosis", governance.notClinicalDiagnosis());
+        map.put("deidentified", governance.deidentified());
+        map.put("diagnosisGenerated", governance.diagnosisGenerated());
+        return map;
+    }
+
+    /**
+     * Transforms the AI Module's raw v2 measurement list into the shape consumed by
+     * worklist/history/frontend. Only fields the AI Module actually provided are
+     * carried through — level, reviewer values and clinical labels (e.g. "L4-L5") are
+     * never invented here. Reviewer corrections live separately in
+     * domain_review_corrections.
+     */
+    private List<Map<String, Object>> transformMeasurements(CanonicalPlaneRun plane) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Map<String, Object> measurement : plane.measurements()) {
+            Object value = measurement.get("value");
+            Map<String, Object> transformed = new LinkedHashMap<>();
+            transformed.put("id", measurement.get("id"));
+            transformed.put("labelKey", measurement.get("labelKey"));
+            transformed.put("aiValue", value);
+            transformed.put("value", value);
+            transformed.put("unit", measurement.get("unit"));
+            transformed.put("confidence", measurement.get("confidence"));
+            transformed.put("source", "AI");
+            transformed.put("status", measurement.get("status"));
+            transformed.put("plane", plane.plane());
+            transformed.put("level", null);
+            transformed.put("measurementBasis", measurement.get("measurementBasis"));
+            transformed.put("linkedLandmarkIds", measurement.getOrDefault("linkedLandmarkIds", List.of()));
+            result.add(transformed);
         }
-        metrics.put("humanReviewRequired", response.humanReviewRequired());
-        metrics.put("notClinicalDiagnosis", response.notClinicalDiagnosis());
-        return metrics;
+        return result;
     }
 
-    private Map<String, Object> sagittalMetrics(MultiplanarRunResponseDto response, MultiplanarRunResponseDto.PlaneDto plane) {
-        Map<String, Object> metrics = new LinkedHashMap<>(planeMetrics(plane));
-        if (plane == null) return metrics;
-        metrics.put("modelKey", valueOrEmpty(plane.modelKey()));
-        metrics.put("modelVersion", valueOrEmpty(plane.modelVersion()));
-        metrics.put("artifactHash", artifactHash(plane));
-        metrics.put("inputId", valueOrEmpty(plane.inputId()));
-        if (plane.metadata() != null) {
-            metrics.put("selectedSlice", plane.metadata().get("selectedSlice"));
-            metrics.put("selectedAxis", plane.metadata().get("selectedAxis"));
-            metrics.put("sliceCount", plane.metadata().get("sliceCount"));
-            metrics.put("inputOrientationTransform", plane.metadata().get("inputOrientationTransform"));
-        }
-        metrics.put("humanReviewRequired", plane.humanReviewRequired() == null ? response.humanReviewRequired() : plane.humanReviewRequired());
-        metrics.put("notClinicalDiagnosis", plane.notClinicalDiagnosis() == null ? response.notClinicalDiagnosis() : plane.notClinicalDiagnosis());
-        return metrics;
+    private String artifactHash(CanonicalPlaneRun plane) {
+        return plane == null ? "" : text(plane.model().get("artifactHash"));
     }
 
-    private Map<String, Object> planeMetrics(MultiplanarRunResponseDto.PlaneDto plane) {
-        if (plane == null) return Map.of();
-        Map<String, Object> metrics = new LinkedHashMap<>();
-        metrics.put("effectiveInferenceMode", valueOrEmpty(plane.effectiveInferenceMode()));
-        metrics.put("inferenceMode", valueOrEmpty(plane.inferenceMode()));
-        metrics.put("measurements", safeMap(plane.measurements()));
-        metrics.put("evidence", safeMap(plane.evidence()));
-        metrics.put("quality", safeMap(plane.quality()));
-        return metrics;
+    private String modelKey(CanonicalPlaneRun plane) {
+        return plane == null ? "" : text(plane.model().get("modelKey"));
     }
 
-    private String requestedInferenceMode(MultiplanarRunRequestDto request) {
-        if (request.metadata() == null) return "";
-        Object value = request.metadata().get("inferenceMode");
-        return value == null ? "" : String.valueOf(value);
+    private String planeRunId(CanonicalPlaneRun plane) {
+        return plane == null ? "" : valueOrEmpty(plane.planeRunId());
     }
 
-    private String artifactHash(MultiplanarRunResponseDto.PlaneDto plane) {
-        if (plane == null) return "";
-        if (!blank(plane.artifactHash())) return plane.artifactHash();
-        String aiOutputHash = valueFrom(plane.aiOutput(), "artifactHash");
-        if (!blank(aiOutputHash)) return aiOutputHash;
-        if (plane.modelArtifact() == null) return "";
-        for (String key : List.of("artifactHash", "checkpointHash", "hash", "sha256")) {
-            String value = valueFrom(plane.modelArtifact(), key);
-            if (!blank(value)) return value;
-        }
-        return "";
+    private String text(Object value) {
+        return value == null ? "" : String.valueOf(value).trim();
     }
 
-    private String valueFrom(Map<String, Object> map, String key) {
-        if (map == null) return "";
-        Object value = map.get(key);
-        return value == null ? "" : String.valueOf(value);
-    }
-
-    private String reviewStatus(Map<String, Object> review) {
-        if (review == null) return "pending";
-        Object value = review.get("status");
-        if (value == null || String.valueOf(value).isBlank() || "pendiente".equalsIgnoreCase(String.valueOf(value))) return "pending";
-        return String.valueOf(value);
-    }
-
-    private Map<String, Object> safeMap(Map<String, Object> value) {
-        return value == null ? Map.of() : value;
-    }
-
-    private String modelKey(MultiplanarRunResponseDto.PlaneDto plane) {
-        return plane == null ? "" : valueOrEmpty(plane.modelKey());
-    }
-
-    private String runId(MultiplanarRunResponseDto.PlaneDto plane) {
-        return plane == null ? "" : valueOrEmpty(plane.runId());
-    }
-
-    private String basename(String value) {
-        if (value == null) return "";
-        String normalized = value.replace('\\', '/');
-        String name = normalized.substring(normalized.lastIndexOf('/') + 1);
-        return name.contains("..") ? "" : name;
+    private String blankOrDefault(String value, String fallback) {
+        return blank(value) ? fallback : value;
     }
 
     private String valueOrDefault(String value, String fallback) {

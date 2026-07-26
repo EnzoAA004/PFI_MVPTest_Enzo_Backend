@@ -84,6 +84,45 @@ class MultiplanarRealBaselineContractValidatorTest {
         assertFails(mutateRoot("humanReviewRequired", false));
     }
 
+    @Test
+    void v2SchemaVersionSkipsV1SpecificFieldShapeChecksButStillEnforcesGovernance() {
+        MultiplanarRunResponseDto v2Shaped = new MultiplanarRunResponseDto(
+            "completed",
+            "pfi.multiplanar-run.v2",
+            "multi-v2-001",
+            "trace-v2-001",
+            "CASE-001",
+            "sagittal_only",
+            "real_baseline",
+            "real_baseline",
+            new MultiplanarRunResponseDto.PlanesDto(
+                new MultiplanarRunResponseDto.PlaneDto(
+                    "run-sag-v2-001", "sagittal", "sagittal_spider", "completed", "real_baseline",
+                    Map.of(), List.of(), List.of(), Map.of(), Map.of(), Map.of()
+                ),
+                null
+            ),
+            Map.of(),
+            Map.of(),
+            Map.of(),
+            Map.of(),
+            Map.of(),
+            true,
+            true,
+            false
+        );
+
+        assertDoesNotThrow(() -> validator.validate(strictSagittalOnlyRequest(), v2Shaped));
+
+        MultiplanarRunResponseDto missingGovernance = new MultiplanarRunResponseDto(
+            v2Shaped.status(), v2Shaped.schemaVersion(), v2Shaped.runId(), v2Shaped.traceId(), v2Shaped.caseId(),
+            v2Shaped.workspaceMode(), v2Shaped.requestedInferenceMode(), v2Shaped.effectiveInferenceMode(),
+            v2Shaped.planes(), v2Shaped.assets(), v2Shaped.threeD(), v2Shaped.quality(), v2Shaped.review(),
+            v2Shaped.metadata(), false, true, false
+        );
+        assertThrows(AiMultiplanarContractViolationException.class, () -> validator.validate(strictSagittalOnlyRequest(), missingGovernance));
+    }
+
     private Map<String, Object> mutateRoot(String key, Object value) throws Exception {
         Map<String, Object> response = fixtureMap();
         response.put(key, value);

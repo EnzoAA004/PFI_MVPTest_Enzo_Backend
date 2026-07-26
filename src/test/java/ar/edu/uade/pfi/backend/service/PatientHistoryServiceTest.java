@@ -44,8 +44,8 @@ class PatientHistoryServiceTest {
             "run-sag-new",
             "",
             Map.of(),
-            Map.of("sagittal", Map.of("measurements", Map.of("values", List.of(
-                Map.of("id", "disc-height-l45", "label", "Disc Height", "value", 8.2, "unit", "mm")
+            Map.of("planes", Map.of("sagittal", Map.of("measurements", List.of(
+                Map.of("id", "disc-height-l45", "labelKey", "Disc Height", "value", 8.2, "unit", "mm")
             )))),
             List.of(),
             "completed",

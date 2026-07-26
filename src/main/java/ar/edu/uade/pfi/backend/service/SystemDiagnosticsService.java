@@ -2,6 +2,8 @@ package ar.edu.uade.pfi.backend.service;
 
 import ar.edu.uade.pfi.backend.auth.AuthService;
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
+import ar.edu.uade.pfi.backend.config.AiMultiplanarContractVersion;
+import ar.edu.uade.pfi.backend.config.AiServiceProperties;
 import ar.edu.uade.pfi.backend.util.AiReportEvidence;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -20,6 +22,7 @@ public class SystemDiagnosticsService {
     private final RunAssetContentStorage assetContentStorage;
     private final boolean authEnabled;
     private final String persistenceMode;
+    private final AiMultiplanarContractVersion multiplanarContractVersion;
 
     SystemDiagnosticsService(
         AiServiceOperations aiServiceClient,
@@ -28,12 +31,24 @@ public class SystemDiagnosticsService {
         boolean authEnabled,
         String persistenceMode
     ) {
+        this(aiServiceClient, postgresReviewStoreService, authService, authEnabled, persistenceMode, AiMultiplanarContractVersion.V1);
+    }
+
+    SystemDiagnosticsService(
+        AiServiceOperations aiServiceClient,
+        PostgresReviewStoreService postgresReviewStoreService,
+        AuthService authService,
+        boolean authEnabled,
+        String persistenceMode,
+        AiMultiplanarContractVersion multiplanarContractVersion
+    ) {
         this.aiServiceClient = aiServiceClient;
         this.postgresReviewStoreService = postgresReviewStoreService;
         this.authService = authService;
         this.assetContentStorage = null;
         this.authEnabled = authEnabled;
         this.persistenceMode = persistenceMode;
+        this.multiplanarContractVersion = multiplanarContractVersion;
     }
 
     @Autowired
@@ -42,6 +57,7 @@ public class SystemDiagnosticsService {
         PostgresReviewStoreService postgresReviewStoreService,
         AuthService authService,
         ObjectProvider<RunAssetContentStorage> assetContentStorageProvider,
+        AiServiceProperties aiServiceProperties,
         @Value("${pfi.auth.enabled:true}") boolean authEnabled,
         @Value("${pfi.persistence.mode:memory}") String persistenceMode
     ) {
@@ -51,6 +67,7 @@ public class SystemDiagnosticsService {
         this.assetContentStorage = assetContentStorageProvider.getIfAvailable();
         this.authEnabled = authEnabled;
         this.persistenceMode = persistenceMode;
+        this.multiplanarContractVersion = aiServiceProperties.resolvedMultiplanarContractVersion();
     }
 
     public Map<String, Object> diagnostics() {
@@ -144,19 +161,35 @@ public class SystemDiagnosticsService {
             result.put("contract", response.getOrDefault("contract", Map.of("status", "unavailable")));
             result.put("models", models);
             result.put("response", response);
+            result.putAll(multiplanarContractDiagnostics());
             return result;
         } catch (RuntimeException ex) {
-            return Map.of(
-                "available", false,
-                "status", "degraded",
-                "service", "pfi-ai-module",
-                "readiness", readinessUnavailable(compact(ex.getMessage())),
-                "evaluationEvidence", evidenceUnavailable(compact(ex.getMessage())),
-                "contract", Map.of("status", "unavailable"),
-                "artifactSummary", Map.of("status", "unavailable"),
-                "message", compact(ex.getMessage())
-            );
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("available", false);
+            result.put("status", "degraded");
+            result.put("service", "pfi-ai-module");
+            result.put("readiness", readinessUnavailable(compact(ex.getMessage())));
+            result.put("evaluationEvidence", evidenceUnavailable(compact(ex.getMessage())));
+            result.put("contract", Map.of("status", "unavailable"));
+            result.put("artifactSummary", Map.of("status", "unavailable"));
+            result.put("message", compact(ex.getMessage()));
+            result.putAll(multiplanarContractDiagnostics());
+            return result;
         }
+    }
+
+    /**
+     * Never includes the AI Module base URL (may be sensitive infra info) — only the
+     * contract version, the endpoint path it resolves to, and the schemaVersion the
+     * backend expects back, which is all that's needed to verify a v1/v2 rollout.
+     */
+    private Map<String, Object> multiplanarContractDiagnostics() {
+        boolean isV2 = multiplanarContractVersion == AiMultiplanarContractVersion.V2;
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("multiplanarContractVersion", isV2 ? "v2" : "v1");
+        result.put("multiplanarEndpoint", isV2 ? "/v2/multiplanar/run" : "/multiplanar/run");
+        result.put("multiplanarSchemaExpected", isV2 ? "pfi.multiplanar-run.v2" : "multiplanar-run-v1");
+        return result;
     }
 
     private Map<String, Object> safeReadiness() {

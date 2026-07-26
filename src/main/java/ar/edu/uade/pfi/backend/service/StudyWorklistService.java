@@ -210,12 +210,12 @@ public class StudyWorklistService {
 
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> measurementValues(Map<String, Object> metricsSnapshot, String plane) {
-        Object planeNode = metricsSnapshot.get(plane);
+        Object planesNode = metricsSnapshot.get("planes");
+        if (!(planesNode instanceof Map<?, ?> planesMap)) return List.of();
+        Object planeNode = planesMap.get(plane);
         if (!(planeNode instanceof Map<?, ?> planeMap)) return List.of();
         Object measurements = planeMap.get("measurements");
-        if (!(measurements instanceof Map<?, ?> measurementsMap)) return List.of();
-        Object values = measurementsMap.get("values");
-        if (!(values instanceof List<?> list)) return List.of();
+        if (!(measurements instanceof List<?> list)) return List.of();
         List<Map<String, Object>> normalized = new ArrayList<>();
         for (Object item : list) {
             if (!(item instanceof Map<?, ?> raw)) continue;

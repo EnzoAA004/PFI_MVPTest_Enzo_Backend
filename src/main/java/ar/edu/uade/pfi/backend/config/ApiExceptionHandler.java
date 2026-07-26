@@ -3,6 +3,7 @@ package ar.edu.uade.pfi.backend.config;
 import ar.edu.uade.pfi.backend.service.AuditService;
 import ar.edu.uade.pfi.backend.service.AiContractViolationException;
 import ar.edu.uade.pfi.backend.service.AiMultiplanarContractViolationException;
+import ar.edu.uade.pfi.backend.service.AiMultiplanarUpstreamException;
 import ar.edu.uade.pfi.backend.service.AssetContentUnavailableException;
 import ar.edu.uade.pfi.backend.service.DatabaseUnavailableException;
 import ar.edu.uade.pfi.backend.service.RunReviewException;
@@ -51,6 +52,11 @@ public class ApiExceptionHandler {
     @ExceptionHandler(AiMultiplanarContractViolationException.class)
     public ResponseEntity<Map<String, Object>> handleAiMultiplanarContractViolation(AiMultiplanarContractViolationException ex, HttpServletRequest request) {
         return buildError(HttpStatus.BAD_GATEWAY, "AI_MULTIPLANAR_CONTRACT_VIOLATION", safeMessage(ex.getMessage(), HttpStatus.BAD_GATEWAY), request, ex);
+    }
+
+    @ExceptionHandler(AiMultiplanarUpstreamException.class)
+    public ResponseEntity<Map<String, Object>> handleAiMultiplanarUpstream(AiMultiplanarUpstreamException ex, HttpServletRequest request) {
+        return buildError(ex.status(), ex.code(), safeMessage(ex.getMessage(), ex.status()), request, ex);
     }
 
     @ExceptionHandler(DatabaseUnavailableException.class)

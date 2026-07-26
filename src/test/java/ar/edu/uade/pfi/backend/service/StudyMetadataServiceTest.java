@@ -4,12 +4,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import ar.edu.uade.pfi.backend.domain.CanonicalMultiplanarRun;
+import ar.edu.uade.pfi.backend.domain.CanonicalPlaneRun;
 import ar.edu.uade.pfi.backend.domain.Study;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunRequestDto;
-import ar.edu.uade.pfi.backend.dto.MultiplanarRunResponseDto;
 import ar.edu.uade.pfi.backend.dto.StudyMetadataDto;
 import ar.edu.uade.pfi.backend.repository.InMemoryStudyRepository;
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
@@ -129,31 +132,28 @@ class StudyMetadataServiceTest {
                 Map.of("inferenceMode", "real_baseline")
             ),
             null,
-            new MultiplanarRunResponseDto(
-                "multi-ready",
-                "trace-ready",
-                "real_baseline",
-                new MultiplanarRunResponseDto.PlanesDto(
-                    new MultiplanarRunResponseDto.PlaneDto(
-                        "run-sag-ready",
-                        "sagittal",
-                        "sagittal_spider",
-                        "completed",
-                        "real_baseline",
-                        Map.of("artifactHash", "sha256:sag"),
-                        java.util.List.of(),
-                        java.util.List.of(),
-                        Map.of(),
-                        Map.of(),
-                        Map.of("overlay", "overlay.png")
-                    ),
-                    null
-                ),
-                Map.of(),
-                Map.of("status", "pending")
-            )
+            readyRunFixture()
         );
 
         assertEquals("ready", repository.findStudyByCaseId("CASE-RUN-READY").orElseThrow().status());
+    }
+
+    private CanonicalMultiplanarRun readyRunFixture() {
+        CanonicalPlaneRun sagittal = new CanonicalPlaneRun(
+            "run-sag-ready", "sagittal", "completed", "real_baseline", false, null,
+            Map.of("modelKey", "sagittal_spider", "artifactHash", "sha256:sag"),
+            Map.of(), Map.of(), List.of(),
+            List.of(Map.of("assetName", "overlay.png")),
+            List.of(), List.of(), List.of(), Map.of()
+        );
+        Map<String, CanonicalPlaneRun> planes = new LinkedHashMap<>();
+        planes.put("sagittal", sagittal);
+        return new CanonicalMultiplanarRun(
+            "multiplanar_run_ready", "multiplanar-run-v1", "multi-ready", "trace-ready", "CASE-RUN-READY",
+            "sagittal_only", "real_baseline", "real_baseline",
+            List.of("sagittal"), List.of("sagittal"), false, null,
+            Map.of(), planes, Map.of(), Map.of(), Map.of("status", "pending"),
+            new CanonicalMultiplanarRun.Governance(true, true, true, false)
+        );
     }
 }

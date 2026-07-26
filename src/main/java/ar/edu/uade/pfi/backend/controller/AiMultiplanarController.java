@@ -1,10 +1,13 @@
 package ar.edu.uade.pfi.backend.controller;
 
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
+import ar.edu.uade.pfi.backend.domain.CanonicalMultiplanarRun;
+import ar.edu.uade.pfi.backend.domain.CanonicalPlaneRun;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunApiRequestDto;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunRequestDto;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunResponseDto;
 import ar.edu.uade.pfi.backend.service.AuditService;
+import ar.edu.uade.pfi.backend.service.CanonicalMultiplanarRunLegacyPresenter;
 import ar.edu.uade.pfi.backend.service.MultiplanarRealBaselineContractValidator;
 import ar.edu.uade.pfi.backend.service.MultiplanarRunPersistenceService;
 import ar.edu.uade.pfi.backend.service.MultiplanarRunResponsePresenter;
@@ -29,19 +32,20 @@ public class AiMultiplanarController {
     private final MultiplanarRunPersistenceService persistenceService;
     private final AuditService auditService;
     private final MultiplanarRunResponsePresenter presenter;
-    private final MultiplanarRealBaselineContractValidator validator;
+    private final CanonicalMultiplanarRunLegacyPresenter legacyPresenter;
+    private final MultiplanarRealBaselineContractValidator strictnessClassifier;
 
     public AiMultiplanarController(AiServiceOperations aiServiceClient) {
-        this(aiServiceClient, null, null, new MultiplanarRunResponsePresenter(), new MultiplanarRealBaselineContractValidator());
+        this(aiServiceClient, null, null, new MultiplanarRunResponsePresenter(), new CanonicalMultiplanarRunLegacyPresenter(), new MultiplanarRealBaselineContractValidator());
     }
 
     public AiMultiplanarController(AiServiceOperations aiServiceClient, MultiplanarRunPersistenceService persistenceService) {
-        this(aiServiceClient, persistenceService, null, new MultiplanarRunResponsePresenter(), new MultiplanarRealBaselineContractValidator());
+        this(aiServiceClient, persistenceService, null, new MultiplanarRunResponsePresenter(), new CanonicalMultiplanarRunLegacyPresenter(), new MultiplanarRealBaselineContractValidator());
     }
 
     @Autowired
     public AiMultiplanarController(AiServiceOperations aiServiceClient, MultiplanarRunPersistenceService persistenceService, AuditService auditService) {
-        this(aiServiceClient, persistenceService, auditService, new MultiplanarRunResponsePresenter(), new MultiplanarRealBaselineContractValidator());
+        this(aiServiceClient, persistenceService, auditService, new MultiplanarRunResponsePresenter(), new CanonicalMultiplanarRunLegacyPresenter(), new MultiplanarRealBaselineContractValidator());
     }
 
     AiMultiplanarController(
@@ -49,13 +53,15 @@ public class AiMultiplanarController {
         MultiplanarRunPersistenceService persistenceService,
         AuditService auditService,
         MultiplanarRunResponsePresenter presenter,
-        MultiplanarRealBaselineContractValidator validator
+        CanonicalMultiplanarRunLegacyPresenter legacyPresenter,
+        MultiplanarRealBaselineContractValidator strictnessClassifier
     ) {
         this.aiServiceClient = aiServiceClient;
         this.persistenceService = persistenceService;
         this.auditService = auditService;
         this.presenter = presenter;
-        this.validator = validator;
+        this.legacyPresenter = legacyPresenter;
+        this.strictnessClassifier = strictnessClassifier;
     }
 
     @GetMapping("/contract")
@@ -77,24 +83,21 @@ public class AiMultiplanarController {
             ? null
             : persistenceService.prepareStudyMetadata(request.caseId(), request.studyMetadata());
         MultiplanarRunRequestDto normalized = normalizedRequest(request, preparedMetadata);
-        MultiplanarRunResponseDto response;
+        // AiServiceClient already resolves the contract version, calls exactly one
+        // endpoint, validates strict real_baseline requests, and returns the canonical
+        // model — this controller no longer touches AI Module DTOs directly.
+        CanonicalMultiplanarRun canonical;
         try {
-            response = aiServiceClient.runMultiplanar(normalized);
+            canonical = aiServiceClient.runMultiplanar(normalized);
         } catch (RuntimeException ex) {
             auditStrictFailure(normalized, ex.getMessage());
             throw ex;
         }
-        MultiplanarRunResponseDto presented = presenter.present(response);
-        try {
-            validator.validate(normalized, presented);
-        } catch (RuntimeException ex) {
-            auditStrictFailure(normalized, ex.getMessage());
-            throw ex;
-        }
+        MultiplanarRunResponseDto presented = presenter.present(legacyPresenter.toLegacyResponse(canonical));
         if (persistenceService != null) {
-            persistenceService.persistSuccessfulRun(normalized, preparedMetadata.metadata(), presented);
+            persistenceService.persistSuccessfulRun(normalized, preparedMetadata.metadata(), canonical);
         }
-        auditSuccess(normalized, presented);
+        auditSuccess(normalized, canonical);
         return presented;
     }
 
@@ -154,16 +157,16 @@ public class AiMultiplanarController {
         return value != null && value.trim().startsWith("demo/");
     }
 
-    private void auditSuccess(MultiplanarRunRequestDto request, MultiplanarRunResponseDto response) {
+    private void auditSuccess(MultiplanarRunRequestDto request, CanonicalMultiplanarRun response) {
         if (auditService == null) return;
-        MultiplanarRunResponseDto.PlaneDto sagittal = response.planes() == null ? null : response.planes().sagittal();
-        MultiplanarRunResponseDto.PlaneDto axial = response.planes() == null ? null : response.planes().axial();
-        String action = validator.isStrict(request) ? "multiplanar.real_baseline.completed" : "multiplanar.run.completed";
-        auditService.record("backend", action, response.runId(), response.traceId(), auditMetadata(request, response, sagittal, axial));
+        CanonicalPlaneRun sagittal = response.sagittal();
+        CanonicalPlaneRun axial = response.axial();
+        String action = strictnessClassifier.isStrict(request) ? "multiplanar.real_baseline.completed" : "multiplanar.run.completed";
+        auditService.record("backend", action, response.multiplanarRunId(), response.traceId(), auditMetadata(request, response, sagittal, axial));
     }
 
     private void auditStrictFailure(MultiplanarRunRequestDto request, String message) {
-        if (auditService == null || !validator.isStrict(request)) return;
+        if (auditService == null || !strictnessClassifier.isStrict(request)) return;
         auditService.record("backend", "multiplanar.real_baseline.failed", request.caseId(), traceId(request), Map.of(
             "caseId", request.caseId(),
             "traceId", traceId(request),
@@ -173,30 +176,24 @@ public class AiMultiplanarController {
         ));
     }
 
-    private Map<String, Object> auditMetadata(MultiplanarRunRequestDto request, MultiplanarRunResponseDto response, MultiplanarRunResponseDto.PlaneDto sagittal, MultiplanarRunResponseDto.PlaneDto axial) {
+    private Map<String, Object> auditMetadata(MultiplanarRunRequestDto request, CanonicalMultiplanarRun response, CanonicalPlaneRun sagittal, CanonicalPlaneRun axial) {
         Map<String, Object> metadata = new LinkedHashMap<>();
-        metadata.put("runId", response.runId());
-        metadata.put("sagittalRunId", sagittal == null ? "" : sagittal.runId());
-        metadata.put("axialRunId", axial == null ? "" : axial.runId());
+        metadata.put("runId", response.multiplanarRunId());
+        metadata.put("sagittalRunId", sagittal == null ? "" : sagittal.planeRunId());
+        metadata.put("axialRunId", axial == null ? "" : axial.planeRunId());
         metadata.put("caseId", request.caseId());
-        metadata.put("sagittalModelKey", sagittal == null ? request.sagittalModelKey() : sagittal.modelKey());
-        metadata.put("sagittalModelVersion", sagittal == null ? "" : sagittal.modelVersion());
-        metadata.put("sagittalArtifactHash", sagittal == null ? "" : sagittal.artifactHash());
+        metadata.put("sagittalModelKey", sagittal == null ? request.sagittalModelKey() : String.valueOf(sagittal.model().get("modelKey")));
+        metadata.put("sagittalModelVersion", sagittal == null ? "" : String.valueOf(sagittal.model().get("modelVersion")));
+        metadata.put("sagittalArtifactHash", sagittal == null ? "" : String.valueOf(sagittal.model().get("artifactHash")));
         metadata.put("sagittalInferenceMode", sagittal == null ? "" : sagittal.effectiveInferenceMode());
-        metadata.put("axialModelKey", axial == null ? request.axialModelKey() : axial.modelKey());
+        metadata.put("axialModelKey", axial == null ? request.axialModelKey() : String.valueOf(axial.model().get("modelKey")));
         metadata.put("axialInferenceMode", axial == null ? "" : axial.effectiveInferenceMode());
         metadata.put("sagittalInputIdPresent", request.sagittalInputId() != null);
         metadata.put("axialInputIdPresent", request.axialInputId() != null);
         metadata.put("axialInferenceRequested", request.axialInputId() != null || request.axialInputPath() != null);
-        metadata.put("dualRunReady", axial != null && "real_baseline".equals(axial.normalizedEffectiveInferenceMode()));
+        metadata.put("dualRunReady", axial != null && "real_baseline".equals(axial.effectiveInferenceMode()));
         metadata.put("traceId", response.traceId());
-        metadata.put("humanReviewRequired", response.humanReviewRequired());
-        if (sagittal != null && sagittal.metadata() != null) {
-            metadata.put("sagittalSelectedSlice", sagittal.metadata().get("selectedSlice"));
-            metadata.put("sagittalSelectedAxis", sagittal.metadata().get("selectedAxis"));
-            metadata.put("sagittalSliceCount", sagittal.metadata().get("sliceCount"));
-            metadata.put("sagittalOrientationTransform", sagittal.metadata().get("inputOrientationTransform"));
-        }
+        metadata.put("humanReviewRequired", response.governance().humanReviewRequired());
         return metadata;
     }
 

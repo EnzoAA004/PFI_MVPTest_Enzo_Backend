@@ -30,7 +30,7 @@ class AiContractControllerTest {
                     """)
                 .build()))
             .build();
-        AiContractController controller = new AiContractController(webClient, new AiServiceProperties("http://ai-module", 1));
+        AiContractController controller = new AiContractController(webClient, new AiServiceProperties("http://ai-module", 1, "v1"));
 
         Map<String, Object> response = controller.pipelineSchema();
 
@@ -49,7 +49,7 @@ class AiContractControllerTest {
         WebClient webClient = WebClient.builder()
             .exchangeFunction(request -> Mono.error(new IllegalStateException("connection refused")))
             .build();
-        AiContractController controller = new AiContractController(webClient, new AiServiceProperties("http://ai-module", 1));
+        AiContractController controller = new AiContractController(webClient, new AiServiceProperties("http://ai-module", 1, "v1"));
 
         Map<String, Object> response = controller.pipelineSchema();
 
@@ -86,7 +86,7 @@ class AiContractControllerTest {
                     """)
                 .build()))
             .build();
-        AiContractController controller = new AiContractController(webClient, new AiServiceProperties("http://ai-module", 1));
+        AiContractController controller = new AiContractController(webClient, new AiServiceProperties("http://ai-module", 1, "v1"));
 
         Map<String, Object> response = controller.pipelineSchemaVerification();
 
@@ -108,7 +108,7 @@ class AiContractControllerTest {
         WebClient webClient = WebClient.builder()
             .exchangeFunction(request -> Mono.error(new IllegalStateException("connection refused")))
             .build();
-        AiContractController controller = new AiContractController(webClient, new AiServiceProperties("http://ai-module", 1));
+        AiContractController controller = new AiContractController(webClient, new AiServiceProperties("http://ai-module", 1, "v1"));
 
         Map<String, Object> response = controller.pipelineSchemaVerification();
 

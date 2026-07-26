@@ -1,19 +1,31 @@
 package ar.edu.uade.pfi.backend.client;
 
+import ar.edu.uade.pfi.backend.config.AiMultiplanarContractVersion;
 import ar.edu.uade.pfi.backend.config.AiServiceProperties;
 import ar.edu.uade.pfi.backend.config.TraceIdFilter;
+import ar.edu.uade.pfi.backend.domain.CanonicalMultiplanarRun;
 import ar.edu.uade.pfi.backend.dto.AiInputResponseDto;
+import ar.edu.uade.pfi.backend.dto.AiMultiplanarV2RequestDto;
+import ar.edu.uade.pfi.backend.dto.AiMultiplanarV2ResponseDto;
+import ar.edu.uade.pfi.backend.dto.AiStructuredErrorV2Dto;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunRequestDto;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunResponseDto;
 import ar.edu.uade.pfi.backend.dto.PipelineRunRequestDto;
+import ar.edu.uade.pfi.backend.service.AiMultiplanarContractViolationException;
+import ar.edu.uade.pfi.backend.service.AiMultiplanarUpstreamException;
+import ar.edu.uade.pfi.backend.service.MultiplanarRealBaselineContractValidator;
+import ar.edu.uade.pfi.backend.service.MultiplanarV2RealBaselineValidator;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
 import org.slf4j.MDC;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.MultipartBodyBuilder;
@@ -31,10 +43,33 @@ public class AiServiceClient implements AiServiceOperations {
 
     private final WebClient aiWebClient;
     private final Duration timeout;
+    private final AiMultiplanarContractVersion multiplanarContractVersion;
+    private final AiMultiplanarV2RequestMapper v2RequestMapper;
+    private final AiMultiplanarV2ResponseAdapter v2ResponseAdapter;
+    private final AiMultiplanarV1ResponseAdapter v1ResponseAdapter;
+    private final MultiplanarRealBaselineContractValidator v1StrictValidator;
+    private final MultiplanarV2RealBaselineValidator v2StrictValidator;
+    private final ObjectMapper objectMapper;
 
-    public AiServiceClient(WebClient aiWebClient, AiServiceProperties properties) {
+    public AiServiceClient(
+        WebClient aiWebClient,
+        AiServiceProperties properties,
+        AiMultiplanarV2RequestMapper v2RequestMapper,
+        AiMultiplanarV2ResponseAdapter v2ResponseAdapter,
+        AiMultiplanarV1ResponseAdapter v1ResponseAdapter,
+        MultiplanarRealBaselineContractValidator v1StrictValidator,
+        MultiplanarV2RealBaselineValidator v2StrictValidator,
+        ObjectMapper objectMapper
+    ) {
         this.aiWebClient = aiWebClient;
         this.timeout = Duration.ofSeconds(properties.resolvedTimeoutSeconds());
+        this.multiplanarContractVersion = properties.resolvedMultiplanarContractVersion();
+        this.v2RequestMapper = v2RequestMapper;
+        this.v2ResponseAdapter = v2ResponseAdapter;
+        this.v1ResponseAdapter = v1ResponseAdapter;
+        this.v1StrictValidator = v1StrictValidator;
+        this.v2StrictValidator = v2StrictValidator;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -117,24 +152,89 @@ public class AiServiceClient implements AiServiceOperations {
             .block(timeout));
     }
 
+    /**
+     * A-F: resolves the configured contract version, builds the appropriate request,
+     * calls exactly one endpoint, deserializes to the matching DTO, adapts to
+     * CanonicalMultiplanarRun and returns it. There is no fallback between contracts
+     * and no retry against the other endpoint on error.
+     */
     @Override
-    public MultiplanarRunResponseDto runMultiplanar(MultiplanarRunRequestDto request) {
+    public CanonicalMultiplanarRun runMultiplanar(MultiplanarRunRequestDto request) {
+        return multiplanarContractVersion == AiMultiplanarContractVersion.V2
+            ? runMultiplanarV2(request)
+            : runMultiplanarV1(request);
+    }
+
+    private CanonicalMultiplanarRun runMultiplanarV1(MultiplanarRunRequestDto request) {
         MultiplanarRunRequestDto tracedRequest = withTraceMetadata(request);
-        return execute(() -> aiWebClient.post()
+        MultiplanarRunResponseDto response = execute(() -> aiWebClient.post()
             .uri("/multiplanar/run")
             .bodyValue(tracedRequest)
-            .exchangeToMono(response -> {
-                if (response.statusCode().is2xxSuccessful()) {
-                    return response.bodyToMono(MultiplanarRunResponseDto.class);
+            .exchangeToMono(clientResponse -> {
+                if (clientResponse.statusCode().is2xxSuccessful()) {
+                    return clientResponse.bodyToMono(MultiplanarRunResponseDto.class);
                 }
-                if (response.statusCode().is4xxClientError()) {
-                    return response.bodyToMono(String.class)
+                if (clientResponse.statusCode().is4xxClientError()) {
+                    return clientResponse.bodyToMono(String.class)
                         .defaultIfEmpty("Multiplanar run rejected by AI Module")
-                        .flatMap(body -> Mono.error(new ResponseStatusException(response.statusCode(), compactMessage(body))));
+                        .flatMap(body -> Mono.error(new ResponseStatusException(clientResponse.statusCode(), compactMessage(body))));
                 }
-                return response.createException().flatMap(Mono::error);
+                return clientResponse.createException().flatMap(Mono::error);
             })
             .block(timeout));
+        v1StrictValidator.validate(tracedRequest, response);
+        return v1ResponseAdapter.toCanonical(response);
+    }
+
+    private CanonicalMultiplanarRun runMultiplanarV2(MultiplanarRunRequestDto request) {
+        String traceId = MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY);
+        AiMultiplanarV2RequestDto v2Request = v2RequestMapper.toV2Request(request, traceId);
+        TraceIdConsistencyGuard.require(v2Request.traceId(), traceId);
+
+        AiMultiplanarV2ResponseDto response = executeV2(() -> aiWebClient.post()
+            .uri("/v2/multiplanar/run")
+            .headers(headers -> {
+                if (traceId != null && !traceId.isBlank()) {
+                    headers.set(TraceIdFilter.TRACE_ID_HEADER, traceId);
+                }
+            })
+            .bodyValue(v2Request)
+            .exchangeToMono(clientResponse -> {
+                if (clientResponse.statusCode().is2xxSuccessful()) {
+                    return clientResponse.bodyToMono(AiMultiplanarV2ResponseDto.class);
+                }
+                return clientResponse.bodyToMono(String.class)
+                    .defaultIfEmpty("")
+                    .flatMap(body -> Mono.error(buildV2Error(clientResponse.statusCode(), body, traceId)));
+            })
+            .block(timeout), traceId);
+
+        CanonicalMultiplanarRun canonical = v2ResponseAdapter.toCanonical(response);
+        v2StrictValidator.validate(request, canonical);
+        return canonical;
+    }
+
+    private RuntimeException buildV2Error(HttpStatusCode originalStatus, String body, String traceId) {
+        AiStructuredErrorV2Dto structured = tryParseStructuredError(body);
+        if (structured != null && structured.code() != null && !structured.code().isBlank()) {
+            AiMultiplanarV2ErrorCodeMapper.Mapped mapped = AiMultiplanarV2ErrorCodeMapper.resolve(structured.code());
+            String message = structured.message() == null || structured.message().isBlank()
+                ? "AI Module (v2) rejected the multiplanar request"
+                : compactMessage(structured.message());
+            String aiTraceId = structured.traceId() == null || structured.traceId().isBlank() ? traceId : structured.traceId();
+            return new AiMultiplanarUpstreamException(mapped.status(), mapped.backendCode(), message, aiTraceId);
+        }
+        AiMultiplanarV2ErrorCodeMapper.Mapped unknown = AiMultiplanarV2ErrorCodeMapper.UNKNOWN;
+        return new AiMultiplanarUpstreamException(unknown.status(), unknown.backendCode(), "AI Module (v2) respondio con un error no estructurado (status " + originalStatus.value() + ")", traceId);
+    }
+
+    private AiStructuredErrorV2Dto tryParseStructuredError(String body) {
+        if (body == null || body.isBlank()) return null;
+        try {
+            return objectMapper.readValue(body, AiStructuredErrorV2Dto.class);
+        } catch (Exception ex) {
+            return null;
+        }
     }
 
     @Override
@@ -238,6 +338,30 @@ public class AiServiceClient implements AiServiceOperations {
         } catch (RuntimeException ex) {
             throw translateException(ex);
         }
+    }
+
+    private <T> T executeV2(Supplier<T> supplier, String traceId) {
+        try {
+            return supplier.get();
+        } catch (RuntimeException ex) {
+            Throwable unwrapped = Exceptions.unwrap(ex);
+            if (unwrapped instanceof AiMultiplanarUpstreamException upstream) {
+                throw upstream;
+            }
+            if (unwrapped instanceof AiMultiplanarContractViolationException contractViolation) {
+                throw contractViolation;
+            }
+            if (isTimeout(unwrapped)) {
+                throw new AiMultiplanarUpstreamException(HttpStatus.GATEWAY_TIMEOUT, "AI_MODULE_TIMEOUT", "AI Module (v2) no respondio a tiempo", traceId);
+            }
+            String message = unwrapped.getMessage() == null ? "unknown error" : compactMessage(unwrapped.getMessage());
+            throw new AiMultiplanarUpstreamException(HttpStatus.BAD_GATEWAY, "AI_MODULE_ERROR", "AI Module (v2) no esta disponible: " + message, traceId);
+        }
+    }
+
+    private boolean isTimeout(Throwable unwrapped) {
+        return unwrapped instanceof TimeoutException
+            || compactMessage(unwrapped.getMessage() == null ? "" : unwrapped.getMessage()).toLowerCase(Locale.ROOT).contains("timeout");
     }
 
     public ResponseStatusException translateException(RuntimeException ex) {

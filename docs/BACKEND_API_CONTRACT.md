@@ -15,7 +15,7 @@ El backend usa JWT con `roles` en claims. Roles existentes:
 Endpoints protegidos:
 
 - `POST /api/ai/models/sync`: requiere `ADMIN`.
-- `GET /api/system/diagnostics`: requiere `ADMIN`.
+- `GET /api/system/diagnostics`: requiere `ADMIN`. Desde P9-B incluye `aiModule.multiplanarContractVersion` (`v1`|`v2`), `aiModule.multiplanarEndpoint` (`/multiplanar/run`|`/v2/multiplanar/run`) y `aiModule.multiplanarSchemaExpected` (`multiplanar-run-v1`|`pfi.multiplanar-run.v2`). Nunca incluye la URL base completa del AI Module.
 - `POST/PUT/GET /api/ai/runs/{multiplanarRunId}/review`: requiere `REVIEWER`, `DOCTOR` o `ADMIN`.
 
 Si el rol es insuficiente, la respuesta es `403` con mensaje semantico `Rol insuficiente`. Los intentos denegados se auditan como `access.denied` sin tokens, credenciales ni datos identificables. No existe endpoint de cache clear en este backend al momento de BE-010.
@@ -266,6 +266,15 @@ En `real_baseline` estricto (`metadata.inferenceMode=real_baseline` y `allowCont
 Si root queda `mixed`, algun plano queda `contract`/fallback, `degradedMode=true`, faltan inputs estrictos, o el contrato no preserva inferencia real, el backend devuelve error y no persiste el run como completed. Violaciones de contrato devuelven `502` con `code=AI_MULTIPLANAR_CONTRACT_VIOLATION`.
 
 El payload publico elimina rutas internas recursivamente (`inputPath`, `sourcePath`, `imagePath`, `outputFiles`, cualquier `path`, `/tmp`, `/content`, rutas Windows, Colab, Google Drive y `models/final`). Se conservan `inputId`, runIds, hashes, orientacion, spacing, quality, mediciones y flags de revision. Assets raw (`mask.npy`, `confidence.npy`) se eliminan del payload publico; solo se publican `input.png`, `overlay.png` y `mask-preview.png` via `/api/ai/assets/{planeRunId}/{plane}/{assetName}` usando el `runId` del plano, no el runId multiplanar.
+
+### Contrato AI Module v1/v2 (P9-B)
+
+El backend puede consumir dos contratos del AI Module para este mismo endpoint publico, controlado por `pfi.ai-service.multiplanar-contract-version` (`PFI_AI_SERVICE_MULTIPLANAR_CONTRACT_VERSION`, default `v1`):
+
+- `v1` -> `POST {PFI_AI_SERVICE_URL}/multiplanar/run` (`schemaVersion=multiplanar-run-v1`).
+- `v2` -> `POST {PFI_AI_SERVICE_URL}/v2/multiplanar/run` (`schemaVersion=pfi.multiplanar-run.v2`), request/response tipados (`AiMultiplanarV2RequestDto`/`AiMultiplanarV2ResponseDto`), adaptados a un modelo canonico interno (`CanonicalMultiplanarRun`/`CanonicalPlaneRun`).
+
+El contrato v2 nunca recibe `studyMetadata`, `subjectRef`, paths internos ni metadata libre — solo `caseId`, `traceId`, `inferenceMode`, `allowContractFallback` y `planes.{sagittal,axial}.{inputId,modelKey}`. La respuesta publica de `POST /api/ai/multiplanar/run` **no cambia** de shape entre v1 y v2: el backend siempre normaliza al contrato `multiplanar-run-v1` documentado arriba antes de devolverlo al frontend. Detalle completo en `docs/P9_B_BACKEND_MULTIPLANAR_V2.md`.
 
 ## GET /api/ai/assets/{runId}/{plane}/{assetName}
 

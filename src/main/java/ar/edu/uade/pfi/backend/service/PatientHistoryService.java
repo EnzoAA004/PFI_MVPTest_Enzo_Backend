@@ -87,13 +87,13 @@ public class PatientHistoryService {
     @SuppressWarnings("unchecked")
     private Map<String, List<Map<String, Object>>> measurementsByPlane(Map<String, Object> metricsSnapshot) {
         Map<String, List<Map<String, Object>>> byPlane = new LinkedHashMap<>();
+        Object planesNode = metricsSnapshot.get("planes");
+        if (!(planesNode instanceof Map<?, ?> planesMap)) return byPlane;
         for (String plane : List.of("sagittal", "axial")) {
-            Object planeNode = metricsSnapshot.get(plane);
+            Object planeNode = planesMap.get(plane);
             if (!(planeNode instanceof Map<?, ?> planeMap)) continue;
             Object measurements = planeMap.get("measurements");
-            if (!(measurements instanceof Map<?, ?> measurementsMap)) continue;
-            Object values = measurementsMap.get("values");
-            if (!(values instanceof List<?> list)) continue;
+            if (!(measurements instanceof List<?> list)) continue;
             List<Map<String, Object>> normalized = new ArrayList<>();
             for (Object item : list) {
                 if (!(item instanceof Map<?, ?> raw)) continue;

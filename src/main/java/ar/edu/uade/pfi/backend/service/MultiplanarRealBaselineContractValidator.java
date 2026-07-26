@@ -13,6 +13,7 @@ public class MultiplanarRealBaselineContractValidator {
     static final String AXIAL_MODEL_KEY = "axial_t2_alkafri";
     static final String SAGITTAL_MODEL_VERSION = "sagittal-spider-final-v1";
     static final String SAGITTAL_ARTIFACT_HASH = "cf11dcc0ad77a7c787e64a796a2fd7398ef906add461cef4b3d61f1a5238e944";
+    private static final String V2_SCHEMA_PREFIX = "pfi.multiplanar-run.v2";
 
     public boolean isStrict(MultiplanarRunRequestDto request) {
         if (request == null || request.metadata() == null) return Boolean.FALSE.equals(request == null ? null : request.allowContractFallback());
@@ -25,6 +26,10 @@ public class MultiplanarRealBaselineContractValidator {
     public void validate(MultiplanarRunRequestDto request, MultiplanarRunResponseDto response) {
         if (!isStrict(request)) return;
         require(response != null, "respuesta multiplanar vacia");
+        if (isV2Contract(response.schemaVersion())) {
+            validateV2Strict(request, response);
+            return;
+        }
         requireEquals("multiplanar_run_ready", response.status(), "status root");
         requireNotBlank(response.runId(), "runId root");
         requireEquals(request.caseId(), response.caseId(), "caseId root");
@@ -38,6 +43,26 @@ public class MultiplanarRealBaselineContractValidator {
         if (axialRequested(request)) {
             validateAxial(request, response.planes().axial());
         }
+    }
+
+    private boolean isV2Contract(String schemaVersion) {
+        return schemaVersion != null && schemaVersion.trim().startsWith(V2_SCHEMA_PREFIX);
+    }
+
+    /**
+     * The v2 contract is already strictly typed and validated at deserialization time
+     * (AiMultiplanarV2ResponseDto uses ignoreUnknown=false on critical fields), so the
+     * hardcoded v1 field-shape assertions below (modelVersion, aiOutput map, metadata
+     * keys, etc.) do not apply. Here we only assert the governance guarantees that must
+     * hold regardless of contract version.
+     */
+    private void validateV2Strict(MultiplanarRunRequestDto request, MultiplanarRunResponseDto response) {
+        requireNotBlank(response.runId(), "multiplanarRunId root");
+        requireEquals(request.caseId(), response.caseId(), "caseId root");
+        requireTrue(Boolean.TRUE.equals(response.humanReviewRequired()), "humanReviewRequired root debe ser true");
+        requireTrue(Boolean.TRUE.equals(response.notClinicalDiagnosis()), "notClinicalDiagnosis root debe ser true");
+        requireTrue(!Boolean.TRUE.equals(response.degradedMode()), "degradedMode root no puede ser true");
+        require(response.planes() != null && response.planes().sagittal() != null, "plano sagittal obligatorio");
     }
 
     public void validateSagittal(MultiplanarRunRequestDto request, MultiplanarRunResponseDto.PlaneDto plane) {

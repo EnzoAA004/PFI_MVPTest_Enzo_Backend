@@ -2,6 +2,7 @@ package ar.edu.uade.pfi.backend.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
@@ -11,12 +12,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
 import ar.edu.uade.pfi.backend.config.ApiExceptionHandler;
 import ar.edu.uade.pfi.backend.controller.AiMultiplanarController;
+import ar.edu.uade.pfi.backend.domain.CanonicalMultiplanarRun;
+import ar.edu.uade.pfi.backend.domain.CanonicalPlaneRun;
 import ar.edu.uade.pfi.backend.domain.Study;
 import ar.edu.uade.pfi.backend.domain.StudyRun;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunRequestDto;
-import ar.edu.uade.pfi.backend.dto.MultiplanarRunResponseDto;
 import ar.edu.uade.pfi.backend.repository.PostgresStudyRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -56,7 +59,7 @@ class MultiplanarRunPersistenceServiceTest {
             false,
             Map.of("inferenceMode", "real_baseline", "allowContractFallback", false)
         );
-        MultiplanarRunResponseDto response = response();
+        CanonicalMultiplanarRun response = response();
 
         persistence.persistSuccessfulRun(request, response);
 
@@ -110,7 +113,7 @@ class MultiplanarRunPersistenceServiceTest {
                 "axialMode", "optional_not_provided"
             )
         );
-        MultiplanarRunResponseDto response = sagittalOnlyResponse();
+        CanonicalMultiplanarRun response = sagittalOnlyResponse();
 
         persistence.persistSuccessfulRun(request, response);
 
@@ -133,16 +136,68 @@ class MultiplanarRunPersistenceServiceTest {
         assertTrue(byRunId.artifacts().stream().allMatch(artifact -> artifact.plane().equals("sagittal")));
         assertTrue(byRunId.artifacts().stream().anyMatch(artifact -> artifact.assetName().equals("overlay.png")));
 
-        Map<String, Object> sagittalMetrics = (Map<String, Object>) byRunId.metricsSnapshot().get("sagittal");
-        assertEquals("input-sag-only", sagittalMetrics.get("inputId"));
-        assertEquals("sagittal-spider-final-v1", sagittalMetrics.get("modelVersion"));
-        assertEquals(MultiplanarRealBaselineContractValidator.SAGITTAL_ARTIFACT_HASH, sagittalMetrics.get("artifactHash"));
-        assertEquals(9, ((Number) sagittalMetrics.get("selectedSlice")).intValue());
-        assertEquals(2, ((Number) sagittalMetrics.get("selectedAxis")).intValue());
-        assertEquals(17, ((Number) sagittalMetrics.get("sliceCount")).intValue());
-        assertEquals("move_axis_0_to_last", sagittalMetrics.get("inputOrientationTransform"));
-        assertEquals(true, sagittalMetrics.get("humanReviewRequired"));
-        assertEquals(true, sagittalMetrics.get("notClinicalDiagnosis"));
+        Map<String, Object> snapshot = byRunId.metricsSnapshot();
+        assertEquals("pfi.backend-run-snapshot.v2", snapshot.get("schemaVersion"));
+        assertEquals("multiplanar-run-v1", snapshot.get("sourceSchemaVersion"));
+        Map<String, Object> planesSnapshot = (Map<String, Object>) snapshot.get("planes");
+        Map<String, Object> sagittalSnapshot = (Map<String, Object>) planesSnapshot.get("sagittal");
+        Map<String, Object> inputSnapshot = (Map<String, Object>) sagittalSnapshot.get("input");
+        Map<String, Object> modelSnapshot = (Map<String, Object>) sagittalSnapshot.get("model");
+        assertEquals("input-sag-only", inputSnapshot.get("inputId"));
+        assertEquals("sagittal-spider-final-v1", modelSnapshot.get("modelVersion"));
+        assertEquals(MultiplanarRealBaselineContractValidator.SAGITTAL_ARTIFACT_HASH, modelSnapshot.get("artifactHash"));
+        assertEquals(8, ((Number) inputSnapshot.get("selectedSliceIndex")).intValue());
+        assertEquals(List.of(352, 384, 17), inputSnapshot.get("nativeShape"));
+        Map<String, Object> governanceSnapshot = (Map<String, Object>) snapshot.get("governance");
+        assertEquals(true, governanceSnapshot.get("humanReviewRequired"));
+        assertEquals(true, governanceSnapshot.get("notClinicalDiagnosis"));
+
+        List<Map<String, Object>> measurements = (List<Map<String, Object>>) sagittalSnapshot.get("measurements");
+        assertEquals(1, measurements.size());
+        Map<String, Object> measurement = measurements.get(0);
+        assertEquals("canalAreaMm2", measurement.get("id"));
+        assertEquals(82.4, measurement.get("aiValue"));
+        assertEquals(82.4, measurement.get("value"));
+        assertEquals("AI", measurement.get("source"));
+        assertEquals("sagittal", measurement.get("plane"));
+        assertNull(measurement.get("level"));
+    }
+
+    @Test
+    void syntheticRunIsNeverPersistedWithTheSameStatusAsARealCompletedRun() {
+        PostgresStudyRepository repository = new PostgresStudyRepository(
+            new ObjectMapper(),
+            postgres.getJdbcUrl() + "&user=" + postgres.getUsername() + "&password=" + postgres.getPassword(),
+            true
+        );
+        StudyRunService studyRunService = new StudyRunService(repository);
+        MultiplanarRunPersistenceService persistence = new MultiplanarRunPersistenceService(studyRunService);
+
+        MultiplanarRunRequestDto request = new MultiplanarRunRequestDto(
+            "CASE-BE-SYNTHETIC", "input-sag-synthetic", null, null, null,
+            "sagittal_spider", "axial_t2_alkafri", true,
+            Map.of("inferenceMode", "demo")
+        );
+        CanonicalPlaneRun sagittal = new CanonicalPlaneRun(
+            "run-sag-synthetic", "sagittal", "ready", "demo", true, "model_unavailable",
+            Map.of("modelKey", "sagittal_spider"), Map.of("inputId", "input-sag-synthetic"),
+            Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), Map.of()
+        );
+        Map<String, CanonicalPlaneRun> planes = new LinkedHashMap<>();
+        planes.put("sagittal", sagittal);
+        CanonicalMultiplanarRun response = new CanonicalMultiplanarRun(
+            "completed", "pfi.multiplanar-run.v2", "multi-synthetic", "trace-synthetic", "CASE-BE-SYNTHETIC",
+            "sagittal_only", "demo", "demo",
+            List.of("sagittal"), List.of("sagittal"), true, "model_unavailable",
+            Map.of(), planes, Map.of(), Map.of(), Map.of("status", "pending"),
+            new CanonicalMultiplanarRun.Governance(true, true, true, false)
+        );
+
+        persistence.persistSuccessfulRun(request, response);
+
+        StudyRun persisted = studyRunService.findRunByMultiplanarRunId("multi-synthetic").orElseThrow();
+        assertEquals("completed_synthetic", persisted.status());
+        assertFalse("completed".equals(persisted.status()));
     }
 
     @Test
@@ -184,106 +239,84 @@ class MultiplanarRunPersistenceServiceTest {
         assertTrue(recovered.artifacts().stream().allMatch(artifact -> artifact.studyRunId().equals(recovered.id())));
     }
 
-    private MultiplanarRunResponseDto response() {
-        return new MultiplanarRunResponseDto(
-            "multi-be006",
-            "trace-be006",
-            "real_baseline",
-            new MultiplanarRunResponseDto.PlanesDto(
-                new MultiplanarRunResponseDto.PlaneDto(
-                    "run-sag-be006",
-                    "sagittal",
-                    "sagittal_spider",
-                    "completed",
-                    "real_baseline",
-                    Map.of("artifactHash", "sha256:sag-be006"),
-                    List.of(Map.of("label", "canal_lumbar")),
-                    List.of(Map.of("name", "L4_left_pedicle")),
-                    Map.of("canalAreaMm2", 82.4),
-                    Map.of("quality", 0.94),
-                    Map.of("overlay", "artifacts/run-sag-be006/overlay.png")
-                ),
-                new MultiplanarRunResponseDto.PlaneDto(
-                    "run-ax-be006",
-                    "axial",
-                    "axial_t2_alkafri",
-                    "completed",
-                    "real_baseline",
-                    Map.of("artifactHash", "sha256:ax-be006"),
-                    List.of(Map.of("label", "estenosis")),
-                    List.of(Map.of("name", "canal_center")),
-                    Map.of("leftForamenMm", 3.1),
-                    Map.of("quality", 0.88),
-                    Map.of("maskPreview", "mask-preview.png")
-                )
-            ),
-            Map.of("workspace", "workspace.json"),
-            Map.of("status", "pendiente")
+    private Map<String, Object> asset(String planeRunId, String plane, String assetName) {
+        Map<String, Object> asset = new LinkedHashMap<>();
+        asset.put("assetName", assetName);
+        asset.put("role", assetName.startsWith("mask") ? "mask_preview" : "preview");
+        asset.put("contentType", "image/png");
+        asset.put("generated", true);
+        asset.put("relativePath", "/assets/" + planeRunId + "/" + plane + "/" + assetName);
+        return asset;
+    }
+
+    private CanonicalMultiplanarRun response() {
+        CanonicalPlaneRun sagittal = new CanonicalPlaneRun(
+            "run-sag-be006", "sagittal", "completed", "real_baseline", false, null,
+            Map.of("modelKey", "sagittal_spider", "artifactHash", "sha256:sag-be006"),
+            Map.of("inputId", "input-sag-be006"),
+            Map.of(),
+            List.of(Map.of("label", "canal_lumbar")),
+            List.of(asset("run-sag-be006", "sagittal", "overlay.png")),
+            List.of(),
+            List.of(Map.of("name", "L4_left_pedicle")),
+            List.of(Map.of("id", "canalAreaMm2", "value", 82.4)),
+            Map.of("quality", 0.94)
+        );
+        CanonicalPlaneRun axial = new CanonicalPlaneRun(
+            "run-ax-be006", "axial", "completed", "real_baseline", false, null,
+            Map.of("modelKey", "axial_t2_alkafri", "artifactHash", "sha256:ax-be006"),
+            Map.of("inputId", "input-ax-be006"),
+            Map.of(),
+            List.of(Map.of("label", "estenosis")),
+            List.of(asset("run-ax-be006", "axial", "mask-preview.png")),
+            List.of(),
+            List.of(Map.of("name", "canal_center")),
+            List.of(Map.of("id", "leftForamenMm", "value", 3.1)),
+            Map.of("quality", 0.88)
+        );
+        Map<String, CanonicalPlaneRun> planes = new LinkedHashMap<>();
+        planes.put("sagittal", sagittal);
+        planes.put("axial", axial);
+        return new CanonicalMultiplanarRun(
+            "multiplanar_run_ready", "multiplanar-run-v1", "multi-be006", "trace-be006", "CASE-BE-006",
+            "dual_plane_with_3d_context", "real_baseline", "real_baseline",
+            List.of("sagittal", "axial"), List.of("sagittal", "axial"), false, null,
+            Map.of(), planes, Map.of(), Map.of(), Map.of("status", "pendiente"),
+            new CanonicalMultiplanarRun.Governance(true, true, true, false)
         );
     }
 
-    private MultiplanarRunResponseDto sagittalOnlyResponse() {
-        return new MultiplanarRunResponseDto(
-            "multiplanar_run_ready",
-            "multiplanar-run-v1",
-            "multi-sag-only",
-            "trace-sag-only",
-            "CASE-BE-SAG-ONLY",
-            "sagittal_only_with_optional_axial",
-            "real_baseline",
-            "mixed",
-            new MultiplanarRunResponseDto.PlanesDto(
-                new MultiplanarRunResponseDto.PlaneDto(
-                    "run-sag-only",
-                    "CASE-BE-SAG-ONLY",
-                    "sagittal",
-                    "sagittal_spider",
-                    "sagittal-spider-final-v1",
-                    MultiplanarRealBaselineContractValidator.SAGITTAL_ARTIFACT_HASH,
-                    "completed",
-                    "real_baseline",
-                    "real_baseline",
-                    "real_baseline",
-                    false,
-                    "input-sag-only",
-                    Map.of("artifactHash", MultiplanarRealBaselineContractValidator.SAGITTAL_ARTIFACT_HASH),
-                    Map.of(
-                        "inferenceMode", "real_baseline",
-                        "artifactHash", MultiplanarRealBaselineContractValidator.SAGITTAL_ARTIFACT_HASH,
-                        "realInferenceAvailable", true
-                    ),
-                    List.of(Map.of("label", "sagittal")),
-                    List.of(),
-                    List.of(Map.of("label", "canal_lumbar")),
-                    List.of(Map.of("name", "L4_left_pedicle")),
-                    Map.of("status", "real_baseline_ready", "canalAreaMm2", 82.4),
-                    Map.of("quality", 0.94),
-                    Map.of("confidence", 0.94),
-                    Map.of("input.png", "input.png", "overlay.png", "overlay.png"),
-                    Map.of(
-                        "selectedSlice", 9,
-                        "selectedAxis", 2,
-                        "sliceCount", 17,
-                        "inputShapeNative", List.of(17, 512, 512),
-                        "inputShapeCanonical", List.of(512, 512, 17),
-                        "inputOrientationTransform", "move_axis_0_to_last",
-                        "inPlaneSpacing", List.of(0.7, 0.7),
-                        "inPlaneSpacingUnit", "mm"
-                    ),
-                    true,
-                    true,
-                    false
-                ),
-                null
+    private CanonicalMultiplanarRun sagittalOnlyResponse() {
+        CanonicalPlaneRun sagittal = new CanonicalPlaneRun(
+            "run-sag-only", "sagittal", "completed", "real_baseline", false, null,
+            Map.of(
+                "modelKey", "sagittal_spider",
+                "modelVersion", "sagittal-spider-final-v1",
+                "artifactHash", MultiplanarRealBaselineContractValidator.SAGITTAL_ARTIFACT_HASH
             ),
-            Map.of("workspace", "workspace.json"),
-            null,
+            Map.of(
+                "inputId", "input-sag-only",
+                "nativeShape", List.of(352, 384, 17),
+                "canonicalShape", List.of(352, 384, 17),
+                "selectedSliceIndex", 8
+            ),
+            Map.of("width", 256, "height", 256),
+            List.of(Map.of("label", "sagittal")),
+            List.of(asset("run-sag-only", "sagittal", "input.png"), asset("run-sag-only", "sagittal", "overlay.png")),
+            List.of(),
+            List.of(Map.of("name", "L4_left_pedicle")),
+            List.of(Map.of("id", "canalAreaMm2", "value", 82.4)),
+            Map.of("confidence", 0.94)
+        );
+        Map<String, CanonicalPlaneRun> planes = new LinkedHashMap<>();
+        planes.put("sagittal", sagittal);
+        return new CanonicalMultiplanarRun(
+            "multiplanar_run_ready", "multiplanar-run-v1", "multi-sag-only", "trace-sag-only", "CASE-BE-SAG-ONLY",
+            "sagittal_only_with_optional_axial", "real_baseline", "mixed",
+            List.of("sagittal"), List.of("sagittal"), false, null,
             Map.of("sagittalRunReady", true, "axialRunReady", false, "dualRunReady", false),
-            Map.of("status", "pending"),
-            Map.of("axialMode", "optional_not_provided"),
-            true,
-            true,
-            false
+            planes, Map.of(), Map.of(), Map.of("status", "pending"),
+            new CanonicalMultiplanarRun.Governance(true, true, true, false)
         );
     }
 }
