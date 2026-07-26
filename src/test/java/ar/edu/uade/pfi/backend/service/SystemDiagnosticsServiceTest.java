@@ -1,14 +1,24 @@
 package ar.edu.uade.pfi.backend.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import ar.edu.uade.pfi.backend.auth.AuthService;
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Proxy;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
 class SystemDiagnosticsServiceTest {
 
@@ -73,6 +83,45 @@ class SystemDiagnosticsServiceTest {
         assertTrue(aiModule.containsKey("artifactSummary"));
         assertTrue(aiModule.containsKey("readiness"));
         assertTrue(aiModule.containsKey("evaluationEvidence"));
+    }
+
+    @Test
+    void productionConstructorIsAutowiredAndNoDefaultConstructorIsRequired() {
+        Constructor<?>[] constructors = SystemDiagnosticsService.class.getDeclaredConstructors();
+
+        assertFalse(Arrays.stream(constructors).anyMatch(constructor -> constructor.getParameterCount() == 0));
+        Constructor<?> autowired = Arrays.stream(constructors)
+            .filter(constructor -> constructor.isAnnotationPresent(Autowired.class))
+            .findFirst()
+            .orElseThrow();
+
+        assertEquals(6, autowired.getParameterCount());
+        assertEquals(AiServiceOperations.class, autowired.getParameterTypes()[0]);
+        assertEquals(PostgresReviewStoreService.class, autowired.getParameterTypes()[1]);
+        assertEquals(AuthService.class, autowired.getParameterTypes()[2]);
+        assertEquals(ObjectProvider.class, autowired.getParameterTypes()[3]);
+    }
+
+    @Test
+    void applicationContextCreatesSystemDiagnosticsServiceWithProductionConstructor() {
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
+            AuthService authService = mock(AuthService.class);
+            when(authService.diagnostics()).thenReturn(Map.of("enabled", true, "status", "ok"));
+            context.getEnvironment().getSystemProperties().put("pfi.auth.enabled", "false");
+            context.getEnvironment().getSystemProperties().put("pfi.persistence.mode", "memory");
+            context.registerBean(AiServiceOperations.class, () -> aiClient(Map.of("status", "ok")));
+            context.registerBean(PostgresReviewStoreService.class, () -> new PostgresReviewStoreService(new ObjectMapper(), "memory", ""));
+            context.registerBean(AuthService.class, () -> authService);
+            context.registerBean(SystemDiagnosticsService.class);
+
+            context.refresh();
+
+            SystemDiagnosticsService service = context.getBean(SystemDiagnosticsService.class);
+            assertNotNull(service);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> assetStorage = (Map<String, Object>) service.diagnostics().get("assetStorage");
+            assertEquals("none", assetStorage.get("mode"));
+        }
     }
 
     private AiServiceOperations aiClient(Map<String, Object> healthResponse) {

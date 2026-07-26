@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -20,7 +21,7 @@ public class SystemDiagnosticsService {
     private final boolean authEnabled;
     private final String persistenceMode;
 
-    public SystemDiagnosticsService(
+    SystemDiagnosticsService(
         AiServiceOperations aiServiceClient,
         PostgresReviewStoreService postgresReviewStoreService,
         AuthService authService,
@@ -35,6 +36,7 @@ public class SystemDiagnosticsService {
         this.persistenceMode = persistenceMode;
     }
 
+    @Autowired
     public SystemDiagnosticsService(
         AiServiceOperations aiServiceClient,
         PostgresReviewStoreService postgresReviewStoreService,
