@@ -40,6 +40,8 @@ public interface StudyRepository {
 
     RunReview saveReview(String multiplanarRunId, String reviewStatus, String reviewer, Instant reviewedAt, String comments, List<MeasurementCorrection> corrections);
 
+    RunReview saveReview(String multiplanarRunId, String reviewStatus, String reviewer, Instant reviewedAt, String comments, List<MeasurementCorrection> corrections, DomainAuditEvent auditEvent);
+
     Optional<RunReview> findReviewByMultiplanarRunId(String multiplanarRunId);
 
     List<MeasurementCorrection> findCorrectionsByStudyRunId(String studyRunId);

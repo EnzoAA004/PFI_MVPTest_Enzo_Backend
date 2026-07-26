@@ -1,5 +1,7 @@
 package ar.edu.uade.pfi.backend.service;
 
+import java.util.Locale;
+
 public final class ReviewStatusMapper {
     private ReviewStatusMapper() {}
 
@@ -16,12 +18,14 @@ public final class ReviewStatusMapper {
 
     public static String toDbStatus(String apiStatus) {
         if (apiStatus == null || apiStatus.isBlank()) return null;
-        return switch (apiStatus) {
+        String normalized = apiStatus.trim().toLowerCase(Locale.ROOT);
+        return switch (normalized) {
             case "pendiente" -> "pending";
             case "aceptado" -> "accepted";
             case "observado" -> "observed";
-            case "descartado" -> "rejected";
-            default -> apiStatus;
+            case "descartado", "rechazado" -> "rejected";
+            case "editado" -> "edited";
+            default -> normalized;
         };
     }
 

@@ -182,3 +182,11 @@ CREATE TABLE IF NOT EXISTS domain_audit_events (
 CREATE INDEX IF NOT EXISTS idx_domain_audit_events_trace_id ON domain_audit_events(trace_id);
 CREATE INDEX IF NOT EXISTS idx_domain_audit_events_entity_id ON domain_audit_events(entity_id);
 CREATE INDEX IF NOT EXISTS idx_domain_audit_events_action ON domain_audit_events(action);
+
+CREATE TABLE IF NOT EXISTS domain_legacy_review_backfill_runs (
+    id TEXT PRIMARY KEY,
+    migrated_count INTEGER NOT NULL DEFAULT 0,
+    skipped_count INTEGER NOT NULL DEFAULT 0,
+    unmatched_count INTEGER NOT NULL DEFAULT 0,
+    executed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

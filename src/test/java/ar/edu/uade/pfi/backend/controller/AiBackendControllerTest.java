@@ -9,11 +9,19 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
+import ar.edu.uade.pfi.backend.client.AiServiceOperations;
+import ar.edu.uade.pfi.backend.domain.Study;
+import ar.edu.uade.pfi.backend.repository.InMemoryStudyRepository;
+import ar.edu.uade.pfi.backend.service.AiBackendService;
+import ar.edu.uade.pfi.backend.service.PostgresReviewStoreService;
+import ar.edu.uade.pfi.backend.service.ReviewStoreService;
+import ar.edu.uade.pfi.backend.service.RunReviewService;
+import ar.edu.uade.pfi.backend.service.StudyRunService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,32 +32,60 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class AiBackendControllerTest {
     private Map<String, Object> aiClientResponses;
-    private Object aiBackendService;
+    private AiBackendService aiBackendService;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() throws Exception {
-        Class<?> clientType = Class.forName("ar.edu.uade.pfi.backend.client.AiServiceOperations");
-        Class<?> postgresReviewStoreType = Class.forName("ar.edu.uade.pfi.backend.service.PostgresReviewStoreService");
-        Class<?> reviewStoreType = Class.forName("ar.edu.uade.pfi.backend.service.ReviewStoreService");
-        Class<?> serviceType = Class.forName("ar.edu.uade.pfi.backend.service.AiBackendService");
-        Class<?> controllerType = Class.forName("ar.edu.uade.pfi.backend.controller.AiBackendController");
-
         aiClientResponses = new HashMap<>();
-        Object aiServiceClient = Proxy.newProxyInstance(
-            clientType.getClassLoader(),
-            new Class<?>[] {clientType},
+        AiServiceOperations aiServiceClient = (AiServiceOperations) Proxy.newProxyInstance(
+            AiServiceOperations.class.getClassLoader(),
+            new Class<?>[] {AiServiceOperations.class},
             (proxy, method, args) -> aiClientResponses.get(method.getName())
         );
-        Object reviewStoreService = reviewStoreType
-            .getConstructor(postgresReviewStoreType, ObjectMapper.class)
-            .newInstance(Mockito.mock(postgresReviewStoreType), new ObjectMapper());
-        aiBackendService = serviceType
-            .getConstructor(clientType, reviewStoreType)
-            .newInstance(aiServiceClient, reviewStoreService);
-        Object controller = controllerType
-            .getConstructor(serviceType)
-            .newInstance(aiBackendService);
+        ReviewStoreService reviewStoreService = new ReviewStoreService(
+            Mockito.mock(PostgresReviewStoreService.class),
+            new ObjectMapper()
+        );
+        InMemoryStudyRepository repository = new InMemoryStudyRepository();
+        StudyRunService studyRunService = new StudyRunService(repository);
+        Study study = studyRunService.createStudy("CASE-123", "created");
+        studyRunService.createRunWithId(
+            java.util.UUID.randomUUID().toString(),
+            study,
+            "run-123",
+            "trace-123",
+            "real_baseline",
+            "real_baseline",
+            "sagittal_spider",
+            "",
+            "sha256:sag",
+            "",
+            "run-sag-123",
+            "",
+            Map.of("sagittal", Map.of("overlay.png", "/api/ai/assets/run-sag-123/sagittal/overlay.png")),
+            Map.of("humanReviewRequired", true, "notClinicalDiagnosis", true),
+            List.of(),
+            "completed",
+            "pending",
+            "",
+            null,
+            ""
+        );
+        aiBackendService = new AiBackendService(
+            aiServiceClient,
+            reviewStoreService,
+            null,
+            null,
+            null,
+            null,
+            null,
+            repository,
+            null,
+            null,
+            new RunReviewService(repository)
+        );
+        AiBackendController controller = new AiBackendController(aiBackendService);
 
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     }

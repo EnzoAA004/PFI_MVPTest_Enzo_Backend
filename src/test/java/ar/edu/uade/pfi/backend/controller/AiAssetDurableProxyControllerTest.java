@@ -111,7 +111,8 @@ class AiAssetDurableProxyControllerTest {
             null,
             repository,
             storage,
-            snapshotService
+            snapshotService,
+            null
         );
         return MockMvcBuilders.standaloneSetup(new AiBackendController(service))
             .setControllerAdvice(new ApiExceptionHandler())

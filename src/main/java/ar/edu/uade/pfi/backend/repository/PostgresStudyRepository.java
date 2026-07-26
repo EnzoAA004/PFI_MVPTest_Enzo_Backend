@@ -380,9 +380,15 @@ public class PostgresStudyRepository implements StudyRepository {
 
     @Override
     public RunReview saveReview(String multiplanarRunId, String reviewStatus, String reviewer, Instant reviewedAt, String comments, List<MeasurementCorrection> corrections) {
+        return saveReview(multiplanarRunId, reviewStatus, reviewer, reviewedAt, comments, corrections, null);
+    }
+
+    @Override
+    public RunReview saveReview(String multiplanarRunId, String reviewStatus, String reviewer, Instant reviewedAt, String comments, List<MeasurementCorrection> corrections, DomainAuditEvent auditEvent) {
         try (Connection connection = connection()) {
             connection.setAutoCommit(false);
             StudyRun run;
+            Instant updatedAt = reviewedAt == null ? Instant.now() : reviewedAt;
             try {
                 try (PreparedStatement statement = connection.prepareStatement("""
                     UPDATE domain_study_runs
@@ -391,9 +397,9 @@ public class PostgresStudyRepository implements StudyRepository {
                     """)) {
                     statement.setString(1, reviewStatus);
                     statement.setString(2, reviewer);
-                    statement.setTimestamp(3, Timestamp.from(reviewedAt));
+                    statement.setTimestamp(3, reviewedAt == null ? null : Timestamp.from(reviewedAt));
                     statement.setString(4, comments);
-                    statement.setTimestamp(5, Timestamp.from(reviewedAt));
+                    statement.setTimestamp(5, Timestamp.from(updatedAt));
                     statement.setString(6, multiplanarRunId);
                     if (statement.executeUpdate() == 0) {
                         throw new IllegalArgumentException("run_not_found");
@@ -401,6 +407,7 @@ public class PostgresStudyRepository implements StudyRepository {
                 }
                 run = findRun(connection, "multiplanar_run_id", multiplanarRunId).orElseThrow();
                 replaceCorrections(connection, run.id(), corrections);
+                if (auditEvent != null) saveAuditEvent(connection, auditEvent);
                 connection.commit();
             } catch (Exception ex) {
                 connection.rollback();
@@ -438,7 +445,16 @@ public class PostgresStudyRepository implements StudyRepository {
 
     @Override
     public DomainAuditEvent saveAuditEvent(DomainAuditEvent event) {
-        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+        try (Connection connection = connection()) {
+            saveAuditEvent(connection, event);
+            return event;
+        } catch (Exception ex) {
+            throw new IllegalStateException("Could not save audit event", ex);
+        }
+    }
+
+    private void saveAuditEvent(Connection connection, DomainAuditEvent event) throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement("""
             INSERT INTO domain_audit_events(id, actor, action, entity_id, trace_id, metadata, created_at)
             VALUES (?::uuid, ?, ?, ?, ?, ?::jsonb, ?)
             """)) {
@@ -450,9 +466,6 @@ public class PostgresStudyRepository implements StudyRepository {
             statement.setString(6, objectMapper.writeValueAsString(event.metadata()));
             statement.setTimestamp(7, Timestamp.from(event.timestamp()));
             statement.executeUpdate();
-            return event;
-        } catch (Exception ex) {
-            throw new IllegalStateException("Could not save audit event", ex);
         }
     }
 

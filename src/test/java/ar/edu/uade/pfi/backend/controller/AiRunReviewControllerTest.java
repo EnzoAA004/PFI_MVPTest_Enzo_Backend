@@ -123,6 +123,37 @@ class AiRunReviewControllerTest {
     }
 
     @Test
+    void pendingDraftAndSpanishRejectedAliasPersistInDomainModel() throws Exception {
+        seedRun("multi-review-pending", "trace-review-pending");
+
+        mockMvc.perform(put("/api/ai/runs/multi-review-pending/review")
+                .with(reviewer())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"reviewStatus":"pending","comments":"Borrador pendiente con mediciones.","corrections":[]}
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.reviewStatus").value("pending"))
+            .andExpect(jsonPath("$.reviewedAt").doesNotExist());
+
+        assertTrue(repository.findRunByMultiplanarRunId("multi-review-pending")
+            .filter(run -> "pending".equals(run.reviewStatus()) && run.reviewedAt() == null)
+            .isPresent());
+
+        mockMvc.perform(put("/api/ai/runs/multi-review-pending/review")
+                .with(reviewer())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"reviewStatus":"descartado","reviewer":"dra-demo","comments":"Descartado por inconsistencia academica."}
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.reviewStatus").value("rejected"));
+
+        assertTrue(repository.findAuditEventsByEntityId("multi-review-pending").stream()
+            .anyMatch(event -> "review.updated".equals(event.action())));
+    }
+
+    @Test
     void rejectsMissingRunInvalidStatusAndMissingReviewer() throws Exception {
         mockMvc.perform(post("/api/ai/runs/missing-run/review")
                 .with(reviewer())
@@ -149,6 +180,15 @@ class AiRunReviewControllerTest {
                     {"reviewStatus":"accepted","reviewer":""}
                     """))
             .andExpect(status().isBadRequest());
+
+        mockMvc.perform(post("/api/ai/runs/multi-review-003/review")
+                .with(reviewer())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"reviewStatus":"rejected","reviewer":"dra-demo","comments":""}
+                    """))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("REVIEW_COMMENT_REQUIRED"));
     }
 
     @Test

@@ -12,6 +12,8 @@ import ar.edu.uade.pfi.backend.dto.ReviewExportResponseDto;
 import ar.edu.uade.pfi.backend.dto.ReviewSnapshotDto;
 import ar.edu.uade.pfi.backend.dto.ReviewStatusDto;
 import ar.edu.uade.pfi.backend.dto.ReviewUpdateRequestDto;
+import ar.edu.uade.pfi.backend.dto.RunReviewRequestDto;
+import ar.edu.uade.pfi.backend.dto.RunReviewResponseDto;
 import ar.edu.uade.pfi.backend.repository.StudyRepository;
 import ar.edu.uade.pfi.backend.util.ResponseNormalizer;
 import ar.edu.uade.pfi.backend.domain.RunArtifact;
@@ -50,13 +52,14 @@ public class AiBackendService {
     private final StudyRepository studyRepository;
     private final RunAssetContentStorage assetContentStorage;
     private final RunAssetSnapshotService runAssetSnapshotService;
+    private final RunReviewService runReviewService;
 
     public AiBackendService(AiServiceOperations aiServiceClient, ReviewStoreService reviewStoreService) {
-        this(aiServiceClient, reviewStoreService, null, null, null, null, null, null, (RunAssetContentStorage) null, null);
+        this(aiServiceClient, reviewStoreService, null, null, null, null, null, null, (RunAssetContentStorage) null, null, null);
     }
 
     public AiBackendService(AiServiceOperations aiServiceClient, ReviewStoreService reviewStoreService, AuditService auditService) {
-        this(aiServiceClient, reviewStoreService, auditService, null, null, null, null, null, (RunAssetContentStorage) null, null);
+        this(aiServiceClient, reviewStoreService, auditService, null, null, null, null, null, (RunAssetContentStorage) null, null, null);
     }
 
     public AiBackendService(
@@ -78,6 +81,7 @@ public class AiBackendService {
             modelReadinessResolver,
             null,
             (RunAssetContentStorage) null,
+            null,
             null
         );
     }
@@ -93,7 +97,8 @@ public class AiBackendService {
         AiModelReadinessResolver modelReadinessResolver,
         StudyRepository studyRepository,
         ObjectProvider<RunAssetContentStorage> assetContentStorageProvider,
-        ObjectProvider<RunAssetSnapshotService> runAssetSnapshotServiceProvider
+        ObjectProvider<RunAssetSnapshotService> runAssetSnapshotServiceProvider,
+        ObjectProvider<RunReviewService> runReviewServiceProvider
     ) {
         this(
             aiServiceClient,
@@ -105,7 +110,8 @@ public class AiBackendService {
             modelReadinessResolver,
             studyRepository,
             assetContentStorageProvider.getIfAvailable(),
-            runAssetSnapshotServiceProvider.getIfAvailable()
+            runAssetSnapshotServiceProvider.getIfAvailable(),
+            runReviewServiceProvider.getIfAvailable()
         );
     }
 
@@ -119,7 +125,8 @@ public class AiBackendService {
         AiModelReadinessResolver modelReadinessResolver,
         StudyRepository studyRepository,
         RunAssetContentStorage assetContentStorage,
-        RunAssetSnapshotService runAssetSnapshotService
+        RunAssetSnapshotService runAssetSnapshotService,
+        RunReviewService runReviewService
     ) {
         this.aiServiceClient = aiServiceClient;
         this.reviewStoreService = reviewStoreService;
@@ -131,6 +138,7 @@ public class AiBackendService {
         this.studyRepository = studyRepository;
         this.assetContentStorage = assetContentStorage;
         this.runAssetSnapshotService = runAssetSnapshotService;
+        this.runReviewService = runReviewService;
     }
 
     public Map<String, Object> health() {
@@ -407,7 +415,22 @@ public class AiBackendService {
 
     public ReviewStatusDto updateReview(String runId, ReviewUpdateRequestDto request) {
         ReviewUpdateRequestDto normalizedRequest = validateReviewDecision(request);
-        return reviewStoreService.updateReview(runId, normalizedRequest);
+        if (runReviewService == null) {
+            throw new DatabaseUnavailableException("Persistencia canonica de revision no disponible.");
+        }
+        RunReviewResponseDto response = runReviewService.saveReview(runId, new RunReviewRequestDto(
+            ReviewStatusMapper.toDbStatus(normalizedRequest.status()),
+            normalizedRequest.reviewer(),
+            normalizedRequest.notes(),
+            List.of()
+        ));
+        return new ReviewStatusDto(
+            response.multiplanarRunId(),
+            ReviewStatusMapper.toApiStatus(response.reviewStatus()),
+            response.comments(),
+            response.reviewer(),
+            response.reviewedAt()
+        );
     }
 
     public ReviewSnapshotDto reviewHistory() {

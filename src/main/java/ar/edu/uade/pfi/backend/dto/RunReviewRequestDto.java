@@ -7,7 +7,7 @@ import java.util.List;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record RunReviewRequestDto(
     @NotBlank String reviewStatus,
-    @NotBlank String reviewer,
+    String reviewer,
     String comments,
     List<MeasurementCorrectionDto> corrections
 ) {}

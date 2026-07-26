@@ -7,7 +7,6 @@ import ar.edu.uade.pfi.backend.service.AuditService;
 import ar.edu.uade.pfi.backend.service.RunReviewService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -72,13 +71,6 @@ public class AiRunReviewController {
     }
 
     private RunReviewResponseDto saveAndAudit(String multiplanarRunId, RunReviewRequestDto request) {
-        RunReviewResponseDto response = service.saveReview(multiplanarRunId, request);
-        if (auditService != null) {
-            auditService.record(response.reviewer(), "review.updated", multiplanarRunId, response.traceId(), Map.of(
-                "reviewStatus", response.reviewStatus(),
-                "correctionCount", response.corrections().size()
-            ));
-        }
-        return response;
+        return service.saveReview(multiplanarRunId, request);
     }
 }

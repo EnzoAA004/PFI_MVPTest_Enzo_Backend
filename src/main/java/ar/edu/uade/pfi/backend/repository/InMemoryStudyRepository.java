@@ -170,7 +170,13 @@ public class InMemoryStudyRepository implements StudyRepository {
 
     @Override
     public RunReview saveReview(String multiplanarRunId, String reviewStatus, String reviewer, Instant reviewedAt, String comments, List<MeasurementCorrection> corrections) {
+        return saveReview(multiplanarRunId, reviewStatus, reviewer, reviewedAt, comments, corrections, null);
+    }
+
+    @Override
+    public RunReview saveReview(String multiplanarRunId, String reviewStatus, String reviewer, Instant reviewedAt, String comments, List<MeasurementCorrection> corrections, DomainAuditEvent auditEvent) {
         StudyRun existing = findRunByMultiplanarRunId(multiplanarRunId).orElseThrow();
+        Instant updatedAt = reviewedAt == null ? Instant.now() : reviewedAt;
         StudyRun updated = new StudyRun(
             existing.id(),
             existing.studyId(),
@@ -193,10 +199,11 @@ public class InMemoryStudyRepository implements StudyRepository {
             reviewedAt,
             comments,
             existing.createdAt(),
-            reviewedAt
+            updatedAt
         );
         saveRun(updated);
         correctionsByRunId.put(existing.id(), List.copyOf(corrections));
+        if (auditEvent != null) saveAuditEvent(auditEvent);
         return new RunReview(multiplanarRunId, existing.traceId(), reviewStatus, reviewer, reviewedAt, comments, corrections);
     }
 

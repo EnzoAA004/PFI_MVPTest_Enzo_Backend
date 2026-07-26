@@ -298,7 +298,7 @@ Response esperada:
 
 ## PATCH /api/ai/review/{runId}
 
-Actualiza la revision profesional local in-memory.
+Endpoint legacy mantenido por compatibilidad. Delega en el endpoint canonico `POST/PUT /api/ai/runs/{multiplanarRunId}/review` y persiste la revision en el modelo `domain_*`; no escribe nuevas revisiones reales en `review_statuses`.
 
 Estados validos:
 
@@ -306,6 +306,8 @@ Estados validos:
 - `aceptado`
 - `observado`
 - `descartado`
+- `rechazado`
+- `editado`
 
 Request:
 
@@ -394,6 +396,14 @@ Enum final de `reviewStatus`:
 - `rejected`: rechazado por el profesional.
 - `edited`: aceptado con ediciones/correcciones registradas.
 
+Alias aceptados en request:
+
+- `pendiente` -> `pending`
+- `aceptado` -> `accepted`
+- `observado` -> `observed`
+- `descartado` / `rechazado` -> `rejected`
+- `editado` -> `edited`
+
 Request:
 
 ```json
@@ -449,11 +459,20 @@ Response:
 
 Reglas:
 
-- `404` si `multiplanarRunId` no existe.
-- `400` si `reviewStatus` no pertenece al enum final.
-- `400` si `reviewer` esta vacio.
-- `reviewedAt` lo asigna el servidor.
+- `404 RUN_NOT_FOUND` si `multiplanarRunId` no existe.
+- `400 INVALID_REVIEW_STATUS` si `reviewStatus` no pertenece al enum final ni a sus alias.
+- `400 REVIEWER_REQUIRED` si `reviewer` esta vacio para decisiones finales.
+- `400 REVIEW_COMMENT_REQUIRED` si `observed` o `rejected` no tienen comentario descriptivo.
+- `pending` puede guardarse como borrador con comentarios/correcciones y sin `reviewer`; no asigna `reviewedAt` final.
+- `reviewedAt` lo asigna el servidor para `accepted`, `observed`, `rejected` y `edited`.
 - Las correcciones guardan un snapshot minimo `beforeValue`/`afterValue`; el versionado completo de mediciones queda para BE-008.
+- La actualizacion de `domain_study_runs`, `domain_review_corrections` y `domain_audit_events` ocurre en una unica transaccion.
+
+Backfill legacy:
+
+- `docs/migrations/V20260726_010_legacy_review_backfill.sql` migra revisiones historicas desde `review_statuses` a `domain_study_runs` cuando `review_statuses.run_id = domain_study_runs.multiplanar_run_id`.
+- No sobreescribe una revision domain mas nueva; conserva `reviewer`, `notes -> comments` y `updated_at -> reviewed_at` para estados finales.
+- Registra conteos en `domain_legacy_review_backfill_runs` y un evento `legacy.review.backfill`.
 
 ## GET /api/ai/runs/{multiplanarRunId}/review
 

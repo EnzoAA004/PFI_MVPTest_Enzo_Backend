@@ -1,5 +1,6 @@
 package ar.edu.uade.pfi.backend.service;
 
+import ar.edu.uade.pfi.backend.domain.DomainAuditEvent;
 import ar.edu.uade.pfi.backend.domain.MeasurementCorrection;
 import ar.edu.uade.pfi.backend.domain.RunReview;
 import ar.edu.uade.pfi.backend.dto.MeasurementCorrectionDto;
@@ -15,7 +16,6 @@ import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class RunReviewService {
@@ -35,41 +35,70 @@ public class RunReviewService {
     }
 
     public RunReviewResponseDto saveReview(String multiplanarRunId, RunReviewRequestDto request) {
-        if (repository.findRunByMultiplanarRunId(multiplanarRunId).isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Run no encontrado.");
-        }
         String status = normalizeStatus(request.reviewStatus());
         String reviewer = request.reviewer() == null ? "" : request.reviewer().trim();
-        if (reviewer.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Reviewer es obligatorio.");
+        String comments = request.comments() == null ? "" : request.comments().trim();
+        validateDecision(status, reviewer, comments);
+        try {
+            var run = repository.findRunByMultiplanarRunId(multiplanarRunId)
+                .orElseThrow(() -> new RunReviewException(HttpStatus.NOT_FOUND, "RUN_NOT_FOUND", "Run no encontrado."));
+            Instant now = clock.instant();
+            Instant reviewedAt = "pending".equals(status) ? null : now;
+            RunReview review = repository.saveReview(
+                multiplanarRunId,
+                status,
+                reviewer,
+                reviewedAt,
+                comments,
+                corrections(run.id(), request.corrections(), now),
+                auditEvent(multiplanarRunId, run.traceId(), reviewer, status, request.corrections(), now)
+            );
+            return toResponse(review);
+        } catch (RunReviewException ex) {
+            throw ex;
+        } catch (IllegalArgumentException ex) {
+            if ("run_not_found".equals(ex.getMessage())) {
+                throw new RunReviewException(HttpStatus.NOT_FOUND, "RUN_NOT_FOUND", "Run no encontrado.");
+            }
+            throw ex;
+        } catch (IllegalStateException ex) {
+            throw new DatabaseUnavailableException("Base de datos no disponible para guardar revision.");
         }
-        Instant reviewedAt = clock.instant();
-        RunReview review = repository.saveReview(
-            multiplanarRunId,
-            status,
-            reviewer,
-            reviewedAt,
-            request.comments() == null ? "" : request.comments(),
-            corrections(multiplanarRunId, request.corrections(), reviewedAt)
-        );
-        return toResponse(review);
     }
 
     public RunReviewResponseDto findReview(String multiplanarRunId) {
-        return repository.findReviewByMultiplanarRunId(multiplanarRunId)
-            .map(this::toResponse)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Run no encontrado."));
+        try {
+            return repository.findReviewByMultiplanarRunId(multiplanarRunId)
+                .map(this::toResponse)
+                .orElseThrow(() -> new RunReviewException(HttpStatus.NOT_FOUND, "RUN_NOT_FOUND", "Run no encontrado."));
+        } catch (RunReviewException ex) {
+            throw ex;
+        } catch (IllegalStateException ex) {
+            throw new DatabaseUnavailableException("Base de datos no disponible para consultar revision.");
+        }
     }
 
     private String normalizeStatus(String status) {
         String normalized = status == null ? "" : status.trim().toLowerCase();
+        if ("pendiente".equals(normalized)) normalized = "pending";
         if ("aceptado".equals(normalized)) normalized = "accepted";
         if ("observado".equals(normalized)) normalized = "observed";
-        if ("rechazado".equals(normalized)) normalized = "rejected";
-        if (!REVIEW_STATUSES.contains(normalized) || "pending".equals(normalized)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "reviewStatus invalido.");
+        if ("descartado".equals(normalized) || "rechazado".equals(normalized)) normalized = "rejected";
+        if ("editado".equals(normalized)) normalized = "edited";
+        if (!REVIEW_STATUSES.contains(normalized)) {
+            throw new RunReviewException(HttpStatus.BAD_REQUEST, "INVALID_REVIEW_STATUS", "reviewStatus invalido.");
         }
         return normalized;
+    }
+
+    private void validateDecision(String status, String reviewer, String comments) {
+        if ("pending".equals(status)) return;
+        if (reviewer.isBlank()) {
+            throw new RunReviewException(HttpStatus.BAD_REQUEST, "REVIEWER_REQUIRED", "Reviewer es obligatorio.");
+        }
+        if (("observed".equals(status) || "rejected".equals(status)) && comments.length() < 5) {
+            throw new RunReviewException(HttpStatus.BAD_REQUEST, "REVIEW_COMMENT_REQUIRED", "El estado requiere un comentario profesional descriptivo.");
+        }
     }
 
     private List<MeasurementCorrection> corrections(String runId, List<MeasurementCorrectionDto> corrections, Instant createdAt) {
@@ -86,6 +115,21 @@ public class RunReviewService {
                 createdAt
             ))
             .toList();
+    }
+
+    private DomainAuditEvent auditEvent(String multiplanarRunId, String traceId, String reviewer, String status, List<MeasurementCorrectionDto> corrections, Instant now) {
+        return new DomainAuditEvent(
+            UUID.randomUUID().toString(),
+            reviewer.isBlank() ? "backend" : reviewer,
+            "review.updated",
+            multiplanarRunId,
+            traceId,
+            now,
+            Map.of(
+                "reviewStatus", status,
+                "correctionCount", corrections == null ? 0 : corrections.size()
+            )
+        );
     }
 
     private RunReviewResponseDto toResponse(RunReview review) {
