@@ -1,6 +1,7 @@
 package ar.edu.uade.pfi.backend.controller;
 
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
+import ar.edu.uade.pfi.backend.dto.MultiplanarRunApiRequestDto;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunRequestDto;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunResponseDto;
 import ar.edu.uade.pfi.backend.service.AuditService;
@@ -70,7 +71,7 @@ public class AiMultiplanarController {
     }
 
     @PostMapping("/run")
-    public MultiplanarRunResponseDto run(@Valid @RequestBody MultiplanarRunRequestDto request) {
+    public MultiplanarRunResponseDto run(@Valid @RequestBody MultiplanarRunApiRequestDto request) {
         MultiplanarRunRequestDto normalized = normalizedRequest(request);
         MultiplanarRunResponseDto response;
         try {
@@ -87,13 +88,13 @@ public class AiMultiplanarController {
             throw ex;
         }
         if (persistenceService != null) {
-            persistenceService.persistSuccessfulRun(normalized, presented);
+            persistenceService.persistSuccessfulRun(normalized, request.studyMetadata(), presented);
         }
         auditSuccess(normalized, presented);
         return presented;
     }
 
-    private MultiplanarRunRequestDto normalizedRequest(MultiplanarRunRequestDto request) {
+    private MultiplanarRunRequestDto normalizedRequest(MultiplanarRunApiRequestDto request) {
         String caseId = request.caseId().trim();
         String sagittalModel = valueOrDefault(request.sagittalModelKey(), "sagittal_spider");
         String axialModel = valueOrDefault(request.axialModelKey(), "axial_t2_alkafri");
@@ -126,7 +127,7 @@ public class AiMultiplanarController {
         );
     }
 
-    private void validateStrictInputs(MultiplanarRunRequestDto request) {
+    private void validateStrictInputs(MultiplanarRunApiRequestDto request) {
         boolean sagittalInputIdPresent = valueOrNull(request.sagittalInputId()) != null;
         boolean sagittalInputPathPresent = valueOrNull(request.sagittalInputPath()) != null;
         boolean axialInputIdPresent = valueOrNull(request.axialInputId()) != null;

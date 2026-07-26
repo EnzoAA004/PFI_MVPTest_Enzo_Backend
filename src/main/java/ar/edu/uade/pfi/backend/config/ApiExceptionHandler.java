@@ -6,6 +6,7 @@ import ar.edu.uade.pfi.backend.service.AiMultiplanarContractViolationException;
 import ar.edu.uade.pfi.backend.service.AssetContentUnavailableException;
 import ar.edu.uade.pfi.backend.service.DatabaseUnavailableException;
 import ar.edu.uade.pfi.backend.service.RunReviewException;
+import ar.edu.uade.pfi.backend.service.StudyMetadataException;
 import ar.edu.uade.pfi.backend.service.StudyNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
@@ -73,6 +74,11 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(RunReviewException.class)
     public ResponseEntity<Map<String, Object>> handleRunReview(RunReviewException ex, HttpServletRequest request) {
+        return buildError(ex.status(), ex.code(), ex.getMessage(), request, ex);
+    }
+
+    @ExceptionHandler(StudyMetadataException.class)
+    public ResponseEntity<Map<String, Object>> handleStudyMetadata(StudyMetadataException ex, HttpServletRequest request) {
         return buildError(ex.status(), ex.code(), ex.getMessage(), request, ex);
     }
 

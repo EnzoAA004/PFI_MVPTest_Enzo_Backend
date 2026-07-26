@@ -136,12 +136,20 @@ El backend preserva solo PNG de revision deidentificados (`input.png`, `overlay.
 ## POST /api/ai/multiplanar/run
 
 Reenvia `POST /multiplanar/run` al AI Module usando inputs registrados por plano.
+El request publico acepta `studyMetadata` de-identificada, pero el backend construye un `MultiplanarRunRequestDto` tecnico sanitizado para el AI Module y no envia `subjectRef`, `studyDate`, `description` ni `reviewPriority` upstream.
 
 Request:
 
 ```json
 {
-  "caseId": "case-001",
+  "caseId": "CASE-SPIDER-101-20260726",
+  "studyMetadata": {
+    "subjectRef": "SPIDER-101",
+    "studyDate": "2026-07-26",
+    "modality": "MRI",
+    "description": "RM lumbar sagital T2",
+    "reviewPriority": "medium"
+  },
   "sagittalInputId": "input-sag-001",
   "axialInputId": "input-ax-001",
   "sagittalModelKey": "sagittal_spider",
@@ -237,6 +245,8 @@ Response esperada:
   }
 }
 ```
+
+`subjectRef` es opcional para compatibilidad. Si se informa debe tener 3 a 64 caracteres y usar solo letras, numeros, guion, guion bajo o punto. Espacios, `@`, barras y traversal devuelven `400 INVALID_SUBJECT_REFERENCE`. Si un `caseId` ya tiene otro `subjectRef` no nulo, el backend devuelve `409 SUBJECT_REFERENCE_CONFLICT`.
 
 `allowContractFallback` se propaga en `metadata`. Si el AI Module rechaza una corrida con fallback deshabilitado, el backend devuelve el error semantico y no genera una respuesta 200 degradada.
 
@@ -526,6 +536,81 @@ No hay fallback demo ni memoria para esos endpoints. Una base vacia devuelve `it
 `GET /api/studies/{caseId}` agrega inputs, corridas, artefactos agrupados por plano, mediciones por plano, correcciones y auditoria persistida. Las mediciones preservan `aiValue`; las correcciones profesionales se devuelven separadas para no destruir el valor de IA.
 
 `GET /api/studies/{caseId}/runs` lista corridas persistidas ordenadas por `created_at DESC`. El `runId` publico es siempre `multiplanar_run_id`; `databaseId` conserva el UUID interno.
+
+`PUT /api/studies/{caseId}/metadata` completa o actualiza metadata de-identificada de un estudio existente. Requiere rol profesional (`REVIEWER`, `DOCTOR` o `ADMIN`). `caseId` inexistente devuelve `404 STUDY_NOT_FOUND`; `subjectRef` invalido devuelve `400 INVALID_SUBJECT_REFERENCE`; conflicto de referencia devuelve `409 SUBJECT_REFERENCE_CONFLICT`.
+
+Request:
+
+```json
+{
+  "subjectRef": "SPIDER-101",
+  "studyDate": "2026-07-26",
+  "modality": "MRI",
+  "description": "RM lumbar sagital T2",
+  "reviewPriority": "medium"
+}
+```
+
+Response:
+
+```json
+{
+  "status": "ok",
+  "study": {
+    "caseId": "CASE-SPIDER-101-20260726",
+    "subjectRef": "SPIDER-101",
+    "studyDate": "2026-07-26",
+    "modality": "MRI",
+    "description": "RM lumbar sagital T2",
+    "priority": "media",
+    "dataOrigin": "database"
+  },
+  "humanReviewRequired": true,
+  "notClinicalDiagnosis": true
+}
+```
+
+`GET /api/subjects/{subjectRef}/history` consulta historial longitudinal desde `domain_*`, sin seed demo ni tablas legacy. Multiples `caseId` pueden compartir el mismo `subjectRef`; la respuesta se ordena por `studyDate DESC NULLS LAST` y luego `createdAt DESC`. Si no hay estudios devuelve `200` con `studies: []`.
+
+Response:
+
+```json
+{
+  "status": "ok",
+  "source": "postgres-domain",
+  "dataOrigin": "database",
+  "subjectRef": "SPIDER-101",
+  "deidentified": true,
+  "studies": [
+    {
+      "caseId": "CASE-SPIDER-101-20260726",
+      "studyDate": "2026-07-26",
+      "modality": "MRI",
+      "description": "RM lumbar sagital T2",
+      "priority": "media",
+      "latestRunId": "multi-001",
+      "planes": ["sagittal"],
+      "modelKey": "sagittal_spider",
+      "reviewStatus": "aceptado",
+      "measurementsByPlane": {
+        "sagittal": []
+      },
+      "corrections": []
+    }
+  ],
+  "summary": {
+    "totalStudies": 1,
+    "pending": 0,
+    "completed": 1,
+    "observed": 0,
+    "withStudyDate": 1
+  },
+  "humanReviewRequired": true,
+  "notClinicalDiagnosis": true
+}
+```
+
+El historial devuelve solo mediciones reales presentes en `metrics_snapshot`; si faltan, se omiten. No calcula `lordosisAngle`, `canalDiameter`, `averageDiscHeight`, `l45DiscHeight` ni otros valores aproximados.
 
 Mapeos de API:
 

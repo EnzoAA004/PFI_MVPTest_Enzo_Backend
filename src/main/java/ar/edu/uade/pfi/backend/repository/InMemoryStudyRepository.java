@@ -63,6 +63,18 @@ public class InMemoryStudyRepository implements StudyRepository {
     }
 
     @Override
+    public List<Study> findStudiesBySubjectRef(String subjectRef) {
+        String normalized = subjectRef == null ? "" : subjectRef.trim();
+        return studiesById.values().stream()
+            .filter(study -> study.subjectRef() != null && study.subjectRef().equalsIgnoreCase(normalized))
+            .sorted(Comparator
+                .comparing((Study study) -> study.studyDate() == null)
+                .thenComparing(Study::studyDate, Comparator.nullsLast(Comparator.reverseOrder()))
+                .thenComparing(Study::createdAt, Comparator.reverseOrder()))
+            .toList();
+    }
+
+    @Override
     public List<InputResource> findInputsByStudyId(String studyId) {
         List<InputResource> inputs = new ArrayList<>();
         for (InputResource input : inputsById.values()) {

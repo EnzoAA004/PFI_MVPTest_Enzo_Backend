@@ -163,6 +163,7 @@ CREATE TABLE IF NOT EXISTS domain_review_corrections (
 );
 
 CREATE INDEX IF NOT EXISTS idx_domain_input_resources_study_plane ON domain_input_resources(study_id, plane);
+CREATE INDEX IF NOT EXISTS idx_domain_studies_subject_ref ON domain_studies (lower(subject_ref)) WHERE subject_ref IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_domain_study_runs_study ON domain_study_runs(study_id);
 CREATE INDEX IF NOT EXISTS idx_domain_study_runs_trace_id ON domain_study_runs(trace_id);
 CREATE INDEX IF NOT EXISTS idx_domain_run_artifacts_run_plane ON domain_run_artifacts(run_id, plane);

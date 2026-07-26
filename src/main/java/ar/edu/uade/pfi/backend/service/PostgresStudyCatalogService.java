@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
+@Deprecated(since = "P8-E1", forRemoval = false)
 public class PostgresStudyCatalogService {
     private final String jdbcUrl;
     private final boolean enabled;
@@ -27,7 +28,6 @@ public class PostgresStudyCatalogService {
         this.enabled = "postgres".equalsIgnoreCase(persistenceMode) && !this.jdbcUrl.isBlank();
         if (enabled) {
             migrate();
-            seedDemoCatalog();
         }
     }
 
@@ -59,8 +59,8 @@ public class PostgresStudyCatalogService {
                     ));
                 }
             }
-        } catch (Exception ignored) {
-            return List.of();
+        } catch (Exception ex) {
+            throw new IllegalStateException("Could not list legacy study catalog", ex);
         }
         return rows;
     }
@@ -87,8 +87,8 @@ public class PostgresStudyCatalogService {
                     ));
                 }
             }
-        } catch (Exception ignored) {
-            return List.of();
+        } catch (Exception ex) {
+            throw new IllegalStateException("Could not list legacy study runs", ex);
         }
         return runs;
     }
@@ -118,8 +118,8 @@ public class PostgresStudyCatalogService {
                     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
                 )
                 """);
-        } catch (Exception ignored) {
-            // Catalog remains available through demo fallback if Postgres is unavailable.
+        } catch (Exception ex) {
+            throw new IllegalStateException("Could not initialize legacy study catalog", ex);
         }
     }
 
@@ -167,8 +167,8 @@ public class PostgresStudyCatalogService {
                 statement.setString(5, modelStatus);
                 statement.executeUpdate();
             }
-        } catch (Exception ignored) {
-            // Demo fallback remains available.
+        } catch (Exception ex) {
+            throw new IllegalStateException("Could not seed legacy study catalog", ex);
         }
     }
 

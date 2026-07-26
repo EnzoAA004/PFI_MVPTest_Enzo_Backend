@@ -4,6 +4,7 @@ import ar.edu.uade.pfi.backend.domain.RunArtifact;
 import ar.edu.uade.pfi.backend.domain.Study;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunRequestDto;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunResponseDto;
+import ar.edu.uade.pfi.backend.dto.StudyMetadataDto;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -43,9 +44,12 @@ public class MultiplanarRunPersistenceService {
     }
 
     public void persistSuccessfulRun(MultiplanarRunRequestDto request, MultiplanarRunResponseDto response) {
+        persistSuccessfulRun(request, null, response);
+    }
+
+    public void persistSuccessfulRun(MultiplanarRunRequestDto request, StudyMetadataDto studyMetadata, MultiplanarRunResponseDto response) {
         if (response == null || blank(response.runId())) return;
-        Study study = studyRunService.findStudyByCaseId(request.caseId())
-            .orElseGet(() -> studyRunService.createStudy(request.caseId(), "created"));
+        Study study = studyRunService.upsertStudyMetadata(request.caseId(), "created", studyMetadata);
 
         registerInput(study, "sagittal", request.sagittalInputId());
         registerInput(study, "axial", request.axialInputId());

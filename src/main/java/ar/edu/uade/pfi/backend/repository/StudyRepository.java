@@ -22,6 +22,8 @@ public interface StudyRepository {
 
     Optional<Study> findStudyByCaseId(String caseId);
 
+    List<Study> findStudiesBySubjectRef(String subjectRef);
+
     List<InputResource> findInputsByStudyId(String studyId);
 
     List<StudyRun> findRunsByStudyId(String studyId);

@@ -41,6 +41,13 @@ class AiMultiplanarRunTest {
                 .content("""
                     {
                       "caseId": "CASE-1",
+                      "studyMetadata": {
+                        "subjectRef": "SPIDER-101",
+                        "studyDate": "2026-07-26",
+                        "modality": "MRI",
+                        "description": "RM lumbar sagital T2",
+                        "reviewPriority": "medium"
+                      },
                       "sagittalInputId": "input-sag-1",
                       "axialInputId": "input-ax-1",
                       "sagittalModelKey": "sagittal_spider",
@@ -73,6 +80,10 @@ class AiMultiplanarRunTest {
         assertEquals(true, request.getValue().allowContractFallback());
         assertEquals(true, request.getValue().metadata().get("allowContractFallback"));
         assertEquals("real_baseline", request.getValue().metadata().get("inferenceMode"));
+        String serializedTechnicalRequest = objectMapper.writeValueAsString(request.getValue());
+        org.junit.jupiter.api.Assertions.assertFalse(serializedTechnicalRequest.contains("studyMetadata"));
+        org.junit.jupiter.api.Assertions.assertFalse(serializedTechnicalRequest.contains("subjectRef"));
+        org.junit.jupiter.api.Assertions.assertFalse(serializedTechnicalRequest.contains("SPIDER-101"));
     }
 
     @Test

@@ -283,6 +283,25 @@ public class PostgresStudyRepository implements StudyRepository {
     }
 
     @Override
+    public List<Study> findStudiesBySubjectRef(String subjectRef) {
+        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+            SELECT id, case_id, status, subject_ref, study_date, modality, description, review_priority, created_at, updated_at
+            FROM domain_studies
+            WHERE subject_ref IS NOT NULL AND lower(subject_ref) = lower(?)
+            ORDER BY study_date DESC NULLS LAST, created_at DESC
+            """)) {
+            statement.setString(1, subjectRef);
+            try (ResultSet rs = statement.executeQuery()) {
+                List<Study> studies = new ArrayList<>();
+                while (rs.next()) studies.add(readStudy(rs));
+                return studies;
+            }
+        } catch (Exception ex) {
+            throw new IllegalStateException("Could not find studies by subject ref", ex);
+        }
+    }
+
+    @Override
     public List<StudyRun> findRunsByStudyId(String studyId) {
         try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
             SELECT id, study_id, multiplanar_run_id, trace_id, requested_inference_mode, effective_inference_mode,

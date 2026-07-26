@@ -1,7 +1,10 @@
 package ar.edu.uade.pfi.backend.controller;
 
+import ar.edu.uade.pfi.backend.auth.RoleAuthorizationService;
+import ar.edu.uade.pfi.backend.domain.Study;
 import ar.edu.uade.pfi.backend.dto.StudyDetailResponseDto;
 import ar.edu.uade.pfi.backend.dto.StudyListResponseDto;
+import ar.edu.uade.pfi.backend.dto.StudyMetadataDto;
 import ar.edu.uade.pfi.backend.dto.StudyReviewResponseDto;
 import ar.edu.uade.pfi.backend.dto.StudyReviewResponseDto.AiOutputStateDto;
 import ar.edu.uade.pfi.backend.dto.StudyReviewResponseDto.ContourDto;
@@ -12,6 +15,8 @@ import ar.edu.uade.pfi.backend.dto.StudyReviewResponseDto.PointDto;
 import ar.edu.uade.pfi.backend.dto.StudyReviewResponseDto.SeriesDto;
 import ar.edu.uade.pfi.backend.dto.StudyRunsResponseDto;
 import ar.edu.uade.pfi.backend.service.ProfessionalAccessAuditService;
+import ar.edu.uade.pfi.backend.service.StudyNotFoundException;
+import ar.edu.uade.pfi.backend.service.StudyRunService;
 import ar.edu.uade.pfi.backend.service.StudyWorklistService;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
@@ -19,6 +24,8 @@ import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -26,11 +33,20 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/studies")
 public class StudyController {
     private final StudyWorklistService studyWorklistService;
+    private final StudyRunService studyRunService;
     private final ProfessionalAccessAuditService accessAuditService;
+    private final RoleAuthorizationService authorizationService;
 
-    public StudyController(StudyWorklistService studyWorklistService, ProfessionalAccessAuditService accessAuditService) {
+    public StudyController(
+        StudyWorklistService studyWorklistService,
+        StudyRunService studyRunService,
+        ProfessionalAccessAuditService accessAuditService,
+        RoleAuthorizationService authorizationService
+    ) {
         this.studyWorklistService = studyWorklistService;
+        this.studyRunService = studyRunService;
         this.accessAuditService = accessAuditService;
+        this.authorizationService = authorizationService;
     }
 
     @GetMapping
@@ -49,6 +65,34 @@ public class StudyController {
     public StudyRunsResponseDto getStudyRuns(@PathVariable String caseId, HttpServletRequest request) {
         accessAuditService.record(request, "access_study_runs", "Corridas de estudio consultadas caseId=" + caseId);
         return studyWorklistService.getStudyRuns(caseId);
+    }
+
+    @PutMapping("/{caseId}/metadata")
+    public Map<String, Object> updateMetadata(
+        @PathVariable String caseId,
+        @RequestBody(required = false) StudyMetadataDto metadata,
+        HttpServletRequest request
+    ) {
+        authorizationService.requireProfessional(request, caseId);
+        accessAuditService.record(request, "update_study_metadata", "Metadata de estudio de-identificada actualizada caseId=" + caseId);
+        if (studyRunService.findStudyByCaseId(caseId).isEmpty()) {
+            throw new StudyNotFoundException(caseId);
+        }
+        Study study = studyRunService.upsertStudyMetadata(caseId, "created", metadata);
+        return Map.of(
+            "status", "ok",
+            "study", Map.of(
+                "caseId", study.caseId(),
+                "subjectRef", study.subjectRef() == null ? "" : study.subjectRef(),
+                "studyDate", study.studyDate() == null ? "" : study.studyDate().toString(),
+                "modality", study.modality() == null ? "" : study.modality(),
+                "description", study.description() == null ? "" : study.description(),
+                "priority", ar.edu.uade.pfi.backend.service.ReviewStatusMapper.toApiPriority(study.reviewPriority()),
+                "dataOrigin", "database"
+            ),
+            "humanReviewRequired", true,
+            "notClinicalDiagnosis", true
+        );
     }
 
     @PostMapping("/demo")
