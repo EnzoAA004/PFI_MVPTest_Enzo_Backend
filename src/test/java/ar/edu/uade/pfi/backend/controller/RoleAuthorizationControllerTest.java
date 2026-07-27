@@ -76,7 +76,8 @@ class RoleAuthorizationControllerTest {
 
         mockMvc.perform(post("/api/ai/models/sync").with(reviewer()))
             .andExpect(status().isForbidden())
-            .andExpect(jsonPath("$.message").value("Rol insuficiente"));
+            .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
+            .andExpect(jsonPath("$.message").value("No tiene permisos para realizar esta operacion."));
     }
 
     private static RequestPostProcessor admin() {

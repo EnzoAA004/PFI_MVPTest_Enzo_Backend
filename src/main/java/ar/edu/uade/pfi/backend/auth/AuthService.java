@@ -13,8 +13,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -31,6 +34,7 @@ public class AuthService {
     private final boolean exposeCodes;
     private final long refreshTokenSeconds;
     private final SecureRandom random = new SecureRandom();
+    private final Environment environment;
 
     public AuthService(
         PasswordHasher passwordHasher,
@@ -39,11 +43,24 @@ public class AuthService {
         @Value("${pfi.auth.expose-dev-codes:true}") boolean exposeCodes,
         @Value("${pfi.auth.refresh-token-seconds:604800}") long refreshTokenSeconds
     ) {
+        this(passwordHasher, tokenService, postgresAuthStore, exposeCodes, refreshTokenSeconds, null);
+    }
+
+    @Autowired
+    public AuthService(
+        PasswordHasher passwordHasher,
+        TokenService tokenService,
+        PostgresAuthStoreService postgresAuthStore,
+        @Value("${pfi.auth.expose-dev-codes:true}") boolean exposeCodes,
+        @Value("${pfi.auth.refresh-token-seconds:604800}") long refreshTokenSeconds,
+        Environment environment
+    ) {
         this.passwordHasher = passwordHasher;
         this.tokenService = tokenService;
         this.postgresAuthStore = postgresAuthStore;
         this.exposeCodes = exposeCodes;
         this.refreshTokenSeconds = refreshTokenSeconds;
+        this.environment = environment;
     }
 
     public PendingAuthResponse register(RegisterRequest request) {
@@ -167,7 +184,15 @@ public class AuthService {
         return toUser(account);
     }
 
+    /**
+     * Issues a fully-approved ADMIN/DOCTOR/REVIEWER token with no credential check at
+     * all. This is only acceptable for local/dev seeding; in a production profile it
+     * would be an unauthenticated admin-token backdoor, so it is refused there.
+     */
     public TokenResponse seedDemoDoctor() {
+        if (isProductionProfile()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No encontrado");
+        }
         String email = "doctor.demo@pfi.local";
         DoctorAccount existing = findAccount(email).orElse(null);
         if (existing != null) {
@@ -217,6 +242,15 @@ public class AuthService {
         Optional<DoctorAccount> persisted = postgresAuthStore.findByEmail(email);
         persisted.ifPresent(account -> accountsByEmail.put(email, account));
         return persisted;
+    }
+
+    private boolean isProductionProfile() {
+        if (environment == null) return false;
+        for (String profile : environment.getActiveProfiles()) {
+            String normalized = profile.toLowerCase(Locale.ROOT);
+            if (normalized.equals("production") || normalized.equals("prod")) return true;
+        }
+        return false;
     }
 
     private void requireAdmin(TokenService.Claims claims) {

@@ -49,10 +49,19 @@ public class TokenService {
         return encodedHeader + "." + encodedPayload + "." + signature;
     }
 
+    /**
+     * The signature is always recomputed with our own HMAC-SHA256 key and compared in
+     * constant time; the token's own "alg" header is never trusted or branched on, so
+     * algorithm-confusion attacks (e.g. a forged "alg":"none" token) are not possible
+     * regardless of what the header claims.
+     */
     public Claims verify(String token) {
+        if (token == null || token.isBlank()) {
+            return null;
+        }
         try {
             String[] parts = token.split("\\.");
-            if (parts.length != 3) {
+            if (parts.length != 3 || parts[0].isBlank() || parts[1].isBlank() || parts[2].isBlank()) {
                 return null;
             }
             String expectedSignature = sign(parts[0] + "." + parts[1]);
@@ -65,12 +74,20 @@ public class TokenService {
             if (exp == null || exp.longValue() < Instant.now().getEpochSecond()) {
                 return null;
             }
+            String subject = payload.getOrDefault("sub", "").toString().trim();
+            if (subject.isBlank()) {
+                return null;
+            }
             Object rolesValue = payload.get("roles");
+            // Authorities are only ever taken from this signed payload; a client can never
+            // inject roles out-of-band (e.g. via a header) because AuthFilter/RoleAuthorizationService
+            // only read TokenService.Claims. A token missing/malformed "roles" gets no
+            // authorities at all rather than a default privileged role.
             List<String> roles = rolesValue instanceof List<?> list
                 ? list.stream().map(Object::toString).toList()
-                : List.of("DOCTOR");
+                : List.of();
             return new Claims(
-                payload.getOrDefault("sub", "").toString(),
+                subject,
                 payload.getOrDefault("email", "").toString(),
                 payload.getOrDefault("name", "").toString(),
                 roles

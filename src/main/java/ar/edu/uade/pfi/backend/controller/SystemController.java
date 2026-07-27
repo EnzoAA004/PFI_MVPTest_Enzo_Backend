@@ -26,6 +26,16 @@ public class SystemController {
         this.authorizationService = authorizationService;
     }
 
+    /**
+     * Public minimal liveness: intentionally returns nothing beyond a status flag. No
+     * database, AI Module, secrets, or infra details — see /api/system/diagnostics
+     * (ADMIN-only) for anything richer.
+     */
+    @GetMapping("/health")
+    public Map<String, Object> health() {
+        return Map.of("status", "ok");
+    }
+
     @GetMapping("/diagnostics")
     public Map<String, Object> diagnostics(HttpServletRequest request) {
         if (authorizationService != null) {

@@ -203,7 +203,7 @@ class AiRunReviewControllerTest {
                     {"reviewStatus":"accepted","reviewer":"dra-demo"}
                     """))
             .andExpect(status().isForbidden())
-            .andExpect(jsonPath("$.message").value("Rol insuficiente"));
+            .andExpect(jsonPath("$.message").value("No tiene permisos para realizar esta operacion."));
 
         assertTrue(repository.findAuditEventsByEntityId("multi-review-denied").stream()
             .anyMatch(event -> "access.denied".equals(event.action())));

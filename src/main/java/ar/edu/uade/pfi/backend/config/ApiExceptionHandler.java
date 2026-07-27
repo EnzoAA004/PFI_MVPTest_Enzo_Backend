@@ -174,8 +174,8 @@ public class ApiExceptionHandler {
     private String codeForStatus(HttpStatus status) {
         return switch (status) {
             case BAD_REQUEST -> "BAD_REQUEST";
-            case UNAUTHORIZED -> "UNAUTHORIZED";
-            case FORBIDDEN -> "FORBIDDEN";
+            case UNAUTHORIZED -> "AUTHENTICATION_REQUIRED";
+            case FORBIDDEN -> "ACCESS_DENIED";
             case NOT_FOUND -> "NOT_FOUND";
             case CONFLICT -> "CONFLICT";
             case SERVICE_UNAVAILABLE, BAD_GATEWAY, GATEWAY_TIMEOUT -> "UPSTREAM_UNAVAILABLE";
@@ -189,8 +189,8 @@ public class ApiExceptionHandler {
         }
         return switch (status) {
             case BAD_REQUEST -> "Solicitud invalida";
-            case UNAUTHORIZED -> "No autorizado";
-            case FORBIDDEN -> "Acceso denegado";
+            case UNAUTHORIZED -> "Autenticacion requerida.";
+            case FORBIDDEN -> "No tiene permisos para realizar esta operacion.";
             case NOT_FOUND -> "Recurso no encontrado";
             case CONFLICT -> "Conflicto de estado";
             default -> status.is5xxServerError() ? "Error interno del backend" : status.getReasonPhrase();

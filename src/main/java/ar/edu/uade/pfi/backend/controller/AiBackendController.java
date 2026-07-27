@@ -11,10 +11,13 @@ import ar.edu.uade.pfi.backend.dto.ReviewExportResponseDto;
 import ar.edu.uade.pfi.backend.dto.ReviewSnapshotDto;
 import ar.edu.uade.pfi.backend.dto.ReviewStatusDto;
 import ar.edu.uade.pfi.backend.dto.ReviewUpdateRequestDto;
+import ar.edu.uade.pfi.backend.auth.RoleAuthorizationService;
 import ar.edu.uade.pfi.backend.service.AiBackendService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -32,9 +35,16 @@ import org.springframework.web.multipart.MultipartFile;
 @RequestMapping("/api/ai")
 public class AiBackendController {
     private final AiBackendService aiBackendService;
+    private final RoleAuthorizationService authorizationService;
 
     public AiBackendController(AiBackendService aiBackendService) {
+        this(aiBackendService, null);
+    }
+
+    @Autowired
+    public AiBackendController(AiBackendService aiBackendService, RoleAuthorizationService authorizationService) {
         this.aiBackendService = aiBackendService;
+        this.authorizationService = authorizationService;
     }
 
     @GetMapping("/health")
@@ -130,12 +140,20 @@ public class AiBackendController {
     }
 
     @PostMapping("/audit")
-    public AuditEventDto appendAudit(@RequestBody AuditEventRequestDto request) {
+    public AuditEventDto appendAudit(@RequestBody AuditEventRequestDto request, HttpServletRequest httpRequest) {
+        requireAdmin(httpRequest);
         return aiBackendService.appendAudit(request);
     }
 
     @GetMapping("/audit")
-    public List<AuditEventDto> auditTrail() {
+    public List<AuditEventDto> auditTrail(HttpServletRequest httpRequest) {
+        requireAdmin(httpRequest);
         return aiBackendService.auditTrail();
+    }
+
+    private void requireAdmin(HttpServletRequest request) {
+        if (authorizationService != null) {
+            authorizationService.requireAdmin(request, "audit.trail");
+        }
     }
 }

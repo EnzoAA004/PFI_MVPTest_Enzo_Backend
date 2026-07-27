@@ -33,7 +33,7 @@ public class RoleAuthorizationService {
             return;
         }
         auditDenied(request, claims, entityId, semanticRole, currentRoles);
-        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Rol insuficiente");
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No tiene permisos para realizar esta operacion.");
     }
 
     private TokenService.Claims claims(HttpServletRequest request) {

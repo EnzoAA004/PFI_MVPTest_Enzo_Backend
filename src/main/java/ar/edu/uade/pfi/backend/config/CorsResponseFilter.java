@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Value;
@@ -14,18 +15,32 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+/**
+ * Single source of truth for CORS (there used to be a second, overlapping CorsFilter
+ * bean too, which risked emitting duplicate Access-Control-* headers). Origins come
+ * exclusively from PFI_CORS_ALLOWED_ORIGINS (pfi.cors.allowed-origins) and the optional
+ * PFI_CORS_ALLOWED_ORIGIN_PATTERNS (pfi.cors.allowed-origin-patterns, "*" glob only, e.g.
+ * "https://*.vercel.app" for preview deployments) — no production domain is hardcoded
+ * in Java. Because credentials are allowed, a literal "*" is never honored in either list.
+ */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 1)
 public class CorsResponseFilter extends OncePerRequestFilter {
+    private static final Set<String> ALLOWED_METHODS = Set.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS");
     private final Set<String> allowedOrigins;
+    private final List<String> allowedOriginPatterns;
 
     public CorsResponseFilter(
-        @Value("${pfi.cors.allowed-origins:https://pfi-mvp-test-enzo-frontend.vercel.app,http://localhost:5173,http://localhost:4173,http://localhost:3000,http://127.0.0.1:5173}") String allowedOrigins
+        @Value("${pfi.cors.allowed-origins:http://localhost:5173,http://localhost:3000}") String allowedOrigins,
+        @Value("${pfi.cors.allowed-origin-patterns:}") String allowedOriginPatterns
     ) {
-        this.allowedOrigins = Arrays.stream(allowedOrigins.split(","))
-            .map(String::trim)
-            .filter(value -> !value.isBlank())
-            .collect(Collectors.toSet());
+        this.allowedOrigins = splitTrimmed(allowedOrigins).filter(origin -> !"*".equals(origin)).collect(Collectors.toSet());
+        this.allowedOriginPatterns = splitTrimmed(allowedOriginPatterns).filter(origin -> !"*".equals(origin)).toList();
+    }
+
+    private static java.util.stream.Stream<String> splitTrimmed(String value) {
+        if (value == null || value.isBlank()) return java.util.stream.Stream.empty();
+        return Arrays.stream(value.split(",")).map(String::trim).filter(v -> !v.isBlank());
     }
 
     @Override
@@ -43,6 +58,15 @@ public class CorsResponseFilter extends OncePerRequestFilter {
         }
 
         if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            if (origin != null && !origin.isBlank() && !isAllowedOrigin(origin)) {
+                response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                return;
+            }
+            String requestedMethod = request.getHeader("Access-Control-Request-Method");
+            if (requestedMethod != null && !ALLOWED_METHODS.contains(requestedMethod.trim().toUpperCase(java.util.Locale.ROOT))) {
+                response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                return;
+            }
             response.setStatus(HttpServletResponse.SC_NO_CONTENT);
             return;
         }
@@ -53,6 +77,17 @@ public class CorsResponseFilter extends OncePerRequestFilter {
     private boolean isAllowedOrigin(String origin) {
         if (origin == null || origin.isBlank()) return false;
         if (allowedOrigins.contains(origin)) return true;
-        return origin.startsWith("https://pfi-mvp-test-enzo-frontend") && origin.endsWith(".vercel.app");
+        for (String pattern : allowedOriginPatterns) {
+            if (matchesPattern(origin, pattern)) return true;
+        }
+        return false;
+    }
+
+    private boolean matchesPattern(String origin, String pattern) {
+        int star = pattern.indexOf('*');
+        if (star < 0) return origin.equals(pattern);
+        String prefix = pattern.substring(0, star);
+        String suffix = pattern.substring(star + 1);
+        return origin.startsWith(prefix) && origin.endsWith(suffix) && origin.length() >= prefix.length() + suffix.length();
     }
 }
