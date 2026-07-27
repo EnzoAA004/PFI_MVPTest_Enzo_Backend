@@ -22,10 +22,6 @@ public class AiAuditController {
     private final AuditService auditService;
     private final RoleAuthorizationService authorizationService;
 
-    public AiAuditController(AuditService auditService) {
-        this(auditService, null);
-    }
-
     @Autowired
     public AiAuditController(AuditService auditService, RoleAuthorizationService authorizationService) {
         this.auditService = auditService;
@@ -38,9 +34,7 @@ public class AiAuditController {
         @RequestParam(required = false) String entityId,
         HttpServletRequest request
     ) {
-        if (authorizationService != null) {
-            authorizationService.requireAdmin(request, "audit.events");
-        }
+        authorizationService.requireAdmin(request, "audit.events");
         if (traceId != null && !traceId.isBlank()) return auditService.findByTraceId(traceId);
         if (entityId != null && !entityId.isBlank()) return auditService.findByEntityId(entityId);
         return List.of();

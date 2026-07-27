@@ -16,10 +16,6 @@ public class SystemController {
     private final SystemDiagnosticsService systemDiagnosticsService;
     private final RoleAuthorizationService authorizationService;
 
-    public SystemController(SystemDiagnosticsService systemDiagnosticsService) {
-        this(systemDiagnosticsService, null);
-    }
-
     @Autowired
     public SystemController(SystemDiagnosticsService systemDiagnosticsService, RoleAuthorizationService authorizationService) {
         this.systemDiagnosticsService = systemDiagnosticsService;
@@ -27,9 +23,9 @@ public class SystemController {
     }
 
     /**
-     * Public minimal liveness: intentionally returns nothing beyond a status flag. No
-     * database, AI Module, secrets, or infra details — see /api/system/diagnostics
-     * (ADMIN-only) for anything richer.
+     * The only endpoint in AuthFilter.PUBLIC_LIVENESS_PATHS: intentionally returns
+     * nothing beyond a status flag. No database, AI Module, secrets, or infra details —
+     * see /api/system/diagnostics (ADMIN-only) for anything richer.
      */
     @GetMapping("/health")
     public Map<String, Object> health() {
@@ -38,14 +34,14 @@ public class SystemController {
 
     @GetMapping("/diagnostics")
     public Map<String, Object> diagnostics(HttpServletRequest request) {
-        if (authorizationService != null) {
-            authorizationService.requireAdmin(request, "system.diagnostics");
-        }
+        authorizationService.requireAdmin(request, "system.diagnostics");
         return systemDiagnosticsService.diagnostics();
     }
 
+    /** Triggers an AI Module warmup call — ADMIN-only, it is an operational action, not a read. */
     @PostMapping("/warmup")
-    public Map<String, Object> warmup() {
+    public Map<String, Object> warmup(HttpServletRequest request) {
+        authorizationService.requireAdmin(request, "system.warmup");
         return systemDiagnosticsService.warmup();
     }
 }

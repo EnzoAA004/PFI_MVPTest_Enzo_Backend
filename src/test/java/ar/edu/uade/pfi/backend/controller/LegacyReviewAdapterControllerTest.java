@@ -64,7 +64,7 @@ class LegacyReviewAdapterControllerTest {
             null,
             new RunReviewService(repository)
         );
-        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new AiBackendController(service))
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new AiBackendController(service, mock(ar.edu.uade.pfi.backend.auth.RoleAuthorizationService.class)))
             .setControllerAdvice(new ApiExceptionHandler())
             .build();
 

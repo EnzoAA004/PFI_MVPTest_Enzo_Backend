@@ -114,7 +114,7 @@ class AiAssetDurableProxyControllerTest {
             snapshotService,
             null
         );
-        return MockMvcBuilders.standaloneSetup(new AiBackendController(service))
+        return MockMvcBuilders.standaloneSetup(new AiBackendController(service, Mockito.mock(ar.edu.uade.pfi.backend.auth.RoleAuthorizationService.class)))
             .setControllerAdvice(new ApiExceptionHandler())
             .build();
     }

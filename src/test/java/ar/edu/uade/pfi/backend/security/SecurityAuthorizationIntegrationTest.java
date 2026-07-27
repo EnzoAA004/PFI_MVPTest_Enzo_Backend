@@ -82,7 +82,7 @@ class SecurityAuthorizationIntegrationTest {
 
         mockMvc = MockMvcBuilders
             .standaloneSetup(studyController, multiplanarController, backendController, systemController)
-            .addFilter(new AuthFilter(tokenService, true))
+            .addFilter(new AuthFilter(tokenService, true, false, new org.springframework.mock.env.MockEnvironment()))
             .addFilter(new CorsResponseFilter("https://allowed.example.com", "https://*.preview.example.com"))
             .setControllerAdvice(new ApiExceptionHandler(auditService))
             .build();
@@ -200,6 +200,91 @@ class SecurityAuthorizationIntegrationTest {
         void adminCanAlsoUseProfessionalEndpoints() throws Exception {
             when(studyWorklistService.listStudies()).thenReturn(new StudyListResponseDto("ok", "test", "database", List.of(), Map.of(), true, true));
             mockMvc.perform(get("/api/studies").header("Authorization", bearer(List.of("ADMIN"))))
+                .andExpect(status().isOk());
+        }
+    }
+
+    // ---- P10-A.1 §7: minimal public surface / warmup ADMIN-only ----
+
+    @Nested
+    class PublicSurfaceMatrix {
+        @Test
+        void anonymousSystemHealthIsPublicAndMinimal() throws Exception {
+            mockMvc.perform(get("/api/system/health"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ok"));
+        }
+
+        @Test
+        void anonymousAiHealthRequiresAuthentication() throws Exception {
+            mockMvc.perform(get("/api/ai/health")).andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        void anonymousAiModelsRequiresAuthentication() throws Exception {
+            mockMvc.perform(get("/api/ai/models")).andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        void anonymousWarmupRequiresAuthentication() throws Exception {
+            mockMvc.perform(post("/api/system/warmup")).andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        void pendingApprovalIsForbiddenFromAiHealthModelsAndWarmup() throws Exception {
+            mockMvc.perform(get("/api/ai/health").header("Authorization", bearer(List.of("PENDING_APPROVAL"))))
+                .andExpect(status().isForbidden());
+            mockMvc.perform(get("/api/ai/models").header("Authorization", bearer(List.of("PENDING_APPROVAL"))))
+                .andExpect(status().isForbidden());
+            mockMvc.perform(post("/api/system/warmup").header("Authorization", bearer(List.of("PENDING_APPROVAL"))))
+                .andExpect(status().isForbidden());
+        }
+
+        @Test
+        void approvedProfessionalCanReadAiHealthAndModelsButNotWarmup() throws Exception {
+            when(aiBackendService.health()).thenReturn(Map.of("status", "ok"));
+            when(aiBackendService.models()).thenReturn(Map.of());
+            mockMvc.perform(get("/api/ai/health").header("Authorization", bearer(List.of("DOCTOR"))))
+                .andExpect(status().isOk());
+            mockMvc.perform(get("/api/ai/models").header("Authorization", bearer(List.of("DOCTOR"))))
+                .andExpect(status().isOk());
+            mockMvc.perform(post("/api/system/warmup").header("Authorization", bearer(List.of("DOCTOR"))))
+                .andExpect(status().isForbidden());
+        }
+
+        @Test
+        void adminCanTriggerWarmup() throws Exception {
+            when(systemDiagnosticsService.warmup()).thenReturn(Map.of("status", "ok"));
+            mockMvc.perform(post("/api/system/warmup").header("Authorization", bearer(List.of("ADMIN"))))
+                .andExpect(status().isOk());
+        }
+    }
+
+    // ---- P10-A.1 §8: readiness/models-verify are ADMIN-only technical diagnostics ----
+
+    @Nested
+    class ReadinessAndVerifyAreAdminOnly {
+        @Test
+        void anonymousIsUnauthorized() throws Exception {
+            mockMvc.perform(get("/api/ai/readiness")).andExpect(status().isUnauthorized());
+            mockMvc.perform(get("/api/ai/models/verify")).andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        void approvedProfessionalIsForbidden() throws Exception {
+            mockMvc.perform(get("/api/ai/readiness").header("Authorization", bearer(List.of("DOCTOR"))))
+                .andExpect(status().isForbidden());
+            mockMvc.perform(get("/api/ai/models/verify").header("Authorization", bearer(List.of("DOCTOR"))))
+                .andExpect(status().isForbidden());
+        }
+
+        @Test
+        void adminIsAllowed() throws Exception {
+            when(aiBackendService.readiness()).thenReturn(Map.of("status", "ok"));
+            when(aiBackendService.verifyModels()).thenReturn(Map.of("status", "ok"));
+            mockMvc.perform(get("/api/ai/readiness").header("Authorization", bearer(List.of("ADMIN"))))
+                .andExpect(status().isOk());
+            mockMvc.perform(get("/api/ai/models/verify").header("Authorization", bearer(List.of("ADMIN"))))
                 .andExpect(status().isOk());
         }
     }

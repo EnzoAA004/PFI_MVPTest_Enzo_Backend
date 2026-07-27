@@ -68,7 +68,7 @@ class AuditServiceTest {
         when(ai.runMultiplanar(any())).thenReturn(multiplanarResponse());
 
         MockMvc uploadMvc = MockMvcBuilders
-            .standaloneSetup(new AiBackendController(new AiBackendService(ai, org.mockito.Mockito.mock(ReviewStoreService.class), auditService)))
+            .standaloneSetup(new AiBackendController(new AiBackendService(ai, org.mockito.Mockito.mock(ReviewStoreService.class), auditService), org.mockito.Mockito.mock(ar.edu.uade.pfi.backend.auth.RoleAuthorizationService.class)))
             .setControllerAdvice(new ApiExceptionHandler(auditService))
             .build();
         MockMultipartFile file = new MockMultipartFile("file", "secret-case.npy", "application/octet-stream", new byte[] {1, 2, 3});

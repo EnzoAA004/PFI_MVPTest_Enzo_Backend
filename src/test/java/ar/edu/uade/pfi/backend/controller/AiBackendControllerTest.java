@@ -85,7 +85,7 @@ class AiBackendControllerTest {
             null,
             new RunReviewService(repository)
         );
-        AiBackendController controller = new AiBackendController(aiBackendService);
+        AiBackendController controller = new AiBackendController(aiBackendService, Mockito.mock(ar.edu.uade.pfi.backend.auth.RoleAuthorizationService.class));
 
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     }

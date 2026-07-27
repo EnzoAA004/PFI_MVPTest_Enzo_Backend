@@ -3,6 +3,14 @@
 Commit base: `c3b088080ee6742a712062bd9300ad592cf253d4`
 Repository: `EnzoAA004/PFI_MVPTest_Enzo_Backend`
 
+**P10-A.1 addendum (base `9e8b72c25306cf78395598ff1a06b81168381989`):** a post-review pass
+found that P10-A's production-startup gate was not sufficient on its own — see
+`docs/P10_A1_DEMO_AND_PRODUCTION_HARDENING.md` for the blocking risks found and closed
+(demo endpoint still unconditionally public, persisted demo account still usable via
+login/refresh even with the endpoint closed, `pfi.auth.enabled=false` had no production
+guard, dev verification codes defaulted to exposed, and `/api/ai/health`/`/api/ai/models`/
+`/api/system/warmup` were still anonymously public). **Do not deploy on P10-A alone.**
+
 ## Endpoint matrix
 
 See `docs/P10_A_SECURITY_BASELINE.md`.

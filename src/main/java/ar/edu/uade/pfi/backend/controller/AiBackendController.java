@@ -37,33 +37,46 @@ public class AiBackendController {
     private final AiBackendService aiBackendService;
     private final RoleAuthorizationService authorizationService;
 
-    public AiBackendController(AiBackendService aiBackendService) {
-        this(aiBackendService, null);
-    }
-
     @Autowired
     public AiBackendController(AiBackendService aiBackendService, RoleAuthorizationService authorizationService) {
         this.aiBackendService = aiBackendService;
         this.authorizationService = authorizationService;
     }
 
+    /**
+     * No longer publicly reachable (see AuthFilter.PUBLIC_LIVENESS_PATHS): any
+     * authenticated, non-pending user (professional or ADMIN) may call this — it is
+     * gated purely by AuthFilter's default "authenticated" requirement, no extra role
+     * check needed here.
+     */
     @GetMapping("/health")
     public Map<String, Object> health() {
         return aiBackendService.health();
     }
 
+    /**
+     * Technical diagnostic with no documented professional consumer today — ADMIN-only
+     * per P10-A.1 (was previously reachable by any authenticated professional).
+     */
     @GetMapping("/readiness")
-    public Map<String, Object> readiness() {
+    public Map<String, Object> readiness(HttpServletRequest request) {
+        authorizationService.requireAdmin(request, "ai.readiness");
         return aiBackendService.readiness();
     }
 
+    /** Same as /health: gated purely by AuthFilter's default "authenticated" requirement. */
     @GetMapping("/models")
     public Object models() {
         return aiBackendService.models();
     }
 
+    /**
+     * Technical diagnostic with no documented professional consumer today — ADMIN-only
+     * per P10-A.1 (was previously reachable by any authenticated professional).
+     */
     @GetMapping("/models/verify")
-    public Map<String, Object> verifyModels() {
+    public Map<String, Object> verifyModels(HttpServletRequest request) {
+        authorizationService.requireAdmin(request, "ai.models.verify");
         return aiBackendService.verifyModels();
     }
 
@@ -141,19 +154,13 @@ public class AiBackendController {
 
     @PostMapping("/audit")
     public AuditEventDto appendAudit(@RequestBody AuditEventRequestDto request, HttpServletRequest httpRequest) {
-        requireAdmin(httpRequest);
+        authorizationService.requireAdmin(httpRequest, "audit.trail");
         return aiBackendService.appendAudit(request);
     }
 
     @GetMapping("/audit")
     public List<AuditEventDto> auditTrail(HttpServletRequest httpRequest) {
-        requireAdmin(httpRequest);
+        authorizationService.requireAdmin(httpRequest, "audit.trail");
         return aiBackendService.auditTrail();
-    }
-
-    private void requireAdmin(HttpServletRequest request) {
-        if (authorizationService != null) {
-            authorizationService.requireAdmin(request, "audit.trail");
-        }
     }
 }

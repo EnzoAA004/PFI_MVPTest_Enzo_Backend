@@ -18,10 +18,6 @@ public class AiModelSyncController {
     private final RoleAuthorizationService authorizationService;
     private final SagittalRealBaselineContractValidator sagittalContractValidator;
 
-    public AiModelSyncController(AiServiceOperations aiServiceClient) {
-        this(aiServiceClient, null, null);
-    }
-
     public AiModelSyncController(AiServiceOperations aiServiceClient, RoleAuthorizationService authorizationService) {
         this(aiServiceClient, authorizationService, null);
     }
@@ -39,9 +35,7 @@ public class AiModelSyncController {
 
     @PostMapping("/sync")
     public Map<String, Object> sync(@RequestParam(defaultValue = "false") boolean force, HttpServletRequest request) {
-        if (authorizationService != null) {
-            authorizationService.requireAdmin(request, "models.sync");
-        }
+        authorizationService.requireAdmin(request, "models.sync");
         Map<String, Object> response = aiServiceClient.syncModels(force);
         if (sagittalContractValidator != null) {
             sagittalContractValidator.validateSagittalSync(response);

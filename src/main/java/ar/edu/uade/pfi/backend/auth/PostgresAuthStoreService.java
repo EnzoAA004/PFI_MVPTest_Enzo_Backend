@@ -204,6 +204,23 @@ public class PostgresAuthStoreService {
         }
     }
 
+    /**
+     * Bulk-revokes every still-active refresh token for one email — used to close out
+     * lingering demo-account sessions from a previous rollout without touching any
+     * other account's tokens (no DELETE, no wildcard, single-email WHERE clause only).
+     */
+    public void revokeRefreshTokensForEmail(String email) {
+        if (!enabled) return;
+        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+            UPDATE auth_refresh_tokens SET revoked_at = now() WHERE email = ? AND revoked_at IS NULL
+            """)) {
+            statement.setString(1, email);
+            statement.executeUpdate();
+        } catch (Exception ignored) {
+            // Best-effort; in-memory fallback in AuthService also clears its own map.
+        }
+    }
+
     private DoctorAccount readAccount(ResultSet rs) throws Exception {
         List<String> roles = Arrays.stream(rs.getString("roles").split(","))
             .map(String::trim)

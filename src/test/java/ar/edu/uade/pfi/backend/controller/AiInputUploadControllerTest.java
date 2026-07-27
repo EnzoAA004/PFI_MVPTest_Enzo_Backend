@@ -34,7 +34,7 @@ class AiInputUploadControllerTest {
     void setUp() {
         aiServiceClient = org.mockito.Mockito.mock(AiServiceOperations.class);
         AiBackendService service = new AiBackendService(aiServiceClient, org.mockito.Mockito.mock(ReviewStoreService.class));
-        mockMvc = MockMvcBuilders.standaloneSetup(new AiBackendController(service))
+        mockMvc = MockMvcBuilders.standaloneSetup(new AiBackendController(service, org.mockito.Mockito.mock(ar.edu.uade.pfi.backend.auth.RoleAuthorizationService.class)))
             .setControllerAdvice(new ApiExceptionHandler())
             .build();
     }

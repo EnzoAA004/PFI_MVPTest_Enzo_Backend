@@ -15,6 +15,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
@@ -24,6 +25,12 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class AuthService {
+    /**
+     * The single well-known demo account email. Blocking must key off this identity,
+     * not off roles, because a previously-seeded demo account may already be persisted
+     * with ADMIN in Postgres even after demo mode is turned off.
+     */
+    public static final String DEMO_ACCOUNT_EMAIL = "doctor.demo@pfi.local";
     private static final Duration CHALLENGE_TTL = Duration.ofMinutes(10);
     private final Map<String, DoctorAccount> accountsByEmail = new ConcurrentHashMap<>();
     private final Map<String, Challenge> challenges = new ConcurrentHashMap<>();
@@ -35,15 +42,16 @@ public class AuthService {
     private final long refreshTokenSeconds;
     private final SecureRandom random = new SecureRandom();
     private final Environment environment;
+    private final boolean demoEnabled;
 
     public AuthService(
         PasswordHasher passwordHasher,
         TokenService tokenService,
         PostgresAuthStoreService postgresAuthStore,
-        @Value("${pfi.auth.expose-dev-codes:true}") boolean exposeCodes,
+        @Value("${pfi.auth.expose-dev-codes:false}") boolean exposeCodes,
         @Value("${pfi.auth.refresh-token-seconds:604800}") long refreshTokenSeconds
     ) {
-        this(passwordHasher, tokenService, postgresAuthStore, exposeCodes, refreshTokenSeconds, null);
+        this(passwordHasher, tokenService, postgresAuthStore, exposeCodes, refreshTokenSeconds, null, false);
     }
 
     @Autowired
@@ -51,9 +59,10 @@ public class AuthService {
         PasswordHasher passwordHasher,
         TokenService tokenService,
         PostgresAuthStoreService postgresAuthStore,
-        @Value("${pfi.auth.expose-dev-codes:true}") boolean exposeCodes,
+        @Value("${pfi.auth.expose-dev-codes:false}") boolean exposeCodes,
         @Value("${pfi.auth.refresh-token-seconds:604800}") long refreshTokenSeconds,
-        Environment environment
+        Environment environment,
+        @Value("${pfi.auth.demo-enabled:false}") boolean demoEnabled
     ) {
         this.passwordHasher = passwordHasher;
         this.tokenService = tokenService;
@@ -61,6 +70,21 @@ public class AuthService {
         this.exposeCodes = exposeCodes;
         this.refreshTokenSeconds = refreshTokenSeconds;
         this.environment = environment;
+        this.demoEnabled = demoEnabled;
+    }
+
+    /**
+     * If demo mode is not effectively enabled at startup, proactively revoke any
+     * lingering refresh tokens for the demo account from a previous deployment/rollout
+     * — otherwise a still-valid refresh token issued before this change could keep
+     * renewing access tokens indefinitely even though the seed endpoint is now closed.
+     */
+    @PostConstruct
+    void revokeDemoSessionsIfDemoDisabled() {
+        if (!isDemoEffectivelyEnabled()) {
+            postgresAuthStore.revokeRefreshTokensForEmail(DEMO_ACCOUNT_EMAIL);
+            refreshTokens.values().removeIf(DEMO_ACCOUNT_EMAIL::equals);
+        }
     }
 
     public PendingAuthResponse register(RegisterRequest request) {
@@ -90,6 +114,9 @@ public class AuthService {
 
     public Object login(String emailValue, String password) {
         String email = normalizeEmail(emailValue);
+        if (isDemoAccountBlocked(email)) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Credenciales inválidas");
+        }
         DoctorAccount account = findAccount(email).orElse(null);
         if (account == null || !passwordHasher.verify(password, account.passwordHash())) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Credenciales inválidas");
@@ -114,6 +141,10 @@ public class AuthService {
         if (!challenge.code().equals(code.trim())) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Código inválido");
         }
+        if (isDemoAccountBlocked(challenge.email())) {
+            challenges.remove(challengeId);
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Código expirado o inválido");
+        }
         DoctorAccount account = findAccount(challenge.email()).orElse(null);
         if (account == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Cuenta no encontrada");
@@ -131,6 +162,10 @@ public class AuthService {
         String email = postgresAuthStore.findEmailByRefreshToken(refreshToken)
             .orElseGet(() -> refreshTokens.get(refreshToken));
         if (email == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Refresh token inválido o revocado");
+        }
+        if (isDemoAccountBlocked(email)) {
+            revokeRefreshToken(refreshToken);
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Refresh token inválido o revocado");
         }
         DoctorAccount account = findAccount(email).orElse(null);
@@ -186,14 +221,17 @@ public class AuthService {
 
     /**
      * Issues a fully-approved ADMIN/DOCTOR/REVIEWER token with no credential check at
-     * all. This is only acceptable for local/dev seeding; in a production profile it
-     * would be an unauthenticated admin-token backdoor, so it is refused there.
+     * all. Refused (404, to avoid advertising the endpoint's existence) whenever demo
+     * mode is not effectively enabled — i.e. always in production, and locally unless
+     * PFI_AUTH_DEMO_ENABLED=true was explicitly set. This check is enforced here at the
+     * service layer regardless of how the request reached this method (AuthFilter only
+     * controls whether a token is *required* to reach it).
      */
     public TokenResponse seedDemoDoctor() {
-        if (isProductionProfile()) {
+        if (!isDemoEffectivelyEnabled()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No encontrado");
         }
-        String email = "doctor.demo@pfi.local";
+        String email = DEMO_ACCOUNT_EMAIL;
         DoctorAccount existing = findAccount(email).orElse(null);
         if (existing != null) {
             existing.verify();
@@ -251,6 +289,18 @@ public class AuthService {
             if (normalized.equals("production") || normalized.equals("prod")) return true;
         }
         return false;
+    }
+
+    private boolean isDemoEffectivelyEnabled() {
+        return demoEnabled && !isProductionProfile();
+    }
+
+    /**
+     * Blocks the known demo account identity whenever demo mode is not effectively
+     * enabled — regardless of whatever roles it may already carry in a persisted store.
+     */
+    private boolean isDemoAccountBlocked(String emailValue) {
+        return DEMO_ACCOUNT_EMAIL.equals(normalizeEmail(emailValue)) && !isDemoEffectivelyEnabled();
     }
 
     private void requireAdmin(TokenService.Claims claims) {

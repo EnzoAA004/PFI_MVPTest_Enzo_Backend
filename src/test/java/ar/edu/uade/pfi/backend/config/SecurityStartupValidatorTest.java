@@ -7,47 +7,114 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.env.MockEnvironment;
 
 class SecurityStartupValidatorTest {
+    private static final String STRONG_SECRET = "a-sufficiently-long-random-production-secret-value-1234";
+    private static final String EXACT_ORIGIN = "https://pfi-mvp-test-enzo-frontend.vercel.app";
+
     @Test
-    void nonProductionProfileNeverBlocksStartupRegardlessOfSecret() {
+    void nonProductionProfileNeverBlocksStartupRegardlessOfConfig() {
         MockEnvironment env = new MockEnvironment();
-        assertDoesNotThrow(() -> new SecurityStartupValidator(env, "").validate());
-        assertDoesNotThrow(() -> new SecurityStartupValidator(env, "pfi-demo-change-me-2026").validate());
+        assertDoesNotThrow(() -> validator(env, "", false, true, true, "", "*", true).validate());
     }
 
     @Test
     void productionWithBlankSecretFailsStartup() {
-        MockEnvironment env = new MockEnvironment().withProperty("spring.profiles.active", "production");
-        env.setActiveProfiles("production");
-        assertThrows(IllegalStateException.class, () -> new SecurityStartupValidator(env, "").validate());
+        assertThrows(IllegalStateException.class,
+            () -> validator(production(), "", true, false, false, EXACT_ORIGIN, "", false).validate());
     }
 
     @Test
     void productionWithDemoDefaultSecretFailsStartup() {
-        MockEnvironment env = new MockEnvironment();
-        env.setActiveProfiles("production");
         assertThrows(IllegalStateException.class,
-            () -> new SecurityStartupValidator(env, "pfi-demo-change-me-2026").validate());
+            () -> validator(production(), "pfi-demo-change-me-2026", true, false, false, EXACT_ORIGIN, "", false).validate());
     }
 
     @Test
     void productionWithWeakShortSecretFailsStartup() {
-        MockEnvironment env = new MockEnvironment();
-        env.setActiveProfiles("production");
-        assertThrows(IllegalStateException.class, () -> new SecurityStartupValidator(env, "too-short").validate());
-    }
-
-    @Test
-    void productionWithStrongSecretStartsCleanly() {
-        MockEnvironment env = new MockEnvironment();
-        env.setActiveProfiles("production");
-        assertDoesNotThrow(() -> new SecurityStartupValidator(
-            env, "a-sufficiently-long-random-production-secret-value-1234").validate());
+        assertThrows(IllegalStateException.class,
+            () -> validator(production(), "too-short", true, false, false, EXACT_ORIGIN, "", false).validate());
     }
 
     @Test
     void prodAliasIsAlsoTreatedAsProduction() {
         MockEnvironment env = new MockEnvironment();
         env.setActiveProfiles("prod");
-        assertThrows(IllegalStateException.class, () -> new SecurityStartupValidator(env, "").validate());
+        assertThrows(IllegalStateException.class,
+            () -> validator(env, "", true, false, false, EXACT_ORIGIN, "", false).validate());
+    }
+
+    @Test
+    void productionWithAuthDisabledFailsStartup() {
+        assertThrows(IllegalStateException.class,
+            () -> validator(production(), STRONG_SECRET, false, false, false, EXACT_ORIGIN, "", false).validate());
+    }
+
+    @Test
+    void productionWithDemoEnabledFailsStartup() {
+        assertThrows(IllegalStateException.class,
+            () -> validator(production(), STRONG_SECRET, true, true, false, EXACT_ORIGIN, "", false).validate());
+    }
+
+    @Test
+    void productionWithExposeDevCodesTrueFailsStartup() {
+        assertThrows(IllegalStateException.class,
+            () -> validator(production(), STRONG_SECRET, true, false, true, EXACT_ORIGIN, "", false).validate());
+    }
+
+    @Test
+    void productionWithExposeDevCodesFalseStartsCleanly() {
+        assertDoesNotThrow(
+            () -> validator(production(), STRONG_SECRET, true, false, false, EXACT_ORIGIN, "", false).validate());
+    }
+
+    @Test
+    void productionWithoutHttpsOriginFailsStartup() {
+        assertThrows(IllegalStateException.class,
+            () -> validator(production(), STRONG_SECRET, true, false, false, "", "", false).validate());
+    }
+
+    @Test
+    void productionWithLiteralWildcardOriginFailsStartup() {
+        assertThrows(IllegalStateException.class,
+            () -> validator(production(), STRONG_SECRET, true, false, false, "*", "", false).validate());
+    }
+
+    @Test
+    void productionWithPatternsButPreviewNotAllowedFailsStartup() {
+        assertThrows(IllegalStateException.class,
+            () -> validator(production(), STRONG_SECRET, true, false, false, EXACT_ORIGIN, "https://*.vercel.app", false).validate());
+    }
+
+    @Test
+    void productionWithPatternsAndPreviewExplicitlyAllowedStartsCleanly() {
+        assertDoesNotThrow(() -> validator(
+            production(), STRONG_SECRET, true, false, false, EXACT_ORIGIN, "https://*.vercel.app", true).validate());
+    }
+
+    @Test
+    void productionWithExactHttpsOriginAndStrongSecretStartsCleanly() {
+        assertDoesNotThrow(
+            () -> validator(production(), STRONG_SECRET, true, false, false, EXACT_ORIGIN, "", false).validate());
+    }
+
+    private MockEnvironment production() {
+        MockEnvironment env = new MockEnvironment();
+        env.setActiveProfiles("production");
+        return env;
+    }
+
+    private SecurityStartupValidator validator(
+        MockEnvironment env,
+        String jwtSecret,
+        boolean authEnabled,
+        boolean demoEnabled,
+        boolean exposeDevCodes,
+        String corsAllowedOrigins,
+        String corsAllowedOriginPatterns,
+        boolean allowPreviewPatterns
+    ) {
+        return new SecurityStartupValidator(
+            env, jwtSecret, authEnabled, demoEnabled, exposeDevCodes,
+            corsAllowedOrigins, corsAllowedOriginPatterns, allowPreviewPatterns
+        );
     }
 }

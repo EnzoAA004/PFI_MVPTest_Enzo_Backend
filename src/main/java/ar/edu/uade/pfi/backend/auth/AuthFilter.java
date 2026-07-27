@@ -7,8 +7,10 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.time.Instant;
+import java.util.Locale;
 import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -20,28 +22,33 @@ import org.springframework.web.filter.OncePerRequestFilter;
 @Component
 public class AuthFilter extends OncePerRequestFilter {
     public static final String AUTH_CLAIMS_ATTRIBUTE = "pfi.auth.claims";
+    private static final String DEMO_DOCTOR_PATH = "/api/auth/demo-doctor";
     private static final Set<String> PUBLIC_AUTH_PATHS = Set.of(
         "/api/auth/register",
         "/api/auth/verify-registration",
         "/api/auth/login",
         "/api/auth/verify-login",
         "/api/auth/refresh",
-        "/api/auth/demo-doctor",
         "/api/auth/logout"
     );
-    private static final Set<String> PUBLIC_LIVENESS_PATHS = Set.of(
-        "/api/system/health",
-        "/api/ai/health",
-        "/api/ai/models",
-        "/api/system/warmup"
-    );
+    /** Only a minimal, no-detail liveness endpoint is anonymously reachable — see P10-A.1 §7. */
+    private static final Set<String> PUBLIC_LIVENESS_PATHS = Set.of("/api/system/health");
     private static final Set<String> PENDING_ALLOWED_PATHS = Set.of("/api/auth/me", "/api/auth/settings");
     private final TokenService tokenService;
     private final boolean authEnabled;
+    private final boolean demoEnabled;
+    private final Environment environment;
 
-    public AuthFilter(TokenService tokenService, @Value("${pfi.auth.enabled:true}") boolean authEnabled) {
+    public AuthFilter(
+        TokenService tokenService,
+        @Value("${pfi.auth.enabled:true}") boolean authEnabled,
+        @Value("${pfi.auth.demo-enabled:false}") boolean demoEnabled,
+        Environment environment
+    ) {
         this.tokenService = tokenService;
         this.authEnabled = authEnabled;
+        this.demoEnabled = demoEnabled;
+        this.environment = environment;
     }
 
     @Override
@@ -74,7 +81,23 @@ public class AuthFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         if ("OPTIONS".equalsIgnoreCase(method)) return true;
         if (PUBLIC_AUTH_PATHS.contains(path)) return true;
-        return PUBLIC_LIVENESS_PATHS.contains(path);
+        if (PUBLIC_LIVENESS_PATHS.contains(path)) return true;
+        if (DEMO_DOCTOR_PATH.equals(path)) return isDemoEffectivelyEnabled();
+        return false;
+    }
+
+    /** Demo seeding is only ever public when explicitly opted into locally AND not in production. */
+    private boolean isDemoEffectivelyEnabled() {
+        return demoEnabled && !isProductionProfile();
+    }
+
+    private boolean isProductionProfile() {
+        if (environment == null) return false;
+        for (String profile : environment.getActiveProfiles()) {
+            String normalized = profile.toLowerCase(Locale.ROOT);
+            if (normalized.equals("production") || normalized.equals("prod")) return true;
+        }
+        return false;
     }
 
     private void writeError(HttpServletRequest request, HttpServletResponse response, int status, String code, String message)

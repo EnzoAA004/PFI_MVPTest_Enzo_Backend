@@ -1,6 +1,10 @@
 # P10-A — Security Baseline
 
 Commit base: `c3b088080ee6742a712062bd9300ad592cf253d4`
+Superseded in part by **P10-A.1** (base `9e8b72c25306cf78395598ff1a06b81168381989`) —
+see `docs/P10_A1_DEMO_AND_PRODUCTION_HARDENING.md`. Rows below marked **(P10-A.1)** were
+changed after the initial P10-A pass; this file has been updated in place rather than
+kept as two divergent documents.
 
 ## 0. Architecture reality check (audit finding #1)
 
@@ -51,7 +55,7 @@ valid token with `ADMIN` role (`RoleAuthorizationService.requireAdmin`).
 | POST | /api/auth/login | PUBLIC | anonymous | token or challenge | credential exchange | pre-existing |
 | POST | /api/auth/verify-login | PUBLIC | anonymous | access+refresh token | 2FA completion | pre-existing |
 | POST | /api/auth/refresh | PUBLIC | anonymous | new access+refresh token | session renewal, refresh token itself is the credential | pre-existing |
-| POST | /api/auth/demo-doctor | PUBLIC (dev/test only) | anonymous | ADMIN-privileged token | **hardening**: now refused (404) when `SPRING_PROFILES_ACTIVE` contains `production`/`prod` — see finding #2 | `AuthServiceProductionTest`-style coverage TODO (see risks) |
+| POST | /api/auth/demo-doctor | **(P10-A.1)** PUBLIC only when `pfi.auth.demo-enabled=true` AND no `production`/`prod` profile; otherwise treated as any other protected route (401 anonymous) | anonymous, only when demo effectively enabled | ADMIN-privileged token | default is now `PFI_AUTH_DEMO_ENABLED=false`; service layer (`AuthService.seedDemoDoctor`) also refuses with 404 regardless of how the request reached it | `DemoModeAuthServiceTest`, `SecurityStartupValidatorTest` |
 | POST | /api/auth/logout | PUBLIC | anonymous | ok flag | must work even with an expired access token | pre-existing |
 | GET | /api/auth/me | PENDING+AUTH | any authenticated | own profile | pending users must see their own approval status | `AuthFilter` PENDING_ALLOWED_PATHS |
 | PATCH | /api/auth/settings | PENDING+AUTH | any authenticated | own profile | pending users can complete 2FA/onboarding prefs | `AuthFilter` PENDING_ALLOWED_PATHS |
@@ -59,9 +63,9 @@ valid token with `ADMIN` role (`RoleAuthorizationService.requireAdmin`).
 | PATCH | /api/auth/admin/professionals/approval | AUTH → ADMIN (service-level) | ADMIN | approval result | approval workflow | `AuthService.requireAdmin` |
 | GET | /api/system/health | PUBLIC | anonymous | `{"status":"ok"}` only | minimal liveness, new in P10-A | `SecurityAuthorizationIntegrationTest` (indirect) |
 | GET | /api/system/diagnostics | ADMIN | ADMIN | AI Module/db/auth diagnostics (no secrets, no AI Module URL) | admin-only troubleshooting | `RoleAuthorizationControllerTest`, `SecurityAuthorizationIntegrationTest.Admin` |
-| POST | /api/system/warmup | PUBLIC | anonymous | warmup summary | operational convenience; no secrets returned | pre-existing |
-| GET | /api/ai/health, /api/ai/models | PUBLIC | anonymous | AI Module proxy passthrough | connectivity check used before login | pre-existing (unchanged) |
-| GET | /api/ai/readiness, /api/ai/models/verify | AUTH | any non-pending authenticated | AI Module proxy passthrough | requires a session, not admin-gated today | documented limitation below |
+| POST | /api/system/warmup | **(P10-A.1)** ADMIN | ADMIN | warmup summary | was PUBLIC; now `RoleAuthorizationService.requireAdmin` because it triggers an AI Module operation, not a read | `SecurityAuthorizationIntegrationTest.PublicSurfaceMatrix` |
+| GET | /api/ai/health, /api/ai/models | **(P10-A.1)** AUTH | professional/ADMIN | AI Module proxy passthrough | removed from `AuthFilter.PUBLIC_LIVENESS_PATHS`; use `/api/system/health` for anonymous liveness instead | `SecurityAuthorizationIntegrationTest.PublicSurfaceMatrix` |
+| GET | /api/ai/readiness, /api/ai/models/verify | **(P10-A.1)** ADMIN | ADMIN | AI Module proxy passthrough | reclassified as technical diagnostics with no documented professional consumer; was `AUTH`-only, now `RoleAuthorizationService.requireAdmin` | `SecurityAuthorizationIntegrationTest.ReadinessAndVerifyAreAdminOnly` |
 | POST | /api/ai/models/sync | ADMIN | ADMIN | sync result | changes served model artifacts | `RoleAuthorizationControllerTest` |
 | GET/POST | /api/ai/audit, /api/ai/audit-events | ADMIN (hardened in P10-A) | ADMIN | audit trail across all users | system-wide audit search is an admin capability, not "propia" | new: `SecurityAuthorizationIntegrationTest` pattern (see risks — no dedicated controller test yet) |
 | GET | /api/studies, /api/studies/{caseId}, /api/studies/{caseId}/runs | AUTH | professional/ADMIN | de-identified worklist/detail | clinical/academic worklist | `SecurityAuthorizationIntegrationTest.ApprovedProfessional/Admin` |
@@ -93,11 +97,15 @@ policy before P10-A; no change was needed there beyond standardizing the error b
 
 ## 5. Known gaps (see `P10_A_SECURITY_EVIDENCE.md` → "Limitaciones que NO deben sobreafirmarse")
 
-- `/api/ai/readiness` and `/api/ai/models/verify` are `AUTH`-only (any non-pending role),
-  not `ADMIN`-gated, even though they are diagnostic in nature — left unchanged to avoid
-  scope creep into P9 territory without an explicit instruction; flagged as a follow-up.
+- ~~`/api/ai/readiness` and `/api/ai/models/verify` are `AUTH`-only~~ — closed in P10-A.1,
+  both are now ADMIN-only.
 - No per-controller MockMvc test was added for `/api/ai/inputs` role enforcement
   specifically (covered indirectly through `AuthFilter`'s blanket gate, exercised in
-  `SecurityAuthorizationIntegrationTest`), nor for `AiAuditController`'s new ADMIN gate.
+  `SecurityAuthorizationIntegrationTest`).
 - No IDOR/ownership model exists for studies/runs by professional — see the evidence
   document's explicit non-claim about multi-tenancy.
+- `AiRunReviewController` still has a `if (authorizationService != null)` null-bypass
+  around its `requireProfessional` call (P10-A.1 §10 only mandated removing this pattern
+  from `AiAuditController`/`AiBackendController`/`SystemController`/`AiModelSyncController`
+  — the administrative ones). Left as a follow-up since it is a professional-level check,
+  not an admin one, and touching it would require rewiring `AiRunReviewControllerTest`.

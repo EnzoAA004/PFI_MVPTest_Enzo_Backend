@@ -295,7 +295,7 @@ class SagittalRealBaselineIntegrationContractTest {
         when(ai.syncModels(false)).thenReturn(syncResponse("models_sync_completed", "synced_verified", expected.modelSha256()));
 
         MockMvc mockMvc = MockMvcBuilders
-            .standaloneSetup(new AiModelSyncController(ai, null, validator))
+            .standaloneSetup(new AiModelSyncController(ai, mock(ar.edu.uade.pfi.backend.auth.RoleAuthorizationService.class), validator))
             .setControllerAdvice(new ApiExceptionHandler())
             .build();
 
@@ -499,7 +499,7 @@ class SagittalRealBaselineIntegrationContractTest {
     private MockMvc strictMockMvc(AiServiceOperations ai, ReviewStoreService reviews) {
         AiBackendService service = new AiBackendService(ai, reviews, null, normalizer, validator, presenter, readinessResolver);
         return MockMvcBuilders
-            .standaloneSetup(new AiBackendController(service))
+            .standaloneSetup(new AiBackendController(service, mock(ar.edu.uade.pfi.backend.auth.RoleAuthorizationService.class)))
             .setControllerAdvice(new ApiExceptionHandler())
             .build();
     }
