@@ -97,8 +97,10 @@ class ProfessionalActivationIntegrationTest {
         assertEquals("deactivated", response.status());
         assertEquals(List.of("PENDING_APPROVAL"), response.roles());
         assertFalse(response.approved());
-        verify(store).updateProfessionalActivation(active.email(), true, false, List.of("PENDING_APPROVAL"));
-        verify(store).revokeRefreshTokensForEmail(active.email());
+        // Deactivation + session revocation are transactional now (single Postgres
+        // call) rather than two separate best-effort calls — see
+        // PostgresAuthStoreService.deactivateProfessionalAndRevokeSessions.
+        verify(store).deactivateProfessionalAndRevokeSessions(active.email(), true, List.of("PENDING_APPROVAL"));
     }
 
     @Test
@@ -163,6 +165,62 @@ class ProfessionalActivationIntegrationTest {
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
             () -> service.activateProfessional(doctorClaims, pending.email(), true));
+        assertEquals(403, ex.getStatusCode().value());
+    }
+
+    @Test
+    void deactivationFailurePropagatesAndNeverUpdatesTheInMemoryCache() {
+        PostgresAuthStoreService store = mock(PostgresAuthStoreService.class);
+        DoctorAccount active = activeAccount();
+        when(store.findByEmail(active.email())).thenReturn(Optional.of(active));
+        when(store.deactivateProfessionalAndRevokeSessions(active.email(), true, List.of("PENDING_APPROVAL")))
+            .thenThrow(new IllegalStateException("rollback: could not persist deactivation"));
+        AuthService service = service(store);
+
+        assertThrows(IllegalStateException.class, () -> service.activateProfessional(adminClaims, active.email(), false));
+
+        // The account object handed back by a subsequent lookup must still be approved —
+        // account.approve(false) is only called AFTER the Postgres call succeeds.
+        assertTrue(active.approved());
+        assertEquals(List.of("DOCTOR", "REVIEWER"), active.roles());
+    }
+
+    // ---- Legacy /approval delegates to the exact same domain operation ----
+
+    @Test
+    void legacyApprovalGrantsOnlyDoctorAndReviewerNeverAdmin() {
+        PostgresAuthStoreService store = mock(PostgresAuthStoreService.class);
+        DoctorAccount pending = pendingAccount();
+        when(store.findByEmail(pending.email())).thenReturn(Optional.of(pending));
+        AuthService service = service(store);
+
+        var user = service.approveProfessional(adminClaims, pending.email(), true);
+
+        assertEquals(List.of("DOCTOR", "REVIEWER"), user.roles());
+        assertFalse(user.roles().contains("ADMIN"));
+        verify(store).updateProfessionalActivation(pending.email(), true, true, List.of("DOCTOR", "REVIEWER"));
+    }
+
+    @Test
+    void legacyApprovalDeactivationUsesTheTransactionalRevocationPath() {
+        PostgresAuthStoreService store = mock(PostgresAuthStoreService.class);
+        DoctorAccount active = activeAccount();
+        when(store.findByEmail(active.email())).thenReturn(Optional.of(active));
+        AuthService service = service(store);
+
+        var user = service.approveProfessional(adminClaims, active.email(), false);
+
+        assertEquals(List.of("PENDING_APPROVAL"), user.roles());
+        verify(store).deactivateProfessionalAndRevokeSessions(active.email(), true, List.of("PENDING_APPROVAL"));
+    }
+
+    @Test
+    void legacyApprovalRejectsTheDemoAccount() {
+        PostgresAuthStoreService store = mock(PostgresAuthStoreService.class);
+        AuthService service = service(store);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+            () -> service.approveProfessional(adminClaims, AuthService.DEMO_ACCOUNT_EMAIL, true));
         assertEquals(403, ex.getStatusCode().value());
     }
 

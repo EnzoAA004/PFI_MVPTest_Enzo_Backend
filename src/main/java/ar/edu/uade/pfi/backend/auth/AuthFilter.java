@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.time.Instant;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;
@@ -35,17 +36,20 @@ public class AuthFilter extends OncePerRequestFilter {
     private static final Set<String> PUBLIC_LIVENESS_PATHS = Set.of("/api/system/health");
     private static final Set<String> PENDING_ALLOWED_PATHS = Set.of("/api/auth/me", "/api/auth/settings");
     private final TokenService tokenService;
+    private final AuthAccountStateService accountStateService;
     private final boolean authEnabled;
     private final boolean demoEnabled;
     private final Environment environment;
 
     public AuthFilter(
         TokenService tokenService,
+        AuthAccountStateService accountStateService,
         @Value("${pfi.auth.enabled:true}") boolean authEnabled,
         @Value("${pfi.auth.demo-enabled:false}") boolean demoEnabled,
         Environment environment
     ) {
         this.tokenService = tokenService;
+        this.accountStateService = accountStateService;
         this.authEnabled = authEnabled;
         this.demoEnabled = demoEnabled;
         this.environment = environment;
@@ -63,17 +67,42 @@ public class AuthFilter extends OncePerRequestFilter {
             writeError(request, response, HttpServletResponse.SC_UNAUTHORIZED, "AUTHENTICATION_REQUIRED", "Autenticacion requerida.");
             return;
         }
-        TokenService.Claims claims = tokenService.verify(header.substring(7).trim());
-        if (claims == null) {
+        TokenService.Claims tokenClaims = tokenService.verify(header.substring(7).trim());
+        if (tokenClaims == null) {
             writeError(request, response, HttpServletResponse.SC_UNAUTHORIZED, "AUTHENTICATION_REQUIRED", "Autenticacion requerida.");
             return;
         }
-        if (claims.roles().contains("PENDING_APPROVAL") && !PENDING_ALLOWED_PATHS.contains(request.getRequestURI())) {
+        AuthAccountStateService.Resolution resolution = accountStateService.resolve(tokenClaims);
+        if (resolution.status() == AuthAccountStateService.Status.STATE_UNAVAILABLE) {
+            writeError(request, response, HttpServletResponse.SC_SERVICE_UNAVAILABLE, "AUTH_STATE_UNAVAILABLE",
+                "No fue posible validar el estado actual de la sesion.");
+            return;
+        }
+        if (resolution.status() != AuthAccountStateService.Status.OK) {
+            writeError(request, response, HttpServletResponse.SC_UNAUTHORIZED, "AUTHENTICATION_REQUIRED", "Autenticacion requerida.");
+            return;
+        }
+        TokenService.Claims claims = resolution.claims();
+        if (isRestrictedAccount(claims) && !PENDING_ALLOWED_PATHS.contains(request.getRequestURI())) {
             writeError(request, response, HttpServletResponse.SC_FORBIDDEN, "ACCESS_DENIED", "No tiene permisos para realizar esta operacion.");
             return;
         }
         request.setAttribute(AUTH_CLAIMS_ATTRIBUTE, claims);
         filterChain.doFilter(request, response);
+    }
+
+    private static final Set<String> RECOGNIZED_ACTIVE_ROLES = Set.of("DOCTOR", "REVIEWER", "ADMIN");
+
+    /**
+     * A pending/inactive account: explicitly PENDING_APPROVAL, or carrying no
+     * recognized professional/admin role at all (covers accounts with an empty or
+     * unrecognized role set the same way PENDING_APPROVAL is covered).
+     */
+    private boolean isRestrictedAccount(TokenService.Claims claims) {
+        List<String> roles = claims.roles();
+        if (roles == null || roles.isEmpty()) return true;
+        if (roles.contains("PENDING_APPROVAL")) return true;
+        return roles.stream().noneMatch(RECOGNIZED_ACTIVE_ROLES::contains);
     }
 
     private boolean isPublicRequest(HttpServletRequest request) {

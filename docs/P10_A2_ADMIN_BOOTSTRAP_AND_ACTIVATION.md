@@ -113,21 +113,23 @@ rejected with 400 before it ever reaches business logic (verified in
   issues a token, never deletes the account or touches the password hash.
 - The demo account is refused with 403 for either direction.
 
-## Known limitation: already-issued access tokens survive deactivation
+## Superseded by P10-A.2.1: access tokens now revalidated on every request
 
-Deactivation revokes **refresh tokens** immediately, so a deactivated account cannot
-renew its session. It does **not** invalidate an access token that was already issued
-and has not yet expired — `AuthFilter` only ever validates the JWT signature/expiry, it
-does not query Postgres on every request. A brand-new login attempt after
-deactivation *is* safe: `AuthService.login` re-reads the persisted account, so the new
-token it issues only ever carries `PENDING_APPROVAL` (verified in
-`ProfessionalActivationIntegrationTest.deactivatedAccountLoginOnlyEverGetsPendingApprovalRole`).
-The exposure window is therefore bounded by the access-token TTL (`pfi.auth.access-token-seconds`,
-1 hour by default) rather than being open-ended. A full "re-check account state on every
-authenticated request" implementation was deliberately not attempted in this pass — it
-would add a Postgres round-trip to every protected request, a meaningful architecture
-and performance change that deserves its own review rather than being bundled into an
-already-large security patch. **This is an honest, documented gap, not a silent one.**
+**This section originally documented an accepted gap ("already-issued access tokens
+survive deactivation") — that gap is closed as of P10-A.2.1.** See
+`docs/P10_A1_DEMO_AND_PRODUCTION_HARDENING.md` and the P10-A.2.1 addendum in
+`docs/P10_A_SECURITY_EVIDENCE.md` for the full picture: `AuthFilter` now revalidates the
+caller's persisted account state (via `AuthAccountStateService` →
+`PostgresAuthStoreService.findByEmailForAuthorization`) on every protected request in
+production, and builds the request's effective `TokenService.Claims` from that
+persisted state rather than trusting the JWT's own `roles` claim. A deactivated
+account's still-unexpired access token is rejected (403) on the very next request —
+proven end-to-end against real Postgres in
+`AccountStateImmediateInvalidationIntegrationTest.accessTokenStopsWorkingImmediatelyAfterDeactivation`.
+The cost is one additional Postgres read per protected request in production; outside
+production the JWT's own claims are still trusted directly (no behavior change for
+dev/test). A short-lived, invalidation-aware cache in front of that read is noted as a
+possible future optimization, but was not needed to close the gap.
 
 ## First Railway deployment
 
@@ -191,20 +193,26 @@ any of the removed variables would even be read.
 
 ## Pending risks
 
-- Already-issued access tokens are not invalidated immediately on deactivation (see
-  above) — bounded by the 1-hour default TTL.
-- `AuthService.countOtherNonDemoAdmins` (last-ADMIN protection) reads from
-  `postgresAuthStore.listAccounts()` when Postgres is enabled, else from the in-memory
-  cache — in the extremely unlikely case that the in-memory cache is missing an admin
-  account that exists only in Postgres and Postgres is disabled, the check could
-  under-count. In production (Postgres always enabled per P10-A.1's own requirements)
-  this does not apply.
-- Institutional activation's Postgres calls (`updateProfessionalActivation`) are
-  fail-closed by design (throw rather than silently succeed) — this means the
-  activation endpoint is unusable in a pure in-memory (non-Postgres) deployment. That is
-  considered acceptable because institutional activation is a production-oriented flow.
+- ~~Already-issued access tokens are not invalidated immediately on deactivation~~ —
+  closed in P10-A.2.1 (`AuthAccountStateService` revalidates persisted state on every
+  production request). See the note above.
+- `AuthService.countOtherNonDemoAdmins` (last-ADMIN protection): when Postgres is
+  enabled, it now uses the strict, exact-role
+  `PostgresAuthStoreService.countActiveNonDemoAdminsExcluding` and fails closed (blocks
+  the operation) if that query fails — it no longer relies on `listAccounts()` for this
+  decision. Only outside Postgres (in-memory/dev/test mode) does it fall back to the
+  in-memory cache, which is fine because Postgres is required in production regardless.
+- Institutional activation's Postgres calls (`updateProfessionalActivation`,
+  `deactivateProfessionalAndRevokeSessions`) are fail-closed by design (throw rather
+  than silently succeed) — this means the activation endpoint is unusable in a pure
+  in-memory (non-Postgres) deployment. That is considered acceptable because
+  institutional activation is a production-oriented flow.
 - No multi-tenancy / per-organization admin scoping exists — one ADMIN role governs the
   whole deployment, as before.
+- Every protected request in production now costs one additional Postgres read
+  (`findByEmailForAuthorization`). No caching layer was added — correctness was
+  prioritized over the extra round-trip; a short-lived, invalidation-aware cache is
+  listed as future work if this becomes a measured bottleneck.
 
 ## Future work (not implemented here)
 
@@ -213,6 +221,9 @@ any of the removed variables would even be read.
 - A real transactional email provider so self-service email verification and
   password-reset flows become possible again, reducing reliance on institutional
   manual activation as the only production onboarding path.
-- Optional: a live-session invalidation mechanism (e.g. a short "deny list" cache or
-  reducing the default access-token TTL further) to close the already-issued-token gap
-  described above without a full per-request DB check.
+- Optional: a short, invalidation-aware cache in front of the per-request account-state
+  read described above, to trade a small, bounded staleness window for fewer Postgres
+  round-trips — only worth doing if the extra read is ever measured to matter.
+- The legacy `PATCH /api/auth/admin/professionals/approval` endpoint is still present
+  (frontend compatibility) but fully delegates to the same domain operation as
+  `/activation`; it should be removed once the frontend migrates, in P10-C.

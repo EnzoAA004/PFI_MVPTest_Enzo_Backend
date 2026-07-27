@@ -22,7 +22,7 @@ class LastAdminProtectionTest {
         PostgresAuthStoreService store = mock(PostgresAuthStoreService.class);
         DoctorAccount onlyAdmin = admin("only-admin@pfi.local");
         when(store.findByEmail(onlyAdmin.email())).thenReturn(Optional.of(onlyAdmin));
-        when(store.listAccounts()).thenReturn(List.of(onlyAdmin));
+        when(store.countActiveNonDemoAdminsExcluding(onlyAdmin.email())).thenReturn(0L);
         when(store.enabled()).thenReturn(true);
         AuthService service = service(store);
 
@@ -36,9 +36,8 @@ class LastAdminProtectionTest {
     void withTwoAdminsOneCanBeDeactivated() {
         PostgresAuthStoreService store = mock(PostgresAuthStoreService.class);
         DoctorAccount first = admin("first-admin@pfi.local");
-        DoctorAccount second = admin("second-admin@pfi.local");
         when(store.findByEmail(first.email())).thenReturn(Optional.of(first));
-        when(store.listAccounts()).thenReturn(List.of(first, second));
+        when(store.countActiveNonDemoAdminsExcluding(first.email())).thenReturn(1L);
         when(store.enabled()).thenReturn(true);
         AuthService service = service(store);
 
@@ -51,13 +50,14 @@ class LastAdminProtectionTest {
     void demoAdminAccountDoesNotCountTowardsTheProtection() {
         PostgresAuthStoreService store = mock(PostgresAuthStoreService.class);
         DoctorAccount realAdmin = admin("real-admin@pfi.local");
-        DoctorAccount demoAdmin = admin(AuthService.DEMO_ACCOUNT_EMAIL);
         when(store.findByEmail(realAdmin.email())).thenReturn(Optional.of(realAdmin));
-        when(store.listAccounts()).thenReturn(List.of(realAdmin, demoAdmin));
+        // The store itself excludes the demo account from this count (see
+        // PostgresAuthStoreService.countActiveNonDemoAdminsExcluding) — even though two
+        // ADMIN rows exist in Postgres, realAdmin is the only NON-DEMO one.
+        when(store.countActiveNonDemoAdminsExcluding(realAdmin.email())).thenReturn(0L);
         when(store.enabled()).thenReturn(true);
         AuthService service = service(store);
 
-        // realAdmin is the ONLY non-demo admin even though two ADMIN rows exist.
         assertThrows(LastAdminProtectionException.class,
             () -> service.activateProfessional(adminClaims, realAdmin.email(), false));
     }
@@ -70,13 +70,25 @@ class LastAdminProtectionTest {
             "MN-2", "Spine", "Hospital", List.of("DOCTOR", "REVIEWER"), Instant.now(), true, true, false, true
         );
         when(store.findByEmail(professional.email())).thenReturn(Optional.of(professional));
-        when(store.listAccounts()).thenReturn(List.of(professional));
         when(store.enabled()).thenReturn(true);
         AuthService service = service(store);
 
         var response = service.activateProfessional(adminClaims, professional.email(), false);
 
         assertEquals("deactivated", response.status());
+    }
+
+    @Test
+    void countQueryFailureBlocksTheOperationRatherThanAssumingOtherAdminsExist() {
+        PostgresAuthStoreService store = mock(PostgresAuthStoreService.class);
+        DoctorAccount onlyAdmin = admin("only-admin-2@pfi.local");
+        when(store.findByEmail(onlyAdmin.email())).thenReturn(Optional.of(onlyAdmin));
+        when(store.enabled()).thenReturn(true);
+        when(store.countActiveNonDemoAdminsExcluding(onlyAdmin.email())).thenThrow(new IllegalStateException("connection failed"));
+        AuthService service = service(store);
+
+        assertThrows(LastAdminProtectionException.class,
+            () -> service.activateProfessional(adminClaims, onlyAdmin.email(), false));
     }
 
     private DoctorAccount admin(String email) {

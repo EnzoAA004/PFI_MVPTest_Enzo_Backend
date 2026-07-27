@@ -6,6 +6,16 @@ see `docs/P10_A1_DEMO_AND_PRODUCTION_HARDENING.md`. Rows below marked **(P10-A.1
 changed after the initial P10-A pass; this file has been updated in place rather than
 kept as two divergent documents.
 
+Further superseded by **P10-A.2** (admin bootstrap + institutional activation, see
+`docs/P10_A2_ADMIN_BOOTSTRAP_AND_ACTIVATION.md`) and **P10-A.2.1** (base
+`cd500255a58cec0ade91cd609a9f69627e66452c`): `AuthFilter` now revalidates the caller's
+*persisted* account state on every protected production request (via
+`AuthAccountStateService`) instead of trusting only the JWT's `roles` claim — a
+deactivated account's still-valid access token is rejected on the very next request.
+The legacy `/approval` endpoint now enforces the exact same rules as `/activation`
+(same domain operation, same last-ADMIN protection, same fail-closed persistence).
+Rows below marked **(P10-A.2.1)** reflect this.
+
 ## 0. Architecture reality check (audit finding #1)
 
 This backend does **not** use Spring Security / `SecurityFilterChain` / `@PreAuthorize`.
@@ -60,8 +70,8 @@ valid token with `ADMIN` role (`RoleAuthorizationService.requireAdmin`).
 | GET | /api/auth/me | PENDING+AUTH | any authenticated | own profile | pending users must see their own approval status | `AuthFilter` PENDING_ALLOWED_PATHS |
 | PATCH | /api/auth/settings | PENDING+AUTH | any authenticated | own profile | pending users can complete 2FA/onboarding prefs | `AuthFilter` PENDING_ALLOWED_PATHS |
 | GET | /api/auth/admin/professionals | AUTH → ADMIN (service-level) | ADMIN | professional roster (no passwordHash) | approval workflow | `AuthService.requireAdmin` |
-| PATCH | /api/auth/admin/professionals/approval | AUTH → ADMIN (service-level) | ADMIN | approval result | approval workflow | `AuthService.requireAdmin` |
-| PATCH | /api/auth/admin/professionals/activation | **(P10-A.2)** ADMIN (`RoleAuthorizationService`, mandatory dependency) | ADMIN | institutional activation result (no secrets) | production substitute for email verification (no real email provider); strict DTO rejects `roles`/`admin`/`password`/etc with 400; never grants ADMIN; last-ADMIN-protected on deactivation | `ProfessionalActivationControllerTest`, `ProfessionalActivationIntegrationTest`, `LastAdminProtectionTest` |
+| PATCH | /api/auth/admin/professionals/approval | **(P10-A.2.1)** ADMIN (`RoleAuthorizationService`, mandatory dependency) | ADMIN | approval result (`UserResponse`, kept for frontend compat) | **legacy/deprecated**, kept only because the current frontend still calls it; now delegates to the exact same `AuthService.setProfessionalActivation` domain operation as `/activation` — same last-ADMIN protection, demo blocking, fail-closed persistence, session revocation | `ApprovalEndpointControllerTest`, `ProfessionalActivationIntegrationTest` |
+| PATCH | /api/auth/admin/professionals/activation | ADMIN (`RoleAuthorizationService`, mandatory dependency) | ADMIN | institutional activation result (no secrets) | production substitute for email verification (no real email provider); unknown fields (`roles`/`admin`/`password`/etc) explicitly rejected with 400 against the raw request body **(P10-A.2.1: no longer relies on a Jackson annotation alone — see §10 note below)**; never grants ADMIN; last-ADMIN-protected on deactivation | `ProfessionalActivationControllerTest`, `ProfessionalActivationRealObjectMapperTest`, `ProfessionalActivationIntegrationTest`, `LastAdminProtectionTest` |
 | GET | /api/system/health | PUBLIC | anonymous | `{"status":"ok"}` only | minimal liveness, new in P10-A | `SecurityAuthorizationIntegrationTest` (indirect) |
 | GET | /api/system/diagnostics | ADMIN | ADMIN | AI Module/db/auth diagnostics (no secrets, no AI Module URL) | admin-only troubleshooting | `RoleAuthorizationControllerTest`, `SecurityAuthorizationIntegrationTest.Admin` |
 | POST | /api/system/warmup | **(P10-A.1)** ADMIN | ADMIN | warmup summary | was PUBLIC; now `RoleAuthorizationService.requireAdmin` because it triggers an AI Module operation, not a read | `SecurityAuthorizationIntegrationTest.PublicSurfaceMatrix` |
@@ -89,12 +99,48 @@ Full route list matches `@RequestMapping`/`@GetMapping`/... across `src/main/jav
 for anything outside `/api/**`) was removed — there is nothing served outside `/api/**`
 in this application, so this closes a wildcard that the task explicitly forbids.
 
+## 3b. Per-request account-state revalidation (P10-A.2.1)
+
+Previously, `AuthFilter` only checked the JWT's signature/expiry and then trusted its
+`roles` claim for the rest of the request's lifetime — meaning a deactivated account's
+already-issued token kept working until it naturally expired. As of P10-A.2.1, after
+JWT verification succeeds, `AuthFilter` calls `AuthAccountStateService.resolve(...)`:
+
+- **Outside production**: the JWT's claims are trusted directly (no Postgres read) —
+  preserves all existing dev/test behavior unchanged.
+- **In production**: Postgres is queried via
+  `PostgresAuthStoreService.findByEmailForAuthorization` (fail-closed: never swallows
+  an exception) for every protected request. The account's *current* `id`/`email`/
+  `fullName`/`roles` become the request's effective claims — not the token's. Outcomes:
+  - account missing, or `id` doesn't match the token's `subject` → 401 `AUTHENTICATION_REQUIRED`
+  - the demo account → 401 `AUTHENTICATION_REQUIRED`
+  - Postgres disabled or the query fails → 503 `AUTH_STATE_UNAVAILABLE` (never falls
+    back to trusting the token in production)
+  - otherwise → request proceeds with the persisted roles, and `PENDING_APPROVAL`/no
+    recognized role is still restricted to `/me`+`/settings` exactly as before
+
+Proven end-to-end against real Postgres in
+`AccountStateImmediateInvalidationIntegrationTest`.
+
 ## 4. PENDING_APPROVAL surface
 
 `AuthFilter.PENDING_ALLOWED_PATHS` = `/api/auth/me`, `/api/auth/settings` (plus the
 always-public auth endpoints, notably `/api/auth/logout`). Everything else returns 403
 `ACCESS_DENIED` for a `PENDING_APPROVAL` token. This already matched the task's target
 policy before P10-A; no change was needed there beyond standardizing the error body.
+
+## 4b. Unknown-field rejection on ProfessionalActivationRequest (P10-A.2.1 §10 note)
+
+P10-A.2 relied on `@JsonIgnoreProperties(ignoreUnknown = false)` on the
+`ProfessionalActivationRequest` record, verified only against a hand-built `new
+ObjectMapper()` in a standalone `MockMvc` test. A P10-A.2.1 `@WebMvcTest` against the
+*real* Spring Boot-managed `ObjectMapper` (`ProfessionalActivationRealObjectMapperTest`)
+found that annotation did **not** actually reject unknown fields under the app's real
+Jackson configuration — extra fields were silently dropped and the request bound
+successfully. `AuthController.updateProfessionalActivation` was changed to bind the
+body as a raw `JsonNode` and explicitly reject any field outside `{email, activated}`
+before constructing the DTO at all, independent of any Jackson global/record-introspection
+behavior. This is now proven against the real context, not just a standalone one.
 
 ## 5. Known gaps (see `P10_A_SECURITY_EVIDENCE.md` → "Limitaciones que NO deben sobreafirmarse")
 

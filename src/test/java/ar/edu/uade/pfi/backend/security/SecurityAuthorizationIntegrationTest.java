@@ -82,7 +82,10 @@ class SecurityAuthorizationIntegrationTest {
 
         mockMvc = MockMvcBuilders
             .standaloneSetup(studyController, multiplanarController, backendController, systemController)
-            .addFilter(new AuthFilter(tokenService, true, false, new org.springframework.mock.env.MockEnvironment()))
+            .addFilter(new AuthFilter(
+                tokenService,
+                new ar.edu.uade.pfi.backend.auth.AuthAccountStateService(mock(ar.edu.uade.pfi.backend.auth.PostgresAuthStoreService.class), new org.springframework.mock.env.MockEnvironment()),
+                true, false, new org.springframework.mock.env.MockEnvironment()))
             .addFilter(new CorsResponseFilter("https://allowed.example.com", "https://*.preview.example.com"))
             .setControllerAdvice(new ApiExceptionHandler(auditService))
             .build();

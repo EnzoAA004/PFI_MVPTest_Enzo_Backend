@@ -17,9 +17,8 @@ import ar.edu.uade.pfi.backend.auth.AuthFilter;
 import ar.edu.uade.pfi.backend.auth.AuthService;
 import ar.edu.uade.pfi.backend.auth.RoleAuthorizationService;
 import ar.edu.uade.pfi.backend.auth.TokenService;
-import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.ProfessionalActivationResponse;
+import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.UserResponse;
 import ar.edu.uade.pfi.backend.config.ApiExceptionHandler;
-import ar.edu.uade.pfi.backend.config.CorsResponseFilter;
 import ar.edu.uade.pfi.backend.repository.InMemoryStudyRepository;
 import ar.edu.uade.pfi.backend.service.AuditService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -32,12 +31,16 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 /**
- * P10-A.2 §12: PATCH /api/auth/admin/professionals/activation must require ADMIN via
- * AuthFilter (401 anonymous) + RoleAuthorizationService (403 non-admin), and never
- * accept role-elevating fields from the request body.
+ * P10-A.2.1 §6/§12: the legacy PATCH /api/auth/admin/professionals/approval endpoint
+ * (kept for frontend compatibility) must now enforce exactly the same authorization
+ * matrix as /activation — it no longer bypasses RoleAuthorizationService, last-ADMIN
+ * protection, or demo blocking. Full behavioral coverage (last-ADMIN 409, session
+ * revocation, immediate token invalidation) lives in
+ * AccountStateImmediateInvalidationIntegrationTest; this file focuses on the HTTP-layer
+ * authorization matrix for /approval specifically.
  */
-class ProfessionalActivationControllerTest {
-    private static final String SECRET = "controller-test-secret-at-least-32-bytes-long!!";
+class ApprovalEndpointControllerTest {
+    private static final String SECRET = "approval-test-secret-at-least-32-bytes-long!!";
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final TokenService tokenService = new TokenService(objectMapper, SECRET, 3600);
     private AuthService authService;
@@ -52,96 +55,65 @@ class ProfessionalActivationControllerTest {
 
         mockMvc = MockMvcBuilders
             .standaloneSetup(controller)
-            .setMessageConverters(new org.springframework.http.converter.json.MappingJackson2HttpMessageConverter(objectMapper))
             .addFilter(new AuthFilter(
                 tokenService,
                 new ar.edu.uade.pfi.backend.auth.AuthAccountStateService(mock(ar.edu.uade.pfi.backend.auth.PostgresAuthStoreService.class), new MockEnvironment()),
                 true, false, new MockEnvironment()))
-            .addFilter(new CorsResponseFilter("", ""))
             .setControllerAdvice(new ApiExceptionHandler(auditService))
             .build();
     }
 
     @Test
     void anonymousIsUnauthorized() throws Exception {
-        mockMvc.perform(patch("/api/auth/admin/professionals/activation")
+        mockMvc.perform(patch("/api/auth/admin/professionals/approval")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"email\":\"doc@hospital.example\",\"activated\":true}"))
+                .content("{\"email\":\"doc@hospital.example\",\"approved\":true}"))
             .andExpect(status().isUnauthorized())
             .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+        verify(authService, never()).approveProfessional(any(), anyString(), anyBoolean());
     }
 
     @Test
     void pendingApprovalIsForbidden() throws Exception {
-        mockMvc.perform(patch("/api/auth/admin/professionals/activation")
+        mockMvc.perform(patch("/api/auth/admin/professionals/approval")
                 .header("Authorization", bearer(List.of("PENDING_APPROVAL")))
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"email\":\"doc@hospital.example\",\"activated\":true}"))
+                .content("{\"email\":\"doc@hospital.example\",\"approved\":true}"))
             .andExpect(status().isForbidden());
     }
 
     @Test
     void doctorIsForbidden() throws Exception {
-        mockMvc.perform(patch("/api/auth/admin/professionals/activation")
+        mockMvc.perform(patch("/api/auth/admin/professionals/approval")
                 .header("Authorization", bearer(List.of("DOCTOR")))
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"email\":\"doc@hospital.example\",\"activated\":true}"))
+                .content("{\"email\":\"doc@hospital.example\",\"approved\":true}"))
             .andExpect(status().isForbidden())
             .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        verify(authService, never()).approveProfessional(any(), anyString(), anyBoolean());
     }
 
     @Test
     void reviewerIsForbidden() throws Exception {
-        mockMvc.perform(patch("/api/auth/admin/professionals/activation")
+        mockMvc.perform(patch("/api/auth/admin/professionals/approval")
                 .header("Authorization", bearer(List.of("REVIEWER")))
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"email\":\"doc@hospital.example\",\"activated\":true}"))
+                .content("{\"email\":\"doc@hospital.example\",\"approved\":true}"))
             .andExpect(status().isForbidden());
     }
 
     @Test
-    void adminIsAllowed() throws Exception {
-        when(authService.activateProfessional(any(), eq("doc@hospital.example"), eq(true)))
-            .thenReturn(new ProfessionalActivationResponse("doc@hospital.example", "activated", true, true, List.of("DOCTOR", "REVIEWER")));
+    void adminIsAllowedAndDelegatesToTheSharedActivationLogic() throws Exception {
+        when(authService.approveProfessional(any(), eq("doc@hospital.example"), eq(true)))
+            .thenReturn(new UserResponse("id-1", "Dr Doc", "doc@hospital.example", "MN-1", "Spine", "Hospital", List.of("DOCTOR", "REVIEWER"), true, true, false, true));
 
-        mockMvc.perform(patch("/api/auth/admin/professionals/activation")
+        mockMvc.perform(patch("/api/auth/admin/professionals/approval")
                 .header("Authorization", bearer(List.of("ADMIN")))
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"email\":\"doc@hospital.example\",\"activated\":true}"))
+                .content("{\"email\":\"doc@hospital.example\",\"approved\":true}"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.status").value("activated"))
-            .andExpect(jsonPath("$.roles[0]").value("DOCTOR"));
-    }
-
-    @Test
-    void payloadWithRolesFieldIsRejectedWith400AndNeverGrantsAdmin() throws Exception {
-        mockMvc.perform(patch("/api/auth/admin/professionals/activation")
-                .header("Authorization", bearer(List.of("ADMIN")))
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"email\":\"doc@hospital.example\",\"activated\":true,\"roles\":[\"ADMIN\"]}"))
-            .andExpect(status().isBadRequest());
-
-        verify(authService, never()).activateProfessional(any(), anyString(), anyBoolean());
-    }
-
-    @Test
-    void payloadWithAdminFlagIsRejectedWith400AndNeverGrantsAdmin() throws Exception {
-        mockMvc.perform(patch("/api/auth/admin/professionals/activation")
-                .header("Authorization", bearer(List.of("ADMIN")))
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"email\":\"doc@hospital.example\",\"activated\":true,\"admin\":true}"))
-            .andExpect(status().isBadRequest());
-
-        verify(authService, never()).activateProfessional(any(), anyString(), anyBoolean());
-    }
-
-    @Test
-    void payloadWithPasswordFieldIsRejected() throws Exception {
-        mockMvc.perform(patch("/api/auth/admin/professionals/activation")
-                .header("Authorization", bearer(List.of("ADMIN")))
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"email\":\"doc@hospital.example\",\"activated\":true,\"password\":\"whatever\"}"))
-            .andExpect(status().isBadRequest());
+            .andExpect(jsonPath("$.roles[0]").value("DOCTOR"))
+            .andExpect(jsonPath("$.roles[1]").value("REVIEWER"));
     }
 
     private String bearer(List<String> roles) {

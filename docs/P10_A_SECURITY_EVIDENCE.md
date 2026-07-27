@@ -20,6 +20,27 @@ institutional manual activation (there is no real email provider). See
 `docs/P10_A2_ADMIN_BOOTSTRAP_AND_ACTIVATION.md`. **Do not deploy on P10-A/P10-A.1 alone
 — without this, a production deploy with the demo account disabled has no administrator.**
 
+**P10-A.2.1 addendum (base `cd500255a58cec0ade91cd609a9f69627e66452c`):** a post-review
+pass found four remaining blockers before Railway deployment: (1) `AuthFilter` trusted
+the JWT's `roles` claim for the token's whole lifetime, so a deactivated account's
+access token kept working for up to an hour; (2) the legacy `PATCH
+.../admin/professionals/approval` endpoint (still used by the current frontend)
+bypassed last-ADMIN protection, demo blocking, session revocation, and fail-closed
+persistence entirely; (3) `revokeRefreshTokensForEmail` silently swallowed errors, so a
+"successful" deactivation could still leave refresh tokens active; (4) the P10-A.2 test
+proving unknown-field rejection used a hand-built `ObjectMapper`/standalone `MockMvc`,
+which — as a real `@WebMvcTest` in this pass proved — did **not** reflect the actual
+Spring Boot behavior (extra fields were silently accepted for real). All four are
+closed: `AuthFilter` now revalidates persisted account state every production request
+(`AuthAccountStateService`); `/approval` now delegates to the exact same domain
+operation as `/activation`; deactivation + refresh-token revocation are one Postgres
+transaction (`deactivateProfessionalAndRevokeSessions`, fail-closed, rollback on any
+error); unknown-field rejection is now an explicit `JsonNode` check, proven against the
+real Spring Boot `ObjectMapper`. See `docs/P10_A2_ADMIN_BOOTSTRAP_AND_ACTIVATION.md` and
+`docs/P10_A_SECURITY_BASELINE.md` §3b/§4b. **Do not deploy on P10-A/P10-A.1/P10-A.2
+alone — a deactivated account's old token would keep working for up to an hour, and
+`/approval` would still bypass every new protection.**
+
 ## Endpoint matrix
 
 See `docs/P10_A_SECURITY_BASELINE.md`.
@@ -183,8 +204,10 @@ new tests, 0 removed). Compiled with `--release 17` (unchanged `pom.xml`), execu
 Temurin 21 per the task's instruction (not Java 25).
 
 > **This count is frozen at P10-A time.** Later work changed it: P10-A.1 → 250 tests,
-> P10-A.2 → 291 tests. See `docs/P10_A1_DEMO_AND_PRODUCTION_HARDENING.md` and
-> `docs/P10_A2_ADMIN_BOOTSTRAP_AND_ACTIVATION.md` for current totals — do not treat "223"
+> P10-A.2 → 291 tests, **P10-A.2.1 → 325 tests** (`mvn clean test`, BUILD SUCCESS,
+> Failures: 0, Errors: 0, ~58s on Temurin 21). See
+> `docs/P10_A1_DEMO_AND_PRODUCTION_HARDENING.md` and
+> `docs/P10_A2_ADMIN_BOOTSTRAP_AND_ACTIVATION.md` for details — do not treat "223"
 > as the state of the repository today.
 
 ## Limitaciones que NO deben sobreafirmarse

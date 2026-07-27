@@ -213,14 +213,18 @@ public class AuthService {
         return accountsByEmail.values().stream().map(this::toUser).toList();
     }
 
+    /**
+     * Legacy endpoint kept only for frontend compatibility (see AuthController) — it
+     * now delegates to the exact same domain operation as institutional activation, so
+     * it can no longer bypass last-ADMIN protection, demo blocking, fail-closed
+     * persistence, session revocation, or challenge invalidation the way it used to.
+     * Deprecated: pending removal once the frontend migrates to /activation (P10-C).
+     */
+    @Deprecated
     public UserResponse approveProfessional(TokenService.Claims claims, String emailValue, boolean approved) {
-        requireAdmin(claims);
-        String email = normalizeEmail(emailValue);
-        DoctorAccount account = findAccount(email)
+        setProfessionalActivation(claims, emailValue, approved);
+        DoctorAccount account = findAccount(normalizeEmail(emailValue))
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Profesional no encontrado"));
-        account.approve(approved);
-        accountsByEmail.put(email, account);
-        postgresAuthStore.updateApproval(email, approved, account.roles());
         return toUser(account);
     }
 
@@ -233,6 +237,15 @@ public class AuthService {
      * request DTO itself only carries email+activated, so there is nothing to smuggle).
      */
     public ProfessionalActivationResponse activateProfessional(TokenService.Claims claims, String emailValue, boolean activated) {
+        return setProfessionalActivation(claims, emailValue, activated);
+    }
+
+    /**
+     * The single domain operation both /approval (legacy) and /activation delegate to
+     * — see class-level P10-A.2.1 notes. There is exactly one implementation of
+     * "change a professional's active status" in this service.
+     */
+    private ProfessionalActivationResponse setProfessionalActivation(TokenService.Claims claims, String emailValue, boolean activated) {
         requireAdmin(claims);
         String email = normalizeEmail(emailValue);
         if (DEMO_ACCOUNT_EMAIL.equals(email)) {
@@ -254,15 +267,22 @@ public class AuthService {
         return new ProfessionalActivationResponse(account.email(), "activated", true, true, targetRoles);
     }
 
+    /**
+     * Deactivation + session revocation happen inside a single Postgres transaction
+     * (PostgresAuthStoreService.deactivateProfessionalAndRevokeSessions) — the
+     * in-memory cache/refresh-token map are only mutated after that call returns
+     * successfully, so a failure never leaves the account looking deactivated locally
+     * while Postgres still has it active (or vice versa).
+     */
     private ProfessionalActivationResponse deactivate(DoctorAccount account) {
         if (isLastNonDemoAdmin(account)) {
             throw new LastAdminProtectionException();
         }
         List<String> targetRoles = List.of("PENDING_APPROVAL");
-        postgresAuthStore.updateProfessionalActivation(account.email(), account.verified(), false, targetRoles);
+        postgresAuthStore.deactivateProfessionalAndRevokeSessions(account.email(), account.verified(), targetRoles);
         account.approve(false);
         accountsByEmail.put(account.email(), account);
-        revokeRefreshTokensFor(account.email());
+        refreshTokens.values().removeIf(account.email()::equals);
         invalidateChallengesFor(account.email());
         auditActivation(account.email(), "PROFESSIONAL_DEACTIVATED");
         return new ProfessionalActivationResponse(account.email(), "deactivated", account.verified(), false, targetRoles);
@@ -284,9 +304,22 @@ public class AuthService {
         return countOtherNonDemoAdmins(account.email()) == 0;
     }
 
+    /**
+     * When Postgres is enabled, this is a security decision and must be fail-closed: an
+     * inability to count administrators blocks the operation (via LastAdminProtectionException)
+     * rather than assuming other admins exist. Outside Postgres (in-memory/dev/test
+     * mode), falls back to the in-memory cache — acceptable there because Postgres is
+     * required in production by SecurityStartupValidator anyway.
+     */
     private long countOtherNonDemoAdmins(String excludedEmail) {
-        List<DoctorAccount> accounts = postgresAuthStore.enabled() ? postgresAuthStore.listAccounts() : List.copyOf(accountsByEmail.values());
-        return accounts.stream()
+        if (postgresAuthStore.enabled()) {
+            try {
+                return postgresAuthStore.countActiveNonDemoAdminsExcluding(excludedEmail);
+            } catch (RuntimeException ex) {
+                throw new LastAdminProtectionException();
+            }
+        }
+        return accountsByEmail.values().stream()
             .filter(a -> !DEMO_ACCOUNT_EMAIL.equals(a.email()))
             .filter(a -> !a.email().equals(excludedEmail))
             .filter(a -> a.roles().contains("ADMIN"))
@@ -295,11 +328,6 @@ public class AuthService {
 
     private void invalidateChallengesFor(String email) {
         challenges.values().removeIf(challenge -> email.equals(challenge.email()));
-    }
-
-    private void revokeRefreshTokensFor(String email) {
-        refreshTokens.values().removeIf(email::equals);
-        postgresAuthStore.revokeRefreshTokensForEmail(email);
     }
 
     /**

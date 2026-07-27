@@ -334,6 +334,109 @@ public class PostgresAuthStoreService {
     public record ProfessionalActivationResult(String email, boolean verified, boolean approved, List<String> roles) {}
 
     /**
+     * Fail-closed per-request account read used by AuthAccountStateService to
+     * revalidate a caller's persisted state on every protected request. Unlike
+     * findByEmail (which swallows errors and returns empty — fine for best-effort UI
+     * lookups), this throws on any infra failure; "account genuinely does not exist" is
+     * the only case that returns Optional.empty().
+     */
+    public Optional<DoctorAccount> findByEmailForAuthorization(String email) {
+        if (!enabled) {
+            throw new IllegalStateException("Postgres auth persistence is not enabled (pfi.persistence.mode != postgres)");
+        }
+        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+            SELECT id, full_name, email, password_hash, license_number, specialty, institution, roles, created_at, verified, approved, two_factor_enabled, onboarding_completed
+            FROM doctor_accounts
+            WHERE email = ?
+            """)) {
+            statement.setString(1, email);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (!rs.next()) return Optional.empty();
+                return Optional.of(readAccount(rs));
+            }
+        } catch (Exception ex) {
+            throw new IllegalStateException("Could not validate the current session's account state", ex);
+        }
+    }
+
+    /**
+     * Fail-closed, exact-role count used exclusively for the last-ADMIN lockout
+     * check. Deliberately does NOT rely on `roles LIKE '%ADMIN%'` alone — that SQL
+     * pre-filter is only used to keep the query index-friendly; the actual decision
+     * uses the exact, comma-split role list from readAccount() (List.contains("ADMIN")),
+     * so a hypothetical future role like "SUPERADMIN" could never be miscounted as
+     * "ADMIN". Only verified+approved+non-demo accounts with the exact ADMIN role count.
+     */
+    public long countActiveNonDemoAdminsExcluding(String excludedEmail) {
+        if (!enabled) {
+            throw new IllegalStateException("Postgres auth persistence is not enabled (pfi.persistence.mode != postgres)");
+        }
+        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+            SELECT id, full_name, email, password_hash, license_number, specialty, institution, roles, created_at, verified, approved, two_factor_enabled, onboarding_completed
+            FROM doctor_accounts
+            WHERE roles LIKE '%ADMIN%' AND verified = TRUE AND approved = TRUE AND email <> ?
+            """)) {
+            statement.setString(1, excludedEmail == null ? "" : excludedEmail);
+            try (ResultSet rs = statement.executeQuery()) {
+                long count = 0;
+                while (rs.next()) {
+                    DoctorAccount account = readAccount(rs);
+                    if (!AuthService.DEMO_ACCOUNT_EMAIL.equals(account.email()) && account.roles().contains("ADMIN")) count++;
+                }
+                return count;
+            }
+        } catch (Exception ex) {
+            throw new IllegalStateException("Could not count active production ADMIN accounts", ex);
+        }
+    }
+
+    /**
+     * Transactional deactivation: the account row and its refresh tokens are updated
+     * inside one connection/transaction (autoCommit=false, explicit commit, rollback on
+     * any error) so a caller can never observe "deactivated but sessions still valid" or
+     * vice versa — either both writes land, or neither does. The in-memory cache in
+     * AuthService is only updated by the caller after this method returns successfully.
+     */
+    public ProfessionalActivationResult deactivateProfessionalAndRevokeSessions(String email, boolean verified, List<String> roles) {
+        if (!enabled) {
+            throw new IllegalStateException("Postgres auth persistence is not enabled (pfi.persistence.mode != postgres)");
+        }
+        try (Connection connection = connection()) {
+            connection.setAutoCommit(false);
+            try {
+                try (PreparedStatement statement = connection.prepareStatement("""
+                    UPDATE doctor_accounts
+                    SET verified = ?, approved = FALSE, roles = ?, updated_at = now()
+                    WHERE email = ?
+                    """)) {
+                    statement.setBoolean(1, verified);
+                    statement.setString(2, String.join(",", roles));
+                    statement.setString(3, email);
+                    int updated = statement.executeUpdate();
+                    if (updated == 0) {
+                        throw new IllegalStateException("No account was updated for the given email");
+                    }
+                }
+                try (PreparedStatement statement = connection.prepareStatement("""
+                    UPDATE auth_refresh_tokens SET revoked_at = now() WHERE email = ? AND revoked_at IS NULL
+                    """)) {
+                    statement.setString(1, email);
+                    statement.executeUpdate();
+                }
+                connection.commit();
+            } catch (Exception ex) {
+                connection.rollback();
+                throw ex;
+            }
+        } catch (IllegalStateException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new IllegalStateException("Could not deactivate the account and revoke its sessions", ex);
+        }
+        return new ProfessionalActivationResult(email, verified, false, roles);
+    }
+
+    /**
      * Bulk-revokes every still-active refresh token for one email — used to close out
      * lingering demo-account sessions from a previous rollout without touching any
      * other account's tokens (no DELETE, no wildcard, single-email WHERE clause only).
