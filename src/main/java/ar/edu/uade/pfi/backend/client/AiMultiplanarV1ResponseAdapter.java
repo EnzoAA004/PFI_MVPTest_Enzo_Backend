@@ -56,7 +56,7 @@ public class AiMultiplanarV1ResponseAdapter {
             false,
             null,
             modelMap(plane),
-            Map.of("inputId", text(plane.inputId())),
+            inputMap(plane),
             Map.of(),
             plane.series(),
             assetsList(plane.assets()),
@@ -67,13 +67,54 @@ public class AiMultiplanarV1ResponseAdapter {
         );
     }
 
+    /**
+     * v1's inputId lives on the plane DTO itself, while the shape/orientation/slice
+     * fields the legacy frontend needs (already legacy-named: inputShapeNative,
+     * selectedSlice, sliceCount, ...) live in plane.metadata(). Internal/local paths are
+     * excluded here defensively; MultiplanarRunResponsePresenter also sanitizes the final
+     * payload downstream.
+     */
+    private Map<String, Object> inputMap(MultiplanarRunResponseDto.PlaneDto plane) {
+        Map<String, Object> input = new LinkedHashMap<>();
+        input.put("inputId", text(plane.inputId()));
+        if (plane.metadata() != null) {
+            plane.metadata().forEach((key, value) -> {
+                if (!isInternalMetadataKey(key)) input.put(key, value);
+            });
+        }
+        return input;
+    }
+
+    private boolean isInternalMetadataKey(String key) {
+        String normalized = key.toLowerCase(java.util.Locale.ROOT);
+        return normalized.equals("sourcepath") || normalized.equals("outputfiles") || normalized.endsWith("path");
+    }
+
     private Map<String, Object> modelMap(MultiplanarRunResponseDto.PlaneDto plane) {
         Map<String, Object> model = new LinkedHashMap<>(safe(plane.modelArtifact()));
         if (!blank(plane.modelKey())) model.put("modelKey", plane.modelKey());
         if (!blank(plane.modelVersion())) model.put("modelVersion", plane.modelVersion());
         String hash = artifactHash(plane);
         if (!blank(hash)) model.put("artifactHash", hash);
+        Object availableForRealInference = availableForRealInference(plane);
+        if (availableForRealInference != null) model.put("availableForRealInference", availableForRealInference);
         return model;
+    }
+
+    /**
+     * The v1 contract does not expose model.availableForRealInference directly (that is
+     * a v2-only field). We derive it from plane.aiOutput().realInferenceAvailable, which
+     * the AI Module already reports for v1 runs, so CanonicalMultiplanarRunLegacyPresenter
+     * can compute realInferenceAvailable uniformly for both contract versions.
+     */
+    private Object availableForRealInference(MultiplanarRunResponseDto.PlaneDto plane) {
+        if (plane.aiOutput() != null && plane.aiOutput().containsKey("realInferenceAvailable")) {
+            return plane.aiOutput().get("realInferenceAvailable");
+        }
+        if (plane.modelArtifact() != null && plane.modelArtifact().containsKey("availableForRealInference")) {
+            return plane.modelArtifact().get("availableForRealInference");
+        }
+        return null;
     }
 
     private String artifactHash(MultiplanarRunResponseDto.PlaneDto plane) {

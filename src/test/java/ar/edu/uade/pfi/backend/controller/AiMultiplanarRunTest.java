@@ -298,6 +298,52 @@ class AiMultiplanarRunTest {
     }
 
     @Test
+    void strictRealBaselineExposesLegacyAiOutputAndMetadataWithoutLeakingInternalPaths() throws Exception {
+        AiServiceOperations ai = org.mockito.Mockito.mock(AiServiceOperations.class);
+        when(ai.runMultiplanar(any())).thenReturn(contractFixture());
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new AiMultiplanarController(ai))
+            .setControllerAdvice(new ApiExceptionHandler())
+            .build();
+
+        String payload = mockMvc.perform(post("/api/ai/multiplanar/run")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "caseId": "CASE-001",
+                      "sagittalInputId": "inp_sagittal_001",
+                      "axialInputId": "inp_axial_001",
+                      "sagittalModelKey": "demo_model",
+                      "axialModelKey": "demo_axial",
+                      "allowContractFallback": false,
+                      "metadata": {
+                        "inferenceMode": "real_baseline",
+                        "traceId": "trace-client-001"
+                      }
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.planes.sagittal.aiOutput.realInferenceAvailable").value(true))
+            .andExpect(jsonPath("$.planes.sagittal.aiOutput.inferenceMode").value("real_baseline"))
+            .andExpect(jsonPath("$.planes.sagittal.aiOutput.artifactHash").value(
+                "cf11dcc0ad77a7c787e64a796a2fd7398ef906add461cef4b3d61f1a5238e944"))
+            .andExpect(jsonPath("$.planes.sagittal.metadata.inputShapeNative[0]").value(17))
+            .andExpect(jsonPath("$.planes.sagittal.metadata.inputShapeCanonical[2]").value(17))
+            .andExpect(jsonPath("$.planes.sagittal.metadata.inputOrientationTransform").value("move_axis_0_to_last"))
+            .andExpect(jsonPath("$.planes.sagittal.metadata.selectedSlice").value(9))
+            .andExpect(jsonPath("$.planes.sagittal.metadata.sliceCount").value(17))
+            .andExpect(jsonPath("$.planes.sagittal.metadata.selectedAxis").value(2))
+            .andExpect(jsonPath("$.planes.sagittal.metadata.inPlaneSpacingUnit").value("mm"))
+            .andExpect(jsonPath("$.planes.sagittal.allowContractFallback").value(false))
+            .andReturn().getResponse().getContentAsString();
+
+        org.junit.jupiter.api.Assertions.assertFalse(payload.contains("/tmp"));
+        org.junit.jupiter.api.Assertions.assertFalse(payload.toLowerCase().contains("c:\\\\"));
+        org.junit.jupiter.api.Assertions.assertFalse(payload.contains("mask.npy"));
+        org.junit.jupiter.api.Assertions.assertFalse(payload.contains("confidence.npy"));
+        org.junit.jupiter.api.Assertions.assertFalse(payload.contains("/content"));
+    }
+
+    @Test
     void strictRealBaselineSagittalOnlyNormalizesAndCallsAiModule() throws Exception {
         AiServiceOperations ai = org.mockito.Mockito.mock(AiServiceOperations.class);
         when(ai.runMultiplanar(any())).thenReturn(sagittalOnlyFixture());
