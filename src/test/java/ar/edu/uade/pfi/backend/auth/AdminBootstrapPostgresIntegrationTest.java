@@ -1,6 +1,7 @@
 package ar.edu.uade.pfi.backend.auth;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.DriverManager;
@@ -62,6 +63,73 @@ class AdminBootstrapPostgresIntegrationTest {
         assertEquals(false, store.hasNonDemoAdmin(AuthService.DEMO_ACCOUNT_EMAIL));
         service().bootstrap();
         assertEquals(true, store.hasNonDemoAdmin(AuthService.DEMO_ACCOUNT_EMAIL));
+    }
+
+    // ---- P10-A.2.2 §4/C: findNonDemoAdmin/hasNonDemoAdmin must accept only an exact,
+    // active ADMIN — never SUPERADMIN, an unverified/unapproved row, or the demo account.
+
+    @Test
+    void bootstrapIsSkippedWhenAnExactActiveAdminAlreadyExists() {
+        seed("existing.admin@hospital.example", List.of("ADMIN", "DOCTOR", "REVIEWER"), true, true);
+
+        assertEquals(true, store.hasNonDemoAdmin(AuthService.DEMO_ACCOUNT_EMAIL));
+        AdminBootstrapService bootstrap = service();
+        bootstrap.bootstrap();
+        assertEquals(1, store.listAccounts().size());
+    }
+
+    @Test
+    void unapprovedExactAdminDoesNotCountAsAnExistingAdmin() {
+        seed("unapproved.admin@hospital.example", List.of("ADMIN", "DOCTOR", "REVIEWER"), true, false);
+
+        assertEquals(false, store.hasNonDemoAdmin(AuthService.DEMO_ACCOUNT_EMAIL));
+    }
+
+    @Test
+    void unverifiedExactAdminDoesNotCountAsAnExistingAdmin() {
+        seed("unverified.admin@hospital.example", List.of("ADMIN", "DOCTOR", "REVIEWER"), false, true);
+
+        assertEquals(false, store.hasNonDemoAdmin(AuthService.DEMO_ACCOUNT_EMAIL));
+    }
+
+    @Test
+    void superAdminRoleDoesNotCountAsAnExistingAdmin() {
+        seed("superadmin@hospital.example", List.of("SUPERADMIN", "DOCTOR", "REVIEWER"), true, true);
+
+        assertEquals(false, store.hasNonDemoAdmin(AuthService.DEMO_ACCOUNT_EMAIL));
+    }
+
+    @Test
+    void demoAccountAdminDoesNotCountAsAnExistingAdmin() {
+        seed(AuthService.DEMO_ACCOUNT_EMAIL, List.of("ADMIN", "DOCTOR", "REVIEWER"), true, true);
+
+        assertEquals(false, store.hasNonDemoAdmin(AuthService.DEMO_ACCOUNT_EMAIL));
+    }
+
+    @Test
+    void sqlErrorDuringAdminLookupFailsStartupClosed() {
+        PostgresAuthStoreService brokenStore = new PostgresAuthStoreService("postgres", "jdbc:postgresql://localhost:1/does-not-exist");
+        AdminBootstrapService bootstrap = new AdminBootstrapService(
+            brokenStore, passwordHasher, production(), true, EMAIL, PASSWORD,
+            "Dr. Real Admin", "MN-REAL-001", "Hospital Real",
+            "another-strong-random-jwt-secret-value"
+        );
+
+        assertThrows(IllegalStateException.class, bootstrap::bootstrap);
+    }
+
+    private void seed(String email, List<String> roles, boolean verified, boolean approved) {
+        store.saveAccount(new DoctorAccount(
+            java.util.UUID.randomUUID().toString(), "Dr. Existing", email,
+            passwordHasher.hash(PASSWORD), "MN-1", "Spine", "Hospital",
+            roles, java.time.Instant.now(), verified, approved, false, true
+        ));
+    }
+
+    private MockEnvironment production() {
+        MockEnvironment env = new MockEnvironment();
+        env.setActiveProfiles("production");
+        return env;
     }
 
     private void truncate() throws Exception {

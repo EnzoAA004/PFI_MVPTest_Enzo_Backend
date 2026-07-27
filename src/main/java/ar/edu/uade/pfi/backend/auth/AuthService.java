@@ -244,6 +244,11 @@ public class AuthService {
      * The single domain operation both /approval (legacy) and /activation delegate to
      * — see class-level P10-A.2.1 notes. There is exactly one implementation of
      * "change a professional's active status" in this service.
+     *
+     * This is a PROFESSIONAL flow only: an account that already carries ADMIN can never
+     * be touched here, in either direction (activated=true or activated=false) — its
+     * roles, approved/verified flags, password, and everything else stay untouched.
+     * Administrator management belongs to a separate, dedicated flow.
      */
     private ProfessionalActivationResponse setProfessionalActivation(TokenService.Claims claims, String emailValue, boolean activated) {
         requireAdmin(claims);
@@ -253,6 +258,9 @@ public class AuthService {
         }
         DoctorAccount account = findAccount(email)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Profesional no encontrado"));
+        if (account.roles() != null && account.roles().contains("ADMIN")) {
+            throw new AdminAccountProtectedException();
+        }
         return activated ? activate(account) : deactivate(account);
     }
 

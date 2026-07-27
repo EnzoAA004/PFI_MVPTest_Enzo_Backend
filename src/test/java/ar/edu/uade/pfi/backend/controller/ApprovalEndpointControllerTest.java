@@ -116,6 +116,32 @@ class ApprovalEndpointControllerTest {
             .andExpect(jsonPath("$.roles[1]").value("REVIEWER"));
     }
 
+    @Test
+    void approvingTrueOnAnAdminAccountReturnsAdminAccountProtected() throws Exception {
+        when(authService.approveProfessional(any(), eq("admin@hospital.example"), eq(true)))
+            .thenThrow(new ar.edu.uade.pfi.backend.auth.AdminAccountProtectedException());
+
+        mockMvc.perform(patch("/api/auth/admin/professionals/approval")
+                .header("Authorization", bearer(List.of("ADMIN")))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"admin@hospital.example\",\"approved\":true}"))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("ADMIN_ACCOUNT_PROTECTED"));
+    }
+
+    @Test
+    void approvingFalseOnAnAdminAccountReturnsAdminAccountProtected() throws Exception {
+        when(authService.approveProfessional(any(), eq("admin@hospital.example"), eq(false)))
+            .thenThrow(new ar.edu.uade.pfi.backend.auth.AdminAccountProtectedException());
+
+        mockMvc.perform(patch("/api/auth/admin/professionals/approval")
+                .header("Authorization", bearer(List.of("ADMIN")))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"admin@hospital.example\",\"approved\":false}"))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("ADMIN_ACCOUNT_PROTECTED"));
+    }
+
     private String bearer(List<String> roles) {
         return "Bearer " + tokenService.issueAccessToken(
             new ar.edu.uade.pfi.backend.auth.DoctorAccount(

@@ -215,7 +215,14 @@ public class PostgresAuthStoreService {
         return findNonDemoAdmin(excludedEmail).isPresent();
     }
 
-    /** See {@link #hasNonDemoAdmin(String)} — same fail-closed contract. */
+    /**
+     * See {@link #hasNonDemoAdmin(String)} — same fail-closed contract. The
+     * `roles LIKE '%ADMIN%'` clause is only an index-friendly SQL pre-filter (it would
+     * also match a hypothetical future role like "SUPERADMIN"); every candidate row is
+     * still re-checked in Java against the exact, comma-split role list plus
+     * verified/approved, so only a genuinely active, exact ADMIN account is ever
+     * accepted for bootstrap-skip purposes.
+     */
     public Optional<DoctorAccount> findNonDemoAdmin(String excludedEmail) {
         if (!enabled) {
             throw new IllegalStateException("Postgres auth persistence is not enabled (pfi.persistence.mode != postgres)");
@@ -223,14 +230,18 @@ public class PostgresAuthStoreService {
         try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
             SELECT id, full_name, email, password_hash, license_number, specialty, institution, roles, created_at, verified, approved, two_factor_enabled, onboarding_completed
             FROM doctor_accounts
-            WHERE roles LIKE '%ADMIN%' AND email <> ?
+            WHERE roles LIKE '%ADMIN%' AND verified = TRUE AND approved = TRUE AND email <> ?
             ORDER BY created_at ASC
-            LIMIT 1
             """)) {
             statement.setString(1, excludedEmail == null ? "" : excludedEmail);
             try (ResultSet rs = statement.executeQuery()) {
-                if (!rs.next()) return Optional.empty();
-                return Optional.of(readAccount(rs));
+                while (rs.next()) {
+                    DoctorAccount account = readAccount(rs);
+                    if (account.verified() && account.approved() && account.roles().contains("ADMIN")) {
+                        return Optional.of(account);
+                    }
+                }
+                return Optional.empty();
             }
         } catch (Exception ex) {
             throw new IllegalStateException("Could not query for an existing production ADMIN account", ex);

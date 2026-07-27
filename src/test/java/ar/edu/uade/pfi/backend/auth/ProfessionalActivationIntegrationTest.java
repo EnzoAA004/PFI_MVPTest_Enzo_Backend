@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -223,6 +224,97 @@ class ProfessionalActivationIntegrationTest {
             () -> service.approveProfessional(adminClaims, AuthService.DEMO_ACCOUNT_EMAIL, true));
         assertEquals(403, ex.getStatusCode().value());
     }
+
+    // ---- P10-A.2.2: ADMIN accounts are never touched by the professional flow ----
+
+    @Test
+    void activatingTrueOnAnAdminAccountIsProtected() {
+        PostgresAuthStoreService store = mock(PostgresAuthStoreService.class);
+        DoctorAccount admin = adminAccount();
+        when(store.findByEmail(admin.email())).thenReturn(Optional.of(admin));
+        AuthService service = service(store);
+
+        assertThrows(AdminAccountProtectedException.class,
+            () -> service.activateProfessional(adminClaims, admin.email(), true));
+        verify(store, never()).updateProfessionalActivation(any(), anyBoolean(), anyBoolean(), any());
+    }
+
+    @Test
+    void activatingFalseOnAnAdminAccountIsProtected() {
+        PostgresAuthStoreService store = mock(PostgresAuthStoreService.class);
+        DoctorAccount admin = adminAccount();
+        when(store.findByEmail(admin.email())).thenReturn(Optional.of(admin));
+        AuthService service = service(store);
+
+        assertThrows(AdminAccountProtectedException.class,
+            () -> service.activateProfessional(adminClaims, admin.email(), false));
+        verify(store, never()).deactivateProfessionalAndRevokeSessions(any(), anyBoolean(), any());
+    }
+
+    @Test
+    void legacyApprovalTrueOnAnAdminAccountIsProtected() {
+        PostgresAuthStoreService store = mock(PostgresAuthStoreService.class);
+        DoctorAccount admin = adminAccount();
+        when(store.findByEmail(admin.email())).thenReturn(Optional.of(admin));
+        AuthService service = service(store);
+
+        assertThrows(AdminAccountProtectedException.class,
+            () -> service.approveProfessional(adminClaims, admin.email(), true));
+    }
+
+    @Test
+    void legacyApprovalFalseOnAnAdminAccountIsProtected() {
+        PostgresAuthStoreService store = mock(PostgresAuthStoreService.class);
+        DoctorAccount admin = adminAccount();
+        when(store.findByEmail(admin.email())).thenReturn(Optional.of(admin));
+        AuthService service = service(store);
+
+        assertThrows(AdminAccountProtectedException.class,
+            () -> service.approveProfessional(adminClaims, admin.email(), false));
+    }
+
+    @Test
+    void adminAccountFieldsAreUnchangedAfterAProtectedActivationAttempt() {
+        PostgresAuthStoreService store = mock(PostgresAuthStoreService.class);
+        DoctorAccount admin = adminAccount();
+        String originalHash = admin.passwordHash();
+        List<String> originalRoles = admin.roles();
+        when(store.findByEmail(admin.email())).thenReturn(Optional.of(admin));
+        AuthService service = service(store);
+
+        assertThrows(AdminAccountProtectedException.class,
+            () -> service.activateProfessional(adminClaims, admin.email(), true));
+
+        assertEquals(originalHash, admin.passwordHash());
+        assertEquals(originalRoles, admin.roles());
+        assertTrue(admin.approved());
+        assertTrue(admin.verified());
+    }
+
+    @Test
+    void aNormalProfessionalCanStillBeActivatedAndDeactivated() {
+        PostgresAuthStoreService store = mock(PostgresAuthStoreService.class);
+        DoctorAccount pending = pendingAccount();
+        when(store.findByEmail(pending.email())).thenReturn(Optional.of(pending));
+        AuthService service = service(store);
+
+        ProfessionalActivationResponse activated = service.activateProfessional(adminClaims, pending.email(), true);
+        assertEquals("activated", activated.status());
+
+        DoctorAccount active = activeAccount();
+        when(store.findByEmail(active.email())).thenReturn(Optional.of(active));
+        ProfessionalActivationResponse deactivated = service.activateProfessional(adminClaims, active.email(), false);
+        assertEquals("deactivated", deactivated.status());
+    }
+
+    private DoctorAccount adminAccount() {
+        return new DoctorAccount(
+            "admin-target-1", "Dr. Admin Target", "admin.target@hospital.example",
+            passwordHasher.hash("OriginalPass123!"), "MN-ADM", "Admin", "Hospital",
+            List.of("ADMIN", "DOCTOR", "REVIEWER"), Instant.now(), true, true, false, true
+        );
+    }
+
 
     private DoctorAccount pendingAccount() {
         return new DoctorAccount(

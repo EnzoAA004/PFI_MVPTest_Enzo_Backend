@@ -1,5 +1,6 @@
 package ar.edu.uade.pfi.backend.config;
 
+import ar.edu.uade.pfi.backend.auth.AdminAccountProtectedException;
 import ar.edu.uade.pfi.backend.auth.LastAdminProtectionException;
 import ar.edu.uade.pfi.backend.service.AuditService;
 import ar.edu.uade.pfi.backend.service.AiContractViolationException;
@@ -92,6 +93,11 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(LastAdminProtectionException.class)
     public ResponseEntity<Map<String, Object>> handleLastAdminProtection(LastAdminProtectionException ex, HttpServletRequest request) {
+        return buildError(ex.status(), ex.code(), ex.getMessage(), request, ex);
+    }
+
+    @ExceptionHandler(AdminAccountProtectedException.class)
+    public ResponseEntity<Map<String, Object>> handleAdminAccountProtected(AdminAccountProtectedException ex, HttpServletRequest request) {
         return buildError(ex.status(), ex.code(), ex.getMessage(), request, ex);
     }
 

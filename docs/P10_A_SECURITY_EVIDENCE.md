@@ -41,6 +41,28 @@ real Spring Boot `ObjectMapper`. See `docs/P10_A2_ADMIN_BOOTSTRAP_AND_ACTIVATION
 alone — a deactivated account's old token would keep working for up to an hour, and
 `/approval` would still bypass every new protection.**
 
+**P10-A.2.2 addendum (base `69f04cfc8f75ed67c4dc2f3ed8607a84f4d26575`):** a post-review
+pass found three remaining gaps: (1) `AuthService.activate()` always overwrote roles to
+`DOCTOR,REVIEWER`, so `activated=true` on an account that already carried `ADMIN` silently
+stripped its ADMIN role without ever reaching the last-ADMIN check; (2)
+`AuthAccountStateService` queried `verified`/`approved` from Postgres but discarded them,
+building effective claims from `roles` alone, so a row left `approved=false`/
+`verified=false` with stale `DOCTOR`/`REVIEWER`/`ADMIN` roles could still authorize; (3)
+`findNonDemoAdmin` accepted the first row matching `roles LIKE '%ADMIN%'` without checking
+`verified`/`approved` or the exact role, so an unverified/unapproved row, or a future role
+like `SUPERADMIN`, could be mistaken for a real production administrator during bootstrap.
+All three are closed: `setProfessionalActivation` rejects any ADMIN-carrying account up
+front with `409 ADMIN_ACCOUNT_PROTECTED` (`AdminAccountProtectedException`), in either
+direction, for both `/activation` and `/approval`; `AuthAccountStateService.resolve` now
+derives effective roles from `verified && approved` (`PENDING_APPROVAL` otherwise),
+carried in the extended `Resolution` record; `findNonDemoAdmin` re-checks every SQL
+pre-filtered candidate in Java against exact-role `contains("ADMIN")` plus
+`verified=true`/`approved=true`. See
+`docs/P10_A2_ADMIN_BOOTSTRAP_AND_ACTIVATION.md` and `docs/P10_A_SECURITY_BASELINE.md`
+§3c. **Do not deploy on P10-A/P10-A.1/P10-A.2/P10-A.2.1 alone — `activated=true` on an
+existing ADMIN would silently demote it, and a `verified=false`/`approved=false` row with
+stale professional/admin roles would still pass authorization.**
+
 ## Endpoint matrix
 
 See `docs/P10_A_SECURITY_BASELINE.md`.
@@ -191,6 +213,24 @@ New test classes:
 Pre-existing tests updated (message text only, not behavior):
 `RoleAuthorizationControllerTest`, `AiRunReviewControllerTest`.
 
+**P10-A.2.2 additions:** `AdminAccountProtectedException` coverage in
+`ProfessionalActivationIntegrationTest` (both directions, both `/activation` callers,
+field-immutability check, a normal professional still works), `ProfessionalActivationControllerTest`
+and `ApprovalEndpointControllerTest` (HTTP-layer 409 `ADMIN_ACCOUNT_PROTECTED` for both
+endpoints/both directions), and `LastAdminProtectionTest` (rewritten: every scenario that
+used to reach `LastAdminProtectionException` through this flow now reaches
+`AdminAccountProtectedException` first, proven via `verify(store,
+never()).countActiveNonDemoAdminsExcluding(...)`). Effective-role derivation covered in
+`AuthAccountStateServiceTest` (unit: unverified/unapproved/unapproved-ADMIN all yield
+`PENDING_APPROVAL` effective roles) and `AccountStateImmediateInvalidationIntegrationTest`
+(real Postgres: `/studies` 403 for stale-professional-roles + verified=false/approved=false,
+`/api/system/diagnostics` 403 for a stale-ADMIN row with either flag false, `/me` still
+reachable, and a reactivated account's *original* access token regains access only after
+the row is actually reactivated). Bootstrap exact-ADMIN matching covered in
+`AdminBootstrapPostgresIntegrationTest` (real Postgres: exact verified+approved ADMIN
+skips bootstrap; unapproved/unverified/`SUPERADMIN`/demo-email ADMIN rows do not count;
+a SQL connection failure during the admin lookup fails startup closed).
+
 ## Result of build
 
 ```
@@ -204,9 +244,11 @@ new tests, 0 removed). Compiled with `--release 17` (unchanged `pom.xml`), execu
 Temurin 21 per the task's instruction (not Java 25).
 
 > **This count is frozen at P10-A time.** Later work changed it: P10-A.1 → 250 tests,
-> P10-A.2 → 291 tests, **P10-A.2.1 → 325 tests** (`mvn clean test`, BUILD SUCCESS,
-> Failures: 0, Errors: 0, ~58s on Temurin 21). See
-> `docs/P10_A1_DEMO_AND_PRODUCTION_HARDENING.md` and
+> P10-A.2 → 291 tests, P10-A.2.1 → 325 tests, **P10-A.2.2 → 351 tests** (`mvn clean
+> test`, BUILD SUCCESS, Failures: 0, Errors: 0, on Temurin 21 — `JAVA_HOME` must point at
+> a JDK 21 install; Mockito's inline mock maker cannot instrument classes under a JDK 25
+> `JAVA_HOME`, which surfaces as unrelated-looking `MockitoException`s across dozens of
+> otherwise-passing tests). See `docs/P10_A1_DEMO_AND_PRODUCTION_HARDENING.md` and
 > `docs/P10_A2_ADMIN_BOOTSTRAP_AND_ACTIVATION.md` for details — do not treat "223"
 > as the state of the repository today.
 

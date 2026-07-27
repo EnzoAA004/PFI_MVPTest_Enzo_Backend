@@ -22,6 +22,7 @@ import ar.edu.uade.pfi.backend.controller.AiBackendController;
 import ar.edu.uade.pfi.backend.controller.AiMultiplanarController;
 import ar.edu.uade.pfi.backend.controller.AiRunReviewController;
 import ar.edu.uade.pfi.backend.controller.StudyController;
+import ar.edu.uade.pfi.backend.controller.SystemController;
 import ar.edu.uade.pfi.backend.domain.CanonicalMultiplanarRun;
 import ar.edu.uade.pfi.backend.dto.RunReviewResponseDto;
 import ar.edu.uade.pfi.backend.dto.StudyListResponseDto;
@@ -32,6 +33,7 @@ import ar.edu.uade.pfi.backend.service.ProfessionalAccessAuditService;
 import ar.edu.uade.pfi.backend.service.RunReviewService;
 import ar.edu.uade.pfi.backend.service.StudyRunService;
 import ar.edu.uade.pfi.backend.service.StudyWorklistService;
+import ar.edu.uade.pfi.backend.service.SystemDiagnosticsService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.DriverManager;
 import java.util.List;
@@ -71,6 +73,7 @@ class AccountStateImmediateInvalidationIntegrationTest {
     private AiBackendService aiBackendService;
     private StudyWorklistService studyWorklistService;
     private RunReviewService runReviewService;
+    private TokenService tokenService;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -78,7 +81,7 @@ class AccountStateImmediateInvalidationIntegrationTest {
         truncate();
 
         ObjectMapper objectMapper = new ObjectMapper();
-        TokenService tokenService = new TokenService(objectMapper, SECRET, 3600);
+        tokenService = new TokenService(objectMapper, SECRET, 3600);
         PasswordHasher passwordHasher = new PasswordHasher();
         AuditService auditService = new AuditService(new InMemoryStudyRepository());
         RoleAuthorizationService authorizationService = new RoleAuthorizationService(auditService);
@@ -102,9 +105,10 @@ class AccountStateImmediateInvalidationIntegrationTest {
         AiMultiplanarController multiplanarController = new AiMultiplanarController(aiServiceClient);
         AiBackendController backendController = new AiBackendController(aiBackendService, authorizationService);
         AiRunReviewController runReviewController = new AiRunReviewController(runReviewService, auditService, authorizationService);
+        SystemController systemController = new SystemController(mock(SystemDiagnosticsService.class), authorizationService);
 
         mockMvc = MockMvcBuilders
-            .standaloneSetup(authController, studyController, multiplanarController, backendController, runReviewController)
+            .standaloneSetup(authController, studyController, multiplanarController, backendController, runReviewController, systemController)
             .addFilter(authFilter)
             .setControllerAdvice(new ApiExceptionHandler(auditService))
             .build();
@@ -170,8 +174,13 @@ class AccountStateImmediateInvalidationIntegrationTest {
             .andExpect(jsonPath("$.approved").value(false));
     }
 
+    /**
+     * P10-A.2.2: the professional-activation flow can no longer touch ADMIN accounts at
+     * all — not even one ADMIN targeting another. Both admins keep full, unaffected
+     * access to admin-only routes after the blocked attempts.
+     */
     @Test
-    void twoAdminsDeactivatingOneInvalidatesItsTokenAcrossAllAdminRoutes() throws Exception {
+    void twoAdminsNeitherCanDeactivateTheOtherThroughTheProfessionalFlow() throws Exception {
         seedAdmin("admin.a@hospital.example");
         seedAdmin("admin.b@hospital.example");
         String tokenA = login("admin.a@hospital.example");
@@ -181,19 +190,151 @@ class AccountStateImmediateInvalidationIntegrationTest {
                 .header("Authorization", "Bearer " + tokenB)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\":\"admin.a@hospital.example\",\"activated\":false}"))
-            .andExpect(status().isOk());
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("ADMIN_ACCOUNT_PROTECTED"));
 
         mockMvc.perform(patch("/api/auth/admin/professionals/activation")
                 .header("Authorization", "Bearer " + tokenA)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\":\"admin.b@hospital.example\",\"activated\":false}"))
-            .andExpect(status().isForbidden());
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("ADMIN_ACCOUNT_PROTECTED"));
 
         mockMvc.perform(patch("/api/auth/admin/professionals/approval")
                 .header("Authorization", "Bearer " + tokenA)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\":\"admin.b@hospital.example\",\"approved\":false}"))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("ADMIN_ACCOUNT_PROTECTED"));
+
+        // Neither account lost anything — both tokens still work on an admin-only route.
+        mockMvc.perform(get("/api/system/diagnostics").header("Authorization", "Bearer " + tokenA))
+            .andExpect(status().isOk());
+        mockMvc.perform(get("/api/system/diagnostics").header("Authorization", "Bearer " + tokenB))
+            .andExpect(status().isOk());
+    }
+
+    /**
+     * P10-A.2.2 §2/§3/B: a row left with verified=false but stale DOCTOR/REVIEWER roles
+     * must never grant access — the effective roles used for authorization come from
+     * verified/approved, not from whatever roles are still sitting in the row.
+     */
+    @Test
+    void unverifiedAccountWithStaleProfessionalRolesIsBlockedFromStudies() throws Exception {
+        seedDoctorWithState("stale.unverified@hospital.example", false, true);
+        String staleToken = tokenService.issueAccessToken(doctorAccount("stale.unverified@hospital.example"));
+
+        mockMvc.perform(get("/api/studies").header("Authorization", "Bearer " + staleToken))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void unapprovedAccountWithStaleProfessionalRolesIsBlockedFromStudies() throws Exception {
+        seedDoctorWithState("stale.unapproved@hospital.example", true, false);
+        String staleToken = tokenService.issueAccessToken(doctorAccount("stale.unapproved@hospital.example"));
+
+        mockMvc.perform(get("/api/studies").header("Authorization", "Bearer " + staleToken))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void unapprovedAdminIsBlockedFromDiagnostics() throws Exception {
+        seedAdminWithState("stale.admin.unapproved@hospital.example", true, false);
+        String staleToken = tokenService.issueAccessToken(adminAccount("stale.admin.unapproved@hospital.example"));
+
+        mockMvc.perform(get("/api/system/diagnostics").header("Authorization", "Bearer " + staleToken))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void unverifiedAdminIsBlockedFromDiagnostics() throws Exception {
+        seedAdminWithState("stale.admin.unverified@hospital.example", false, true);
+        String staleToken = tokenService.issueAccessToken(adminAccount("stale.admin.unverified@hospital.example"));
+
+        mockMvc.perform(get("/api/system/diagnostics").header("Authorization", "Bearer " + staleToken))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void meStillWorksForAnUnverifiedAccountAndReflectsCurrentState() throws Exception {
+        seedDoctorWithState("stale.me@hospital.example", false, true);
+        String staleToken = tokenService.issueAccessToken(doctorAccount("stale.me@hospital.example"));
+
+        mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + staleToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.verified").value(false));
+    }
+
+    @Test
+    void reactivatedAccountReusesItsExistingTokenButOnlyGetsCurrentRolesAfterRevalidation() throws Exception {
+        seedAdmin("admin.reactivate@hospital.example");
+        String adminToken = login("admin.reactivate@hospital.example");
+        registerPendingAccount("doc.reactivate@hospital.example");
+        mockMvc.perform(patch("/api/auth/admin/professionals/activation")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"doc.reactivate@hospital.example\",\"activated\":true}"))
+            .andExpect(status().isOk());
+        String docToken = login("doc.reactivate@hospital.example");
+
+        mockMvc.perform(patch("/api/auth/admin/professionals/activation")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"doc.reactivate@hospital.example\",\"activated\":false}"))
+            .andExpect(status().isOk());
+
+        when(studyWorklistService.listStudies()).thenReturn(new StudyListResponseDto("ok", "t", "database", List.of(), Map.of(), true, true));
+        mockMvc.perform(get("/api/studies").header("Authorization", "Bearer " + docToken))
             .andExpect(status().isForbidden());
+
+        mockMvc.perform(patch("/api/auth/admin/professionals/activation")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"doc.reactivate@hospital.example\",\"activated\":true}"))
+            .andExpect(status().isOk());
+
+        // Same original access token, now revalidated against the reactivated row.
+        mockMvc.perform(get("/api/studies").header("Authorization", "Bearer " + docToken))
+            .andExpect(status().isOk());
+    }
+
+    private void seedDoctorWithState(String email, boolean verified, boolean approved) {
+        store.saveAccount(new ar.edu.uade.pfi.backend.auth.DoctorAccount(
+            java.util.UUID.randomUUID().toString(), "Dr. Stale", email,
+            new PasswordHasher().hash("OriginalPass123!"), "MN-1", "Spine", "Hospital",
+            List.of("DOCTOR", "REVIEWER"), java.time.Instant.now(), verified, approved, false, true
+        ));
+    }
+
+    private void seedAdminWithState(String email, boolean verified, boolean approved) {
+        store.saveAccount(new ar.edu.uade.pfi.backend.auth.DoctorAccount(
+            java.util.UUID.randomUUID().toString(), "Dr. Stale Admin", email,
+            new PasswordHasher().hash("OriginalPass123!"), "MN-1", "Admin", "Hospital",
+            List.of("ADMIN", "DOCTOR", "REVIEWER"), java.time.Instant.now(), verified, approved, false, true
+        ));
+    }
+
+    /** Builds a token-signing source account with the given email's persisted id, so subject matching in AuthAccountStateService succeeds. */
+    private ar.edu.uade.pfi.backend.auth.DoctorAccount doctorAccount(String email) {
+        var persisted = store.findByEmail(email).orElseThrow();
+        return new ar.edu.uade.pfi.backend.auth.DoctorAccount(
+            persisted.id(), persisted.fullName(), persisted.email(), persisted.passwordHash(),
+            persisted.licenseNumber(), persisted.specialty(), persisted.institution(),
+            List.of("DOCTOR", "REVIEWER"), persisted.createdAt(), persisted.verified(), persisted.approved(), false, true
+        );
+    }
+
+    private ar.edu.uade.pfi.backend.auth.DoctorAccount adminAccount(String email) {
+        var persisted = store.findByEmail(email).orElseThrow();
+        return new ar.edu.uade.pfi.backend.auth.DoctorAccount(
+            persisted.id(), persisted.fullName(), persisted.email(), persisted.passwordHash(),
+            persisted.licenseNumber(), persisted.specialty(), persisted.institution(),
+            List.of("ADMIN", "DOCTOR", "REVIEWER"), persisted.createdAt(), persisted.verified(), persisted.approved(), false, true
+        );
     }
 
     private CanonicalMultiplanarRun minimalRun() {

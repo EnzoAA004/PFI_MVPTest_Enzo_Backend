@@ -16,6 +16,19 @@ The legacy `/approval` endpoint now enforces the exact same rules as `/activatio
 (same domain operation, same last-ADMIN protection, same fail-closed persistence).
 Rows below marked **(P10-A.2.1)** reflect this.
 
+Further superseded by **P10-A.2.2** (base `69f04cfc8f75ed67c4dc2f3ed8607a84f4d26575`):
+`/activation` and `/approval` now refuse to touch an account that already carries
+`ADMIN`, in either direction, with `409 ADMIN_ACCOUNT_PROTECTED`
+(`AdminAccountProtectedException`) — closing a gap where `activated=true` on an existing
+ADMIN silently stripped its ADMIN role. `AuthAccountStateService` now derives a request's
+effective roles from the persisted `verified`/`approved` flags, not just `roles` — a row
+left with stale `DOCTOR`/`REVIEWER`/`ADMIN` roles but `verified=false` or `approved=false`
+is treated as `PENDING_APPROVAL` for the whole request. Bootstrap-admin detection
+(`findNonDemoAdmin`/`hasNonDemoAdmin`) now requires an exact `ADMIN` role plus
+`verified=true`/`approved=true`, not just a `roles LIKE '%ADMIN%'` match. Rows below
+marked **(P10-A.2.2)** reflect this; see
+`docs/P10_A2_ADMIN_BOOTSTRAP_AND_ACTIVATION.md` for full detail.
+
 ## 0. Architecture reality check (audit finding #1)
 
 This backend does **not** use Spring Security / `SecurityFilterChain` / `@PreAuthorize`.
@@ -70,8 +83,8 @@ valid token with `ADMIN` role (`RoleAuthorizationService.requireAdmin`).
 | GET | /api/auth/me | PENDING+AUTH | any authenticated | own profile | pending users must see their own approval status | `AuthFilter` PENDING_ALLOWED_PATHS |
 | PATCH | /api/auth/settings | PENDING+AUTH | any authenticated | own profile | pending users can complete 2FA/onboarding prefs | `AuthFilter` PENDING_ALLOWED_PATHS |
 | GET | /api/auth/admin/professionals | AUTH → ADMIN (service-level) | ADMIN | professional roster (no passwordHash) | approval workflow | `AuthService.requireAdmin` |
-| PATCH | /api/auth/admin/professionals/approval | **(P10-A.2.1)** ADMIN (`RoleAuthorizationService`, mandatory dependency) | ADMIN | approval result (`UserResponse`, kept for frontend compat) | **legacy/deprecated**, kept only because the current frontend still calls it; now delegates to the exact same `AuthService.setProfessionalActivation` domain operation as `/activation` — same last-ADMIN protection, demo blocking, fail-closed persistence, session revocation | `ApprovalEndpointControllerTest`, `ProfessionalActivationIntegrationTest` |
-| PATCH | /api/auth/admin/professionals/activation | ADMIN (`RoleAuthorizationService`, mandatory dependency) | ADMIN | institutional activation result (no secrets) | production substitute for email verification (no real email provider); unknown fields (`roles`/`admin`/`password`/etc) explicitly rejected with 400 against the raw request body **(P10-A.2.1: no longer relies on a Jackson annotation alone — see §10 note below)**; never grants ADMIN; last-ADMIN-protected on deactivation | `ProfessionalActivationControllerTest`, `ProfessionalActivationRealObjectMapperTest`, `ProfessionalActivationIntegrationTest`, `LastAdminProtectionTest` |
+| PATCH | /api/auth/admin/professionals/approval | **(P10-A.2.1)** ADMIN (`RoleAuthorizationService`, mandatory dependency) | ADMIN | approval result (`UserResponse`, kept for frontend compat) | **legacy/deprecated**, kept only because the current frontend still calls it; now delegates to the exact same `AuthService.setProfessionalActivation` domain operation as `/activation` — same admin-account protection, last-ADMIN protection, demo blocking, fail-closed persistence, session revocation | `ApprovalEndpointControllerTest`, `ProfessionalActivationIntegrationTest` |
+| PATCH | /api/auth/admin/professionals/activation | ADMIN (`RoleAuthorizationService`, mandatory dependency) | ADMIN | institutional activation result (no secrets) | production substitute for email verification (no real email provider); unknown fields (`roles`/`admin`/`password`/etc) explicitly rejected with 400 against the raw request body **(P10-A.2.1: no longer relies on a Jackson annotation alone — see §10 note below)**; never grants ADMIN; **(P10-A.2.2)** refuses to touch an account that already carries ADMIN, in either direction (`409 ADMIN_ACCOUNT_PROTECTED`), before the last-ADMIN check can even run | `ProfessionalActivationControllerTest`, `ProfessionalActivationRealObjectMapperTest`, `ProfessionalActivationIntegrationTest`, `LastAdminProtectionTest` |
 | GET | /api/system/health | PUBLIC | anonymous | `{"status":"ok"}` only | minimal liveness, new in P10-A | `SecurityAuthorizationIntegrationTest` (indirect) |
 | GET | /api/system/diagnostics | ADMIN | ADMIN | AI Module/db/auth diagnostics (no secrets, no AI Module URL) | admin-only troubleshooting | `RoleAuthorizationControllerTest`, `SecurityAuthorizationIntegrationTest.Admin` |
 | POST | /api/system/warmup | **(P10-A.1)** ADMIN | ADMIN | warmup summary | was PUBLIC; now `RoleAuthorizationService.requireAdmin` because it triggers an AI Module operation, not a read | `SecurityAuthorizationIntegrationTest.PublicSurfaceMatrix` |
@@ -121,6 +134,28 @@ JWT verification succeeds, `AuthFilter` calls `AuthAccountStateService.resolve(.
 
 Proven end-to-end against real Postgres in
 `AccountStateImmediateInvalidationIntegrationTest`.
+
+## 3c. Effective roles are derived from verified/approved, not just roles (P10-A.2.2)
+
+`AuthAccountStateService.resolve` previously read `verified`/`approved` from Postgres but
+discarded them, using only the row's `roles` column to build the request's claims. A row
+left with `approved=false` (or `verified=false`) but stale `DOCTOR`/`REVIEWER`/`ADMIN`
+roles could therefore still authorize as those roles. As of P10-A.2.2:
+
+```
+active = account.verified() && account.approved()
+effectiveRoles = active ? account.roles() : ["PENDING_APPROVAL"]
+```
+
+`effectiveRoles` — never the raw column — is what lands in
+`AuthFilter.AUTH_CLAIMS_ATTRIBUTE`, so `RoleAuthorizationService` and every controller
+downstream only ever see the account's real, current authorization state. This is a
+read-time projection only; `AuthFilter` never writes back to the row. Covered by
+`AuthAccountStateServiceTest` (unit) and
+`AccountStateImmediateInvalidationIntegrationTest` (real Postgres: `/studies` 403 for
+`verified=false`/`approved=false` with stale professional roles, `/api/system/diagnostics`
+403 for an unverified/unapproved ADMIN, `/me` still reachable and reflecting current
+state).
 
 ## 4. PENDING_APPROVAL surface
 

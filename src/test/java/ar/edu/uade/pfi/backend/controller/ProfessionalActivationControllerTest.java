@@ -136,6 +136,32 @@ class ProfessionalActivationControllerTest {
     }
 
     @Test
+    void activatingAnAdminAccountReturnsAdminAccountProtected() throws Exception {
+        when(authService.activateProfessional(any(), eq("admin@hospital.example"), eq(true)))
+            .thenThrow(new ar.edu.uade.pfi.backend.auth.AdminAccountProtectedException());
+
+        mockMvc.perform(patch("/api/auth/admin/professionals/activation")
+                .header("Authorization", bearer(List.of("ADMIN")))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"admin@hospital.example\",\"activated\":true}"))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("ADMIN_ACCOUNT_PROTECTED"));
+    }
+
+    @Test
+    void deactivatingAnAdminAccountReturnsAdminAccountProtected() throws Exception {
+        when(authService.activateProfessional(any(), eq("admin@hospital.example"), eq(false)))
+            .thenThrow(new ar.edu.uade.pfi.backend.auth.AdminAccountProtectedException());
+
+        mockMvc.perform(patch("/api/auth/admin/professionals/activation")
+                .header("Authorization", bearer(List.of("ADMIN")))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"admin@hospital.example\",\"activated\":false}"))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("ADMIN_ACCOUNT_PROTECTED"));
+    }
+
+    @Test
     void payloadWithPasswordFieldIsRejected() throws Exception {
         mockMvc.perform(patch("/api/auth/admin/professionals/activation")
                 .header("Authorization", bearer(List.of("ADMIN")))

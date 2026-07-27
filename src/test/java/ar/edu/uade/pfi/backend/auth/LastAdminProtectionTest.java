@@ -12,58 +12,62 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.env.MockEnvironment;
 
+/**
+ * P10-A.2.2: the professional activation/approval flow now rejects ANY ADMIN account up
+ * front (AdminAccountProtectedException, in AuthService.setProfessionalActivation),
+ * before it can ever reach the older last-ADMIN-standing check further down in
+ * deactivate()/isLastNonDemoAdmin() — so every scenario that used to surface
+ * LastAdminProtectionException through this flow now surfaces
+ * AdminAccountProtectedException instead. isLastNonDemoAdmin/countOtherNonDemoAdmins/
+ * LastAdminProtectionException themselves are kept as defense-in-depth for any other
+ * future flow that could deactivate an ADMIN account outside the professional-activation
+ * path — they are simply unreachable from this flow now.
+ */
 class LastAdminProtectionTest {
     private final PasswordHasher passwordHasher = new PasswordHasher();
     private final TokenService tokenService = new TokenService(new ObjectMapper(), "test-only-secret-at-least-32-bytes-long!!", 3600);
     private final TokenService.Claims adminClaims = new TokenService.Claims("admin-1", "admin@pfi.local", "Admin", List.of("ADMIN"));
 
     @Test
-    void theOnlyNonDemoAdminCannotBeDeactivated() {
+    void theOnlyNonDemoAdminCannotBeDeactivatedThroughTheProfessionalFlow() {
         PostgresAuthStoreService store = mock(PostgresAuthStoreService.class);
         DoctorAccount onlyAdmin = admin("only-admin@pfi.local");
         when(store.findByEmail(onlyAdmin.email())).thenReturn(Optional.of(onlyAdmin));
-        when(store.countActiveNonDemoAdminsExcluding(onlyAdmin.email())).thenReturn(0L);
         when(store.enabled()).thenReturn(true);
         AuthService service = service(store);
 
-        LastAdminProtectionException ex = assertThrows(LastAdminProtectionException.class,
+        AdminAccountProtectedException ex = assertThrows(AdminAccountProtectedException.class,
             () -> service.activateProfessional(adminClaims, onlyAdmin.email(), false));
-        assertEquals("LAST_ADMIN_PROTECTION", ex.code());
+        assertEquals("ADMIN_ACCOUNT_PROTECTED", ex.code());
         assertEquals(409, ex.status().value());
     }
 
     @Test
-    void withTwoAdminsOneCanBeDeactivated() {
+    void withTwoAdminsNeitherCanBeDeactivatedThroughTheProfessionalFlow() {
         PostgresAuthStoreService store = mock(PostgresAuthStoreService.class);
         DoctorAccount first = admin("first-admin@pfi.local");
         when(store.findByEmail(first.email())).thenReturn(Optional.of(first));
-        when(store.countActiveNonDemoAdminsExcluding(first.email())).thenReturn(1L);
         when(store.enabled()).thenReturn(true);
         AuthService service = service(store);
 
-        var response = service.activateProfessional(adminClaims, first.email(), false);
-
-        assertEquals("deactivated", response.status());
+        assertThrows(AdminAccountProtectedException.class,
+            () -> service.activateProfessional(adminClaims, first.email(), false));
     }
 
     @Test
-    void demoAdminAccountDoesNotCountTowardsTheProtection() {
+    void aRealAdminAccountIsProtectedRegardlessOfHowManyOtherAdminsExist() {
         PostgresAuthStoreService store = mock(PostgresAuthStoreService.class);
         DoctorAccount realAdmin = admin("real-admin@pfi.local");
         when(store.findByEmail(realAdmin.email())).thenReturn(Optional.of(realAdmin));
-        // The store itself excludes the demo account from this count (see
-        // PostgresAuthStoreService.countActiveNonDemoAdminsExcluding) — even though two
-        // ADMIN rows exist in Postgres, realAdmin is the only NON-DEMO one.
-        when(store.countActiveNonDemoAdminsExcluding(realAdmin.email())).thenReturn(0L);
         when(store.enabled()).thenReturn(true);
         AuthService service = service(store);
 
-        assertThrows(LastAdminProtectionException.class,
+        assertThrows(AdminAccountProtectedException.class,
             () -> service.activateProfessional(adminClaims, realAdmin.email(), false));
     }
 
     @Test
-    void aNormalProfessionalDeactivationIsNeverAffectedByThisRule() {
+    void aNormalProfessionalDeactivationIsNeverAffectedByAdminProtection() {
         PostgresAuthStoreService store = mock(PostgresAuthStoreService.class);
         DoctorAccount professional = new DoctorAccount(
             "doc-1", "Dr. Regular", "regular.doc@hospital.example", passwordHasher.hash("OriginalPass123!"),
@@ -79,16 +83,17 @@ class LastAdminProtectionTest {
     }
 
     @Test
-    void countQueryFailureBlocksTheOperationRatherThanAssumingOtherAdminsExist() {
+    void adminDeactivationAttemptNeverEvenQueriesTheLastAdminCount() {
         PostgresAuthStoreService store = mock(PostgresAuthStoreService.class);
         DoctorAccount onlyAdmin = admin("only-admin-2@pfi.local");
         when(store.findByEmail(onlyAdmin.email())).thenReturn(Optional.of(onlyAdmin));
         when(store.enabled()).thenReturn(true);
-        when(store.countActiveNonDemoAdminsExcluding(onlyAdmin.email())).thenThrow(new IllegalStateException("connection failed"));
         AuthService service = service(store);
 
-        assertThrows(LastAdminProtectionException.class,
+        assertThrows(AdminAccountProtectedException.class,
             () -> service.activateProfessional(adminClaims, onlyAdmin.email(), false));
+        org.mockito.Mockito.verify(store, org.mockito.Mockito.never())
+            .countActiveNonDemoAdminsExcluding(org.mockito.ArgumentMatchers.any());
     }
 
     private DoctorAccount admin(String email) {

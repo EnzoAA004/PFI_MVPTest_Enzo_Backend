@@ -1,5 +1,6 @@
 package ar.edu.uade.pfi.backend.auth;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import org.springframework.core.env.Environment;
@@ -22,13 +23,19 @@ import org.springframework.stereotype.Component;
 public class AuthAccountStateService {
     public enum Status { OK, ACCOUNT_NOT_FOUND, DEMO_BLOCKED, STATE_UNAVAILABLE }
 
-    public record Resolution(Status status, TokenService.Claims claims) {
-        static Resolution ok(TokenService.Claims claims) {
-            return new Resolution(Status.OK, claims);
+    /**
+     * claims() already carries the effective roles for this request (PENDING_APPROVAL
+     * whenever verified/approved is false, regardless of whatever roles the persisted
+     * row still carries) — verified/approved are kept alongside for callers that need
+     * the account's raw authoritative state, not just its effective roles.
+     */
+    public record Resolution(Status status, TokenService.Claims claims, boolean verified, boolean approved) {
+        static Resolution ok(TokenService.Claims claims, boolean verified, boolean approved) {
+            return new Resolution(Status.OK, claims, verified, approved);
         }
 
         static Resolution of(Status status) {
-            return new Resolution(status, null);
+            return new Resolution(status, null, false, false);
         }
     }
 
@@ -42,7 +49,7 @@ public class AuthAccountStateService {
 
     public Resolution resolve(TokenService.Claims tokenClaims) {
         if (!isProductionProfile()) {
-            return Resolution.ok(tokenClaims);
+            return Resolution.ok(tokenClaims, true, true);
         }
         if (!postgresAuthStore.enabled()) {
             return Resolution.of(Status.STATE_UNAVAILABLE);
@@ -64,7 +71,10 @@ public class AuthAccountStateService {
         if (AuthService.DEMO_ACCOUNT_EMAIL.equals(account.email())) {
             return Resolution.of(Status.DEMO_BLOCKED);
         }
-        return Resolution.ok(new TokenService.Claims(account.id(), account.email(), account.fullName(), account.roles()));
+        boolean active = account.verified() && account.approved();
+        List<String> effectiveRoles = active ? account.roles() : List.of("PENDING_APPROVAL");
+        TokenService.Claims effectiveClaims = new TokenService.Claims(account.id(), account.email(), account.fullName(), effectiveRoles);
+        return Resolution.ok(effectiveClaims, account.verified(), account.approved());
     }
 
     private String normalize(String email) {

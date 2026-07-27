@@ -3,6 +3,12 @@
 Commit base: `bb301b48101b51789745e48a80abc0f87715e12e` (P10-A.1)
 Repository: `EnzoAA004/PFI_MVPTest_Enzo_Backend`
 
+P10-A.2.2 (commit base `69f04cfc8f75ed67c4dc2f3ed8607a84f4d26575`) closes the three gaps
+left after P10-A.2.1: ADMIN accounts are now fully protected from the professional
+activation/approval flow, `verified`/`approved` are authoritative for authorization (not
+just `roles`), and bootstrap-admin detection requires an exact, active ADMIN. See the
+dedicated sections below for each.
+
 ## Risk of administrative lockout
 
 P10-A.1 correctly closed `/api/auth/demo-doctor` and blocked the persisted demo account
@@ -50,7 +56,13 @@ On a production start:
 
 1. **An ADMIN already exists** (`PostgresAuthStoreService.hasNonDemoAdmin(DEMO_ACCOUNT_EMAIL)`
    is true) → start normally. The existing account's id, password hash, roles, name, and
-   license are never touched.
+   license are never touched. As of P10-A.2.2, "exists" means an **exact, active** ADMIN:
+   `findNonDemoAdmin` uses `roles LIKE '%ADMIN%'` only as an index-friendly SQL
+   pre-filter, then re-checks every candidate row in Java against
+   `verified = true`, `approved = true`, and the exact, comma-split role list containing
+   `"ADMIN"` — a `SUPERADMIN`/`PENDING_ADMIN` role, or an unverified/unapproved ADMIN row,
+   no longer counts as "an ADMIN already exists", so bootstrap correctly runs (or
+   correctly fails closed if disabled) in those cases instead of silently skipping.
 2. **No ADMIN exists and bootstrap is disabled** (`PFI_AUTH_BOOTSTRAP_ADMIN_ENABLED`
    unset/`false`) → refuse to start with the sanitized message *"No existe un
    administrador productivo configurado."* — no email, variable name, or secret value in
@@ -81,15 +93,32 @@ before `createBootstrapAdmin` is ever called again — verified in
 `AdminBootstrapPostgresIntegrationTest.bootstrapPersistsAdminAndSecondStartupIsIdempotent`
 (same id, same hash, exactly one row after two `bootstrap()` calls).
 
-## Last-ADMIN lockout protection
+## P10-A.2.2: ADMIN accounts are never touched by the professional flow
 
-There is currently no dedicated "edit ADMIN roles" endpoint — the only place an ADMIN's
-status can change today is professional deactivation
-(`PATCH .../activation` with `activated=false`), and it now refuses to deactivate an
-account if doing so would leave zero non-demo ADMIN accounts, responding `409
-LAST_ADMIN_PROTECTION`. The demo account is explicitly excluded from this count (it
-can never be the thing standing between "locked out" and "not locked out"). See
-`AuthService.isLastNonDemoAdmin`/`countOtherNonDemoAdmins` and `LastAdminProtectionTest`.
+There is no dedicated "edit ADMIN" endpoint. Before P10-A.2.2, the only place an ADMIN's
+status could change was professional deactivation
+(`PATCH .../activation` with `activated=false`) — guarded only by a last-ADMIN-standing
+check. That left a real gap: `activate(account)` unconditionally overwrote
+`roles=DOCTOR,REVIEWER`, so calling `activated=true` on an account that already carried
+`ADMIN` silently **stripped its ADMIN role** without ever consulting the last-ADMIN
+check (which only ran on the `activated=false` branch).
+
+`AuthService.setProfessionalActivation` now checks `account.roles().contains("ADMIN")`
+immediately after loading the target account, **before** branching into
+`activate()`/`deactivate()`, and rejects the request outright — in both directions —
+with `AdminAccountProtectedException` (`409 ADMIN_ACCOUNT_PROTECTED`, message *"Las
+cuentas administrativas no pueden modificarse mediante el flujo de profesionales."*).
+This applies identically to `/activation` and the legacy `/approval` endpoint, since both
+delegate to the same method. An ADMIN account's roles, `approved`/`verified` flags,
+password hash, and everything else are left completely untouched by this flow — managing
+an administrator requires a separate, dedicated flow that does not exist yet.
+
+The older last-ADMIN-standing check (`AuthService.isLastNonDemoAdmin`/
+`countOtherNonDemoAdmins`, `LastAdminProtectionException`, `409 LAST_ADMIN_PROTECTION`)
+is kept in the code as defense-in-depth for any other future flow that might deactivate
+an ADMIN — but it is now unreachable from the professional-activation path, since the
+ADMIN guard above always fires first. See `LastAdminProtectionTest` (updated for
+P10-A.2.2) and `ProfessionalActivationIntegrationTest`'s admin-protection tests.
 
 ## Institutional activation endpoint
 
@@ -102,16 +131,47 @@ can never be the thing standing between "locked out" and "not locked out"). See
 rejected with 400 before it ever reaches business logic (verified in
 `ProfessionalActivationControllerTest`).
 
+- An account that already carries `ADMIN` is refused with `409 ADMIN_ACCOUNT_PROTECTED`
+  for either direction — see the P10-A.2.2 section above.
 - `activated=true`: sets `verified=true`, `approved=true`, roles hardcoded to exactly
   `DOCTOR,REVIEWER` (never influenced by the request body), invalidates any pending
   verification challenges for that email, persists verified+approved+roles in one
   `UPDATE`, updates the in-memory cache only after that persist call returns
   successfully, audits `PROFESSIONAL_ACTIVATED`, and never issues a token.
-- `activated=false`: applies the last-ADMIN check, sets `approved=false` and roles to
-  exactly `PENDING_APPROVAL`, revokes every refresh token for that email (Postgres +
-  in-memory), invalidates pending challenges, audits `PROFESSIONAL_DEACTIVATED`, never
-  issues a token, never deletes the account or touches the password hash.
+- `activated=false`: sets `approved=false` and roles to exactly `PENDING_APPROVAL`,
+  revokes every refresh token for that email (Postgres + in-memory), invalidates pending
+  challenges, audits `PROFESSIONAL_DEACTIVATED`, never issues a token, never deletes the
+  account or touches the password hash.
 - The demo account is refused with 403 for either direction.
+
+## P10-A.2.2: `verified`/`approved` are authoritative for authorization, not just `roles`
+
+Before P10-A.2.2, `AuthAccountStateService` queried `verified`/`approved` from Postgres on
+every request but discarded them — only `roles` fed into the request's effective claims.
+That meant a row left inconsistent (e.g. `approved=false` but `roles` still
+`DOCTOR,REVIEWER` from before a partial/legacy update) could still pass `AuthFilter`,
+since `AuthFilter.isRestrictedAccount` only ever inspected `roles`.
+
+`AuthAccountStateService.resolve` now computes **effective roles** from the persisted
+row's `verified`/`approved` flags, not from whatever `roles` happens to still contain:
+
+```java
+boolean active = account.verified() && account.approved();
+List<String> effectiveRoles = active ? account.roles() : List.of("PENDING_APPROVAL");
+```
+
+Those effective roles — never the row's raw `roles` — are what land in
+`AuthFilter.AUTH_CLAIMS_ATTRIBUTE` and therefore in everything downstream
+(`RoleAuthorizationService`, controllers). A `verified=false` or `approved=false` row is
+treated as `PENDING_APPROVAL` for the whole request regardless of stale `DOCTOR`,
+`REVIEWER`, or even `ADMIN` roles still sitting in the row — which in turn means only
+`/api/auth/me` and `/api/auth/settings` remain reachable (existing `AuthFilter`
+`PENDING_ALLOWED_PATHS` behavior), everything else gets `403 ACCESS_DENIED`. The row
+itself is never modified by `AuthFilter` — this is a read-time projection, not a write.
+
+`AuthAccountStateService.Resolution` now also carries the raw `verified`/`approved`
+flags alongside the effective claims, for any caller that needs the account's real
+authoritative state rather than just its effective roles.
 
 ## Superseded by P10-A.2.1: access tokens now revalidated on every request
 
@@ -196,12 +256,23 @@ any of the removed variables would even be read.
 - ~~Already-issued access tokens are not invalidated immediately on deactivation~~ —
   closed in P10-A.2.1 (`AuthAccountStateService` revalidates persisted state on every
   production request). See the note above.
+- ~~`activated=true` on an existing ADMIN account silently strips its ADMIN role~~ —
+  closed in P10-A.2.2 (`AdminAccountProtectedException` guard in
+  `setProfessionalActivation`, before either branch runs).
+- ~~`approved`/`verified` were queried but not used for authorization~~ — closed in
+  P10-A.2.2 (`AuthAccountStateService` now derives effective roles from them).
+- ~~`findNonDemoAdmin` accepted any row matching `roles LIKE '%ADMIN%'`, including
+  `SUPERADMIN`/unverified/unapproved rows~~ — closed in P10-A.2.2 (exact-role,
+  verified+approved re-check in Java on every candidate row).
 - `AuthService.countOtherNonDemoAdmins` (last-ADMIN protection): when Postgres is
   enabled, it now uses the strict, exact-role
   `PostgresAuthStoreService.countActiveNonDemoAdminsExcluding` and fails closed (blocks
   the operation) if that query fails — it no longer relies on `listAccounts()` for this
   decision. Only outside Postgres (in-memory/dev/test mode) does it fall back to the
   in-memory cache, which is fine because Postgres is required in production regardless.
+  As of P10-A.2.2 this check is unreachable from the professional-activation flow (the
+  ADMIN guard above always fires first) but is kept as defense-in-depth for any other
+  future admin-deactivating flow.
 - Institutional activation's Postgres calls (`updateProfessionalActivation`,
   `deactivateProfessionalAndRevokeSessions`) are fail-closed by design (throw rather
   than silently succeed) — this means the activation endpoint is unusable in a pure
