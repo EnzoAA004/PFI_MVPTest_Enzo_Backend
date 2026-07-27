@@ -11,6 +11,15 @@ login/refresh even with the endpoint closed, `pfi.auth.enabled=false` had no pro
 guard, dev verification codes defaulted to exposed, and `/api/ai/health`/`/api/ai/models`/
 `/api/system/warmup` were still anonymously public). **Do not deploy on P10-A alone.**
 
+**P10-A.2 addendum (base `bb301b48101b51789745e48a80abc0f87715e12e`):** P10-A.1 correctly
+blocked the demo account in production, but the demo account was the *only* path that
+ever produced an ADMIN — leaving production with zero administrators once demo mode is
+off. P10-A.2 adds a fail-closed, idempotent `AdminBootstrapService` (no HTTP endpoint)
+and a `PATCH /api/auth/admin/professionals/activation` ADMIN-only endpoint for
+institutional manual activation (there is no real email provider). See
+`docs/P10_A2_ADMIN_BOOTSTRAP_AND_ACTIVATION.md`. **Do not deploy on P10-A/P10-A.1 alone
+— without this, a production deploy with the demo account disabled has no administrator.**
+
 ## Endpoint matrix
 
 See `docs/P10_A_SECURITY_BASELINE.md`.
@@ -172,6 +181,11 @@ mvn clean test
 BUILD SUCCESS. **Total tests: 223, Failures: 0, Errors: 0** (was 189 before P10-A; +34
 new tests, 0 removed). Compiled with `--release 17` (unchanged `pom.xml`), executed on
 Temurin 21 per the task's instruction (not Java 25).
+
+> **This count is frozen at P10-A time.** Later work changed it: P10-A.1 → 250 tests,
+> P10-A.2 → 291 tests. See `docs/P10_A1_DEMO_AND_PRODUCTION_HARDENING.md` and
+> `docs/P10_A2_ADMIN_BOOTSTRAP_AND_ACTIVATION.md` for current totals — do not treat "223"
+> as the state of the repository today.
 
 ## Limitaciones que NO deben sobreafirmarse
 

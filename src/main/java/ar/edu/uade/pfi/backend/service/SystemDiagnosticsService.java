@@ -23,6 +23,7 @@ public class SystemDiagnosticsService {
     private final boolean authEnabled;
     private final String persistenceMode;
     private final AiMultiplanarContractVersion multiplanarContractVersion;
+    private final boolean adminBootstrapEnabled;
 
     SystemDiagnosticsService(
         AiServiceOperations aiServiceClient,
@@ -49,6 +50,7 @@ public class SystemDiagnosticsService {
         this.authEnabled = authEnabled;
         this.persistenceMode = persistenceMode;
         this.multiplanarContractVersion = multiplanarContractVersion;
+        this.adminBootstrapEnabled = false;
     }
 
     @Autowired
@@ -59,7 +61,8 @@ public class SystemDiagnosticsService {
         ObjectProvider<RunAssetContentStorage> assetContentStorageProvider,
         AiServiceProperties aiServiceProperties,
         @Value("${pfi.auth.enabled:true}") boolean authEnabled,
-        @Value("${pfi.persistence.mode:memory}") String persistenceMode
+        @Value("${pfi.persistence.mode:memory}") String persistenceMode,
+        @Value("${pfi.auth.bootstrap-admin-enabled:false}") boolean adminBootstrapEnabled
     ) {
         this.aiServiceClient = aiServiceClient;
         this.postgresReviewStoreService = postgresReviewStoreService;
@@ -68,6 +71,7 @@ public class SystemDiagnosticsService {
         this.authEnabled = authEnabled;
         this.persistenceMode = persistenceMode;
         this.multiplanarContractVersion = aiServiceProperties.resolvedMultiplanarContractVersion();
+        this.adminBootstrapEnabled = adminBootstrapEnabled;
     }
 
     public Map<String, Object> diagnostics() {
@@ -88,6 +92,8 @@ public class SystemDiagnosticsService {
         result.put("contract", aiModule.getOrDefault("contract", Map.of("status", "unavailable")));
         result.put("modelArtifacts", aiModule.getOrDefault("artifactSummary", Map.of("status", "unavailable")));
         result.put("evaluationEvidence", aiModule.getOrDefault("evaluationEvidence", evidenceUnavailable("not_checked")));
+        result.put("adminAccountConfigured", authService.hasConfiguredAdminSafe());
+        result.put("adminBootstrapEnabled", adminBootstrapEnabled);
         result.put("humanReviewRequired", true);
         result.put("notClinicalDiagnosis", true);
         return result;

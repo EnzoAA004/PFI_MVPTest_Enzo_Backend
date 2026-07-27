@@ -1,10 +1,12 @@
 package ar.edu.uade.pfi.backend.auth;
 
 import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.PendingAuthResponse;
+import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.ProfessionalActivationResponse;
 import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.RegisterRequest;
 import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.SettingsRequest;
 import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.TokenResponse;
 import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.UserResponse;
+import ar.edu.uade.pfi.backend.service.AuditService;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
@@ -43,6 +45,7 @@ public class AuthService {
     private final SecureRandom random = new SecureRandom();
     private final Environment environment;
     private final boolean demoEnabled;
+    private final AuditService auditService;
 
     public AuthService(
         PasswordHasher passwordHasher,
@@ -51,7 +54,7 @@ public class AuthService {
         @Value("${pfi.auth.expose-dev-codes:false}") boolean exposeCodes,
         @Value("${pfi.auth.refresh-token-seconds:604800}") long refreshTokenSeconds
     ) {
-        this(passwordHasher, tokenService, postgresAuthStore, exposeCodes, refreshTokenSeconds, null, false);
+        this(passwordHasher, tokenService, postgresAuthStore, exposeCodes, refreshTokenSeconds, null, false, null);
     }
 
     @Autowired
@@ -62,7 +65,8 @@ public class AuthService {
         @Value("${pfi.auth.expose-dev-codes:false}") boolean exposeCodes,
         @Value("${pfi.auth.refresh-token-seconds:604800}") long refreshTokenSeconds,
         Environment environment,
-        @Value("${pfi.auth.demo-enabled:false}") boolean demoEnabled
+        @Value("${pfi.auth.demo-enabled:false}") boolean demoEnabled,
+        AuditService auditService
     ) {
         this.passwordHasher = passwordHasher;
         this.tokenService = tokenService;
@@ -71,6 +75,7 @@ public class AuthService {
         this.refreshTokenSeconds = refreshTokenSeconds;
         this.environment = environment;
         this.demoEnabled = demoEnabled;
+        this.auditService = auditService;
     }
 
     /**
@@ -217,6 +222,99 @@ public class AuthService {
         accountsByEmail.put(email, account);
         postgresAuthStore.updateApproval(email, approved, account.roles());
         return toUser(account);
+    }
+
+    /**
+     * "Institutional manual activation" — an ADMIN vouches for a professional account
+     * outside of any email-verification flow. This is deliberately NOT the same thing
+     * as email verification: it does not claim an email was sent or confirmed, and it
+     * never issues a token. Activating never grants ADMIN (roles are hardcoded to
+     * DOCTOR+REVIEWER here, ignoring anything the caller could try to smuggle in — the
+     * request DTO itself only carries email+activated, so there is nothing to smuggle).
+     */
+    public ProfessionalActivationResponse activateProfessional(TokenService.Claims claims, String emailValue, boolean activated) {
+        requireAdmin(claims);
+        String email = normalizeEmail(emailValue);
+        if (DEMO_ACCOUNT_EMAIL.equals(email)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No tiene permisos para realizar esta operacion.");
+        }
+        DoctorAccount account = findAccount(email)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Profesional no encontrado"));
+        return activated ? activate(account) : deactivate(account);
+    }
+
+    private ProfessionalActivationResponse activate(DoctorAccount account) {
+        List<String> targetRoles = List.of("DOCTOR", "REVIEWER");
+        postgresAuthStore.updateProfessionalActivation(account.email(), true, true, targetRoles);
+        account.verify();
+        account.approve(true);
+        accountsByEmail.put(account.email(), account);
+        invalidateChallengesFor(account.email());
+        auditActivation(account.email(), "PROFESSIONAL_ACTIVATED");
+        return new ProfessionalActivationResponse(account.email(), "activated", true, true, targetRoles);
+    }
+
+    private ProfessionalActivationResponse deactivate(DoctorAccount account) {
+        if (isLastNonDemoAdmin(account)) {
+            throw new LastAdminProtectionException();
+        }
+        List<String> targetRoles = List.of("PENDING_APPROVAL");
+        postgresAuthStore.updateProfessionalActivation(account.email(), account.verified(), false, targetRoles);
+        account.approve(false);
+        accountsByEmail.put(account.email(), account);
+        revokeRefreshTokensFor(account.email());
+        invalidateChallengesFor(account.email());
+        auditActivation(account.email(), "PROFESSIONAL_DEACTIVATED");
+        return new ProfessionalActivationResponse(account.email(), "deactivated", account.verified(), false, targetRoles);
+    }
+
+    /** Best-effort, never throws — used only for the ADMIN diagnostics summary flag, not for gating. */
+    public boolean hasConfiguredAdminSafe() {
+        try {
+            return postgresAuthStore.enabled() && postgresAuthStore.hasNonDemoAdmin(DEMO_ACCOUNT_EMAIL);
+        } catch (RuntimeException ex) {
+            return false;
+        }
+    }
+
+    private boolean isLastNonDemoAdmin(DoctorAccount account) {
+        if (DEMO_ACCOUNT_EMAIL.equals(account.email()) || !account.roles().contains("ADMIN")) {
+            return false;
+        }
+        return countOtherNonDemoAdmins(account.email()) == 0;
+    }
+
+    private long countOtherNonDemoAdmins(String excludedEmail) {
+        List<DoctorAccount> accounts = postgresAuthStore.enabled() ? postgresAuthStore.listAccounts() : List.copyOf(accountsByEmail.values());
+        return accounts.stream()
+            .filter(a -> !DEMO_ACCOUNT_EMAIL.equals(a.email()))
+            .filter(a -> !a.email().equals(excludedEmail))
+            .filter(a -> a.roles().contains("ADMIN"))
+            .count();
+    }
+
+    private void invalidateChallengesFor(String email) {
+        challenges.values().removeIf(challenge -> email.equals(challenge.email()));
+    }
+
+    private void revokeRefreshTokensFor(String email) {
+        refreshTokens.values().removeIf(email::equals);
+        postgresAuthStore.revokeRefreshTokensForEmail(email);
+    }
+
+    /**
+     * entityId carries the normalized email (the "subject técnico" for this event, per
+     * the existing audit convention of using entityId as the resource identifier);
+     * metadata is intentionally minimal because AuditService.sanitize() drops any key
+     * containing "email" entirely, so putting it in metadata would silently lose it.
+     */
+    private void auditActivation(String email, String action) {
+        if (auditService == null) return;
+        try {
+            auditService.record("backend-admin", action, email, "", Map.of("result", "success"));
+        } catch (RuntimeException ignored) {
+            // Authorization/activation result must not depend on audit persistence availability.
+        }
     }
 
     /**

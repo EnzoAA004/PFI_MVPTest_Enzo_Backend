@@ -130,6 +130,6 @@ class DemoModeAuthServiceTest {
     }
 
     private AuthService service(boolean demoEnabled, MockEnvironment environment, PostgresAuthStoreService store) {
-        return new AuthService(passwordHasher, tokenService, store, false, 604800, environment, demoEnabled);
+        return new AuthService(passwordHasher, tokenService, store, false, 604800, environment, demoEnabled, null);
     }
 }

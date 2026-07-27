@@ -3,6 +3,8 @@ package ar.edu.uade.pfi.backend.auth;
 import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.ApprovalRequest;
 import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.LoginRequest;
 import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.PendingAuthResponse;
+import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.ProfessionalActivationRequest;
+import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.ProfessionalActivationResponse;
 import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.RefreshRequest;
 import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.RegisterRequest;
 import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.SettingsRequest;
@@ -15,7 +17,6 @@ import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.ResponseEntity;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -28,15 +29,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
     private final AuthService authService;
     private final AuditService auditService;
+    private final RoleAuthorizationService authorizationService;
 
-    public AuthController(AuthService authService) {
-        this(authService, null);
-    }
-
-    @Autowired
-    public AuthController(AuthService authService, AuditService auditService) {
+    public AuthController(AuthService authService, AuditService auditService, RoleAuthorizationService authorizationService) {
         this.authService = authService;
         this.auditService = auditService;
+        this.authorizationService = authorizationService;
     }
 
     @PostMapping("/register")
@@ -106,5 +104,22 @@ public class AuthController {
     public UserResponse updateProfessionalApproval(HttpServletRequest request, @Valid @RequestBody ApprovalRequest approval) {
         TokenService.Claims claims = (TokenService.Claims) request.getAttribute(AuthFilter.AUTH_CLAIMS_ATTRIBUTE);
         return authService.approveProfessional(claims, approval.email(), approval.approved());
+    }
+
+    /**
+     * "Institutional manual activation": an ADMIN vouches for a professional account
+     * outside of any email-verification flow (there is no real email provider today).
+     * RoleAuthorizationService.requireAdmin is a mandatory constructor dependency —
+     * there is no null-check bypass here, unlike the legacy pattern this project used
+     * to have on some controllers.
+     */
+    @PatchMapping("/admin/professionals/activation")
+    public ProfessionalActivationResponse updateProfessionalActivation(
+        HttpServletRequest request,
+        @Valid @RequestBody ProfessionalActivationRequest activation
+    ) {
+        authorizationService.requireAdmin(request, "professional.activation");
+        TokenService.Claims claims = (TokenService.Claims) request.getAttribute(AuthFilter.AUTH_CLAIMS_ATTRIBUTE);
+        return authService.activateProfessional(claims, activation.email(), activation.activated());
     }
 }

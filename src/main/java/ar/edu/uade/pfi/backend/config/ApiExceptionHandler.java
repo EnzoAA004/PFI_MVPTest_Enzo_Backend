@@ -1,5 +1,6 @@
 package ar.edu.uade.pfi.backend.config;
 
+import ar.edu.uade.pfi.backend.auth.LastAdminProtectionException;
 import ar.edu.uade.pfi.backend.service.AuditService;
 import ar.edu.uade.pfi.backend.service.AiContractViolationException;
 import ar.edu.uade.pfi.backend.service.AiMultiplanarContractViolationException;
@@ -18,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -86,6 +88,22 @@ public class ApiExceptionHandler {
     @ExceptionHandler(StudyMetadataException.class)
     public ResponseEntity<Map<String, Object>> handleStudyMetadata(StudyMetadataException ex, HttpServletRequest request) {
         return buildError(ex.status(), ex.code(), ex.getMessage(), request, ex);
+    }
+
+    @ExceptionHandler(LastAdminProtectionException.class)
+    public ResponseEntity<Map<String, Object>> handleLastAdminProtection(LastAdminProtectionException ex, HttpServletRequest request) {
+        return buildError(ex.status(), ex.code(), ex.getMessage(), request, ex);
+    }
+
+    /**
+     * Malformed JSON or, notably, a strict DTO (JsonIgnoreProperties(ignoreUnknown =
+     * false)) rejecting an unexpected field — e.g. a professional-activation payload
+     * that tried to smuggle in "roles" or "admin". Sanitized 400, never the raw Jackson
+     * parse error (which could otherwise echo back request field names/values).
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, Object>> handleUnreadableMessage(HttpMessageNotReadableException ex, HttpServletRequest request) {
+        return buildError(HttpStatus.BAD_REQUEST, "BAD_REQUEST", "Solicitud invalida", request, ex);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

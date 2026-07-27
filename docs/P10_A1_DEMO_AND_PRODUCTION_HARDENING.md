@@ -3,6 +3,11 @@
 Commit base: `9e8b72c25306cf78395598ff1a06b81168381989` (P10-A)
 Repository: `EnzoAA004/PFI_MVPTest_Enzo_Backend`
 
+**P10-A.2 addendum:** this document correctly closes the demo account, but blocking it
+also removes the only path that ever produced an ADMIN account — see
+`docs/P10_A2_ADMIN_BOOTSTRAP_AND_ACTIVATION.md` for the admin-bootstrap mechanism that
+must be deployed together with this hardening, not after a gap in production.
+
 ## Risk discovered
 
 A post-P10-A review found that P10-A's hardening had a gap: it closed the

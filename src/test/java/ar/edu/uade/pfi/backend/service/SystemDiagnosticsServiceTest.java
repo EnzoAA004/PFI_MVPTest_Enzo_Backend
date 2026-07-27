@@ -46,7 +46,7 @@ class SystemDiagnosticsServiceTest {
         SystemDiagnosticsService service = new SystemDiagnosticsService(
             aiClient,
             new PostgresReviewStoreService(new ObjectMapper(), "memory", ""),
-            null,
+            mock(AuthService.class),
             false,
             "memory"
         );
@@ -92,7 +92,7 @@ class SystemDiagnosticsServiceTest {
         SystemDiagnosticsService v1Service = new SystemDiagnosticsService(
             aiClient(Map.of("status", "ok")),
             new PostgresReviewStoreService(new ObjectMapper(), "memory", ""),
-            null,
+            mock(AuthService.class),
             false,
             "memory",
             AiMultiplanarContractVersion.V1
@@ -106,7 +106,7 @@ class SystemDiagnosticsServiceTest {
         SystemDiagnosticsService v2Service = new SystemDiagnosticsService(
             aiClient(Map.of("status", "ok")),
             new PostgresReviewStoreService(new ObjectMapper(), "memory", ""),
-            null,
+            mock(AuthService.class),
             false,
             "memory",
             AiMultiplanarContractVersion.V2
@@ -133,7 +133,7 @@ class SystemDiagnosticsServiceTest {
             .findFirst()
             .orElseThrow();
 
-        assertEquals(7, autowired.getParameterCount());
+        assertEquals(8, autowired.getParameterCount());
         assertEquals(AiServiceOperations.class, autowired.getParameterTypes()[0]);
         assertEquals(PostgresReviewStoreService.class, autowired.getParameterTypes()[1]);
         assertEquals(AuthService.class, autowired.getParameterTypes()[2]);

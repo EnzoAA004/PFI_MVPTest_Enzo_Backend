@@ -1,5 +1,6 @@
 package ar.edu.uade.pfi.backend.auth.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import java.util.List;
@@ -38,6 +39,26 @@ public final class AuthDtos {
     public record ApprovalRequest(
         @Email @NotBlank String email,
         boolean approved
+    ) {}
+
+    /**
+     * Strict-by-design: ignoreUnknown=false rejects (400) any extra field — in
+     * particular "roles"/"admin"/"authorities"/"permissions"/"verified"/"approved"/
+     * "password"/"passwordHash" — instead of silently ignoring them. Only email and
+     * activated are ever accepted.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = false)
+    public record ProfessionalActivationRequest(
+        @Email @NotBlank String email,
+        boolean activated
+    ) {}
+
+    public record ProfessionalActivationResponse(
+        String email,
+        String status,
+        boolean verified,
+        boolean approved,
+        List<String> roles
     ) {}
 
     public record PendingAuthResponse(

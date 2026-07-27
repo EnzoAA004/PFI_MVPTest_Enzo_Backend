@@ -205,6 +205,135 @@ public class PostgresAuthStoreService {
     }
 
     /**
+     * Strict, fail-closed check used exclusively by admin bootstrap/activation-lockout
+     * logic: unlike every other method in this class, it never swallows an exception —
+     * if Postgres isn't enabled or the query fails, the caller (AdminBootstrapService)
+     * must treat that as "cannot safely determine ADMIN state" and refuse to start,
+     * rather than silently falling back to an in-memory answer.
+     */
+    public boolean hasNonDemoAdmin(String excludedEmail) {
+        return findNonDemoAdmin(excludedEmail).isPresent();
+    }
+
+    /** See {@link #hasNonDemoAdmin(String)} — same fail-closed contract. */
+    public Optional<DoctorAccount> findNonDemoAdmin(String excludedEmail) {
+        if (!enabled) {
+            throw new IllegalStateException("Postgres auth persistence is not enabled (pfi.persistence.mode != postgres)");
+        }
+        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+            SELECT id, full_name, email, password_hash, license_number, specialty, institution, roles, created_at, verified, approved, two_factor_enabled, onboarding_completed
+            FROM doctor_accounts
+            WHERE roles LIKE '%ADMIN%' AND email <> ?
+            ORDER BY created_at ASC
+            LIMIT 1
+            """)) {
+            statement.setString(1, excludedEmail == null ? "" : excludedEmail);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (!rs.next()) return Optional.empty();
+                return Optional.of(readAccount(rs));
+            }
+        } catch (Exception ex) {
+            throw new IllegalStateException("Could not query for an existing production ADMIN account", ex);
+        }
+    }
+
+    /**
+     * Idempotent, race-safe creation of the bootstrap ADMIN. Concurrency strategy: the
+     * INSERT relies on the existing UNIQUE(email) constraint with ON CONFLICT DO NOTHING
+     * — if two instances start concurrently and both attempt to create the same
+     * bootstrap email, exactly one INSERT succeeds and the other becomes a no-op rather
+     * than an error or a duplicate row. Either way, the caller (AdminBootstrapService)
+     * always re-reads the row afterwards via findByEmail(...) to get the single
+     * canonical persisted identity — so both instances converge on the same account
+     * without needing a distributed lock.
+     */
+    public DoctorAccount createBootstrapAdmin(DoctorAccount account) {
+        if (!enabled) {
+            throw new IllegalStateException("Postgres auth persistence is not enabled (pfi.persistence.mode != postgres)");
+        }
+        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+            INSERT INTO doctor_accounts(id, full_name, email, password_hash, license_number, specialty, institution, roles, created_at, verified, approved, two_factor_enabled, onboarding_completed, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now())
+            ON CONFLICT (email) DO NOTHING
+            """)) {
+            statement.setString(1, account.id());
+            statement.setString(2, account.fullName());
+            statement.setString(3, account.email());
+            statement.setString(4, account.passwordHash());
+            statement.setString(5, account.licenseNumber());
+            statement.setString(6, account.specialty());
+            statement.setString(7, account.institution());
+            statement.setString(8, String.join(",", account.roles()));
+            statement.setTimestamp(9, Timestamp.from(account.createdAt()));
+            statement.setBoolean(10, account.verified());
+            statement.setBoolean(11, account.approved());
+            statement.setBoolean(12, account.twoFactorEnabled());
+            statement.setBoolean(13, account.onboardingCompleted());
+            statement.executeUpdate();
+        } catch (Exception ex) {
+            throw new IllegalStateException("Could not persist the bootstrap ADMIN account", ex);
+        }
+        return findByEmailStrict(account.email());
+    }
+
+    /** Same read as findByEmail, but throws instead of returning empty on any failure — used only for bootstrap verification. */
+    private DoctorAccount findByEmailStrict(String email) {
+        if (!enabled) {
+            throw new IllegalStateException("Postgres auth persistence is not enabled (pfi.persistence.mode != postgres)");
+        }
+        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+            SELECT id, full_name, email, password_hash, license_number, specialty, institution, roles, created_at, verified, approved, two_factor_enabled, onboarding_completed
+            FROM doctor_accounts
+            WHERE email = ?
+            """)) {
+            statement.setString(1, email);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    throw new IllegalStateException("Bootstrap ADMIN account was not found after persistence");
+                }
+                return readAccount(rs);
+            }
+        } catch (IllegalStateException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new IllegalStateException("Could not verify the bootstrap ADMIN account was persisted", ex);
+        }
+    }
+
+    /**
+     * Single atomic UPDATE for institutional activation/deactivation — verified,
+     * approved, and roles are always written together so a persisted account is never
+     * observed in a half-updated state. Fail-closed like the bootstrap methods above:
+     * an error here must surface as a real failure to the caller, not a silent no-op.
+     */
+    public ProfessionalActivationResult updateProfessionalActivation(String email, boolean verified, boolean approved, List<String> roles) {
+        if (!enabled) {
+            throw new IllegalStateException("Postgres auth persistence is not enabled (pfi.persistence.mode != postgres)");
+        }
+        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+            UPDATE doctor_accounts
+            SET verified = ?, approved = ?, roles = ?, updated_at = now()
+            WHERE email = ?
+            """)) {
+            statement.setBoolean(1, verified);
+            statement.setBoolean(2, approved);
+            statement.setString(3, String.join(",", roles));
+            statement.setString(4, email);
+            int updated = statement.executeUpdate();
+            if (updated == 0) {
+                throw new IllegalStateException("No account was updated for the given email");
+            }
+        } catch (IllegalStateException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new IllegalStateException("Could not persist professional activation state", ex);
+        }
+        return new ProfessionalActivationResult(email, verified, approved, roles);
+    }
+
+    public record ProfessionalActivationResult(String email, boolean verified, boolean approved, List<String> roles) {}
+
+    /**
      * Bulk-revokes every still-active refresh token for one email — used to close out
      * lingering demo-account sessions from a previous rollout without touching any
      * other account's tokens (no DELETE, no wildcard, single-email WHERE clause only).
