@@ -64,9 +64,17 @@ public class DoctorAccount {
 
     public void verify() { this.verified = true; }
 
+    /**
+     * P10-B.2: sets ONLY the approval flag — never touches roles. Before this fix, this
+     * method silently overwrote roles to a hardcoded DOCTOR+REVIEWER/PENDING_APPROVAL
+     * pair as a side effect, which meant every activation/deactivation replaced whatever
+     * role set the account actually had (a single-role account, an account missing
+     * REVIEWER, etc.) with that fixed pair. Callers that need to change roles must call
+     * {@link #setRoles(List)} explicitly and separately — account status and account
+     * roles are two different concerns.
+     */
     public void approve(boolean approved) {
         this.approved = approved;
-        this.roles = approved ? List.of("DOCTOR", "REVIEWER") : List.of("PENDING_APPROVAL");
     }
 
     public void setRoles(List<String> roles) {

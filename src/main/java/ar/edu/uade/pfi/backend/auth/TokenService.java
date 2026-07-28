@@ -33,14 +33,28 @@ public class TokenService {
         return accessTokenSeconds;
     }
 
+    /** Embeds the account's raw {@code roles()} as-is — see the overload below for the production login/refresh/verify path, which must embed *effective* roles instead. */
     public String issueAccessToken(DoctorAccount account) {
+        return issueAccessToken(account, account.roles());
+    }
+
+    /**
+     * P10-B.2: lets the caller mint a token with an explicit roles list, distinct from
+     * whatever {@code account.roles()} currently holds. {@code AuthService.issueTokens}
+     * uses this to embed the account's *effective* roles (PENDING_APPROVAL whenever the
+     * account isn't verified+approved) rather than its raw persisted roles — so a
+     * deactivated account's next login/refresh never mints a token carrying its old
+     * professional roles, even though those roles are now correctly preserved (not
+     * wiped) in storage for when the account is reactivated.
+     */
+    public String issueAccessToken(DoctorAccount account, List<String> roles) {
         Instant now = Instant.now();
         Map<String, Object> header = Map.of("alg", "HS256", "typ", "JWT");
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("sub", account.id());
         payload.put("email", account.email());
         payload.put("name", account.fullName());
-        payload.put("roles", account.roles());
+        payload.put("roles", roles);
         payload.put("iat", now.getEpochSecond());
         payload.put("exp", now.plusSeconds(accessTokenSeconds).getEpochSecond());
         String encodedHeader = base64Json(header);

@@ -100,8 +100,16 @@ public class AuthController {
         return authService.updateSettings(claims, settings);
     }
 
+    /**
+     * P10-B.2: adds the same controller-level RoleAuthorizationService.requireAdmin gate
+     * every other ADMIN-only endpoint uses, in addition to (not instead of)
+     * AuthService.listProfessionals' own internal requireAdmin(claims) check —
+     * authorization must be blocked as early as possible, not only proven safe by a
+     * service-layer check further down the call stack.
+     */
     @GetMapping("/admin/professionals")
     public List<UserResponse> listProfessionals(HttpServletRequest request) {
+        authorizationService.requireAdmin(request, "professional.list");
         TokenService.Claims claims = (TokenService.Claims) request.getAttribute(AuthFilter.AUTH_CLAIMS_ATTRIBUTE);
         return authService.listProfessionals(claims);
     }

@@ -86,8 +86,18 @@ class ProfessionalActivationIntegrationTest {
         verify(store, never()).saveRefreshToken(any(), any(), any());
     }
 
+    /**
+     * P10-B.2: deactivation changes account *status* only. Before this fix, this test
+     * asserted the opposite — that deactivation replaced the account's roles with
+     * PENDING_APPROVAL in storage — which was itself the bug: it meant a professional's
+     * real role set (here [DOCTOR, REVIEWER]) was destroyed by every deactivate/
+     * reactivate cycle instead of being preserved. Access while deactivated is still
+     * correctly restricted (see AuthAccountStateService/AuthService.issueTokens, which
+     * derive *effective* roles from approved/verified rather than trusting this column)
+     * — only the persisted roles column itself must survive unchanged.
+     */
     @Test
-    void deactivatingSetsPendingApprovalAndRevokesRefreshTokens() {
+    void deactivatingPreservesRolesAndRevokesRefreshTokens() {
         PostgresAuthStoreService store = mock(PostgresAuthStoreService.class);
         DoctorAccount active = activeAccount();
         when(store.findByEmail(active.email())).thenReturn(Optional.of(active));
@@ -96,12 +106,14 @@ class ProfessionalActivationIntegrationTest {
         ProfessionalActivationResponse response = service.activateProfessional(adminClaims, active.email(), false);
 
         assertEquals("deactivated", response.status());
-        assertEquals(List.of("PENDING_APPROVAL"), response.roles());
+        assertEquals(List.of("DOCTOR", "REVIEWER"), response.roles());
         assertFalse(response.approved());
         // Deactivation + session revocation are transactional now (single Postgres
         // call) rather than two separate best-effort calls — see
-        // PostgresAuthStoreService.deactivateProfessionalAndRevokeSessions.
-        verify(store).deactivateProfessionalAndRevokeSessions(active.email(), true, List.of("PENDING_APPROVAL"));
+        // PostgresAuthStoreService.deactivateProfessionalAndRevokeSessions. The roles
+        // passed through to persistence are the account's preserved roles, not a
+        // hardcoded PENDING_APPROVAL replacement.
+        verify(store).deactivateProfessionalAndRevokeSessions(active.email(), true, List.of("DOCTOR", "REVIEWER"));
     }
 
     @Test
@@ -174,7 +186,7 @@ class ProfessionalActivationIntegrationTest {
         PostgresAuthStoreService store = mock(PostgresAuthStoreService.class);
         DoctorAccount active = activeAccount();
         when(store.findByEmail(active.email())).thenReturn(Optional.of(active));
-        when(store.deactivateProfessionalAndRevokeSessions(active.email(), true, List.of("PENDING_APPROVAL")))
+        when(store.deactivateProfessionalAndRevokeSessions(active.email(), true, List.of("DOCTOR", "REVIEWER")))
             .thenThrow(new IllegalStateException("rollback: could not persist deactivation"));
         AuthService service = service(store);
 
@@ -202,6 +214,7 @@ class ProfessionalActivationIntegrationTest {
         verify(store).updateProfessionalActivation(pending.email(), true, true, List.of("DOCTOR", "REVIEWER"));
     }
 
+    /** P10-B.2: same root-cause fix as deactivatingPreservesRolesAndRevokesRefreshTokens, exercised through the legacy /approval delegate. */
     @Test
     void legacyApprovalDeactivationUsesTheTransactionalRevocationPath() {
         PostgresAuthStoreService store = mock(PostgresAuthStoreService.class);
@@ -211,8 +224,8 @@ class ProfessionalActivationIntegrationTest {
 
         var user = service.approveProfessional(adminClaims, active.email(), false);
 
-        assertEquals(List.of("PENDING_APPROVAL"), user.roles());
-        verify(store).deactivateProfessionalAndRevokeSessions(active.email(), true, List.of("PENDING_APPROVAL"));
+        assertEquals(List.of("DOCTOR", "REVIEWER"), user.roles());
+        verify(store).deactivateProfessionalAndRevokeSessions(active.email(), true, List.of("DOCTOR", "REVIEWER"));
     }
 
     @Test

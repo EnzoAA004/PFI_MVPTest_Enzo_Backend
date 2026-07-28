@@ -177,7 +177,7 @@ public class AuthService {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Refresh token inválido o revocado");
         }
         DoctorAccount account = findAccount(email).orElse(null);
-        if (account == null || !account.verified()) {
+        if (account == null || !account.verified() || !account.approved()) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Cuenta no disponible");
         }
         revokeRefreshToken(refreshToken);
@@ -188,14 +188,23 @@ public class AuthService {
         revokeRefreshToken(refreshToken);
     }
 
+    /**
+     * P10-B.2: reports {@code claims.roles()} — the caller's *effective* roles for this
+     * specific request, as already resolved by AuthFilter/AuthAccountStateService — not
+     * {@code account.roles()} directly. Roles are no longer wiped on deactivation (they
+     * are preserved in storage for reactivation), so reading the raw persisted value
+     * here would incorrectly show a deactivated account's old professional roles on its
+     * own `/me` instead of the PENDING_APPROVAL state it is actually restricted to.
+     */
     public UserResponse currentUser(TokenService.Claims claims) {
         DoctorAccount account = findAccount(normalizeEmail(claims.email())).orElse(null);
         if (account == null) {
             return new UserResponse(claims.subject(), claims.name(), claims.email(), "", "", "", claims.roles(), true, true, false, true);
         }
-        return toUser(account);
+        return toUser(account, claims.roles());
     }
 
+    /** Same effective-roles rationale as {@link #currentUser} — /settings is reachable while PENDING_APPROVAL too. */
     public UserResponse updateSettings(TokenService.Claims claims, SettingsRequest request) {
         DoctorAccount account = findAccount(normalizeEmail(claims.email()))
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Cuenta no encontrada"));
@@ -203,7 +212,7 @@ public class AuthService {
         if (request.onboardingCompleted() != null) account.setOnboardingCompleted(request.onboardingCompleted());
         accountsByEmail.put(account.email(), account);
         postgresAuthStore.updateSettings(account.email(), request.twoFactorEnabled(), request.onboardingCompleted());
-        return toUser(account);
+        return toUser(account, claims.roles());
     }
 
     public List<UserResponse> listProfessionals(TokenService.Claims claims) {
@@ -235,9 +244,10 @@ public class AuthService {
      * "Institutional manual activation" — an ADMIN vouches for a professional account
      * outside of any email-verification flow. This is deliberately NOT the same thing
      * as email verification: it does not claim an email was sent or confirmed, and it
-     * never issues a token. Activating never grants ADMIN (roles are hardcoded to
-     * DOCTOR+REVIEWER here, ignoring anything the caller could try to smuggle in — the
-     * request DTO itself only carries email+activated, so there is nothing to smuggle).
+     * never issues a token. Activating never grants ADMIN (the request DTO itself only
+     * carries email+activated, so there is nothing to smuggle in from the caller) and,
+     * as of P10-B.2, never replaces an existing professional role set either — see
+     * {@link #resolveActivationRoles}.
      */
     public ProfessionalActivationResponse activateProfessional(TokenService.Claims claims, String emailValue, boolean activated) {
         return setProfessionalActivation(claims, emailValue, activated);
@@ -268,14 +278,30 @@ public class AuthService {
     }
 
     private ProfessionalActivationResponse activate(TokenService.Claims claims, DoctorAccount account) {
-        List<String> targetRoles = List.of("DOCTOR", "REVIEWER");
+        List<String> targetRoles = resolveActivationRoles(account.roles());
         postgresAuthStore.updateProfessionalActivation(account.email(), true, true, targetRoles);
         account.verify();
         account.approve(true);
+        account.setRoles(targetRoles);
         accountsByEmail.put(account.email(), account);
         invalidateChallengesFor(account.email());
-        auditActivation(claims, account, AuditAction.PROFESSIONAL_ACTIVATED, true);
+        auditActivation(claims, account, AuditAction.PROFESSIONAL_ACTIVATED, true, targetRoles);
         return new ProfessionalActivationResponse(account.email(), "activated", true, true, targetRoles);
+    }
+
+    /**
+     * P10-B.2: activation changes account *status* only — it must never replace an
+     * already-meaningful role set with the default DOCTOR+REVIEWER pair. The default is
+     * only used the very first time an account is approved (its roles are still exactly
+     * the {@code PENDING_APPROVAL} placeholder from registration, or empty/corrupt) —
+     * any real role set already on the account (a single role, a restricted subset, an
+     * extra role) survives activation/reactivation unchanged, byte for byte.
+     */
+    private List<String> resolveActivationRoles(List<String> currentRoles) {
+        List<String> real = currentRoles == null
+            ? List.of()
+            : currentRoles.stream().filter(role -> !"PENDING_APPROVAL".equals(role)).toList();
+        return real.isEmpty() ? List.of("DOCTOR", "REVIEWER") : real;
     }
 
     /**
@@ -284,19 +310,26 @@ public class AuthService {
      * in-memory cache/refresh-token map are only mutated after that call returns
      * successfully, so a failure never leaves the account looking deactivated locally
      * while Postgres still has it active (or vice versa).
+     *
+     * P10-B.2: deactivation changes account *status* only — roles are read back and
+     * persisted completely unchanged (never replaced with PENDING_APPROVAL). Access is
+     * still correctly restricted while deactivated: AuthAccountStateService derives the
+     * request's *effective* roles from verified/approved, not from this roles column
+     * (see its class docs), and AuthService.issueTokens does the same when minting any
+     * new token for this account while it remains unapproved.
      */
     private ProfessionalActivationResponse deactivate(TokenService.Claims claims, DoctorAccount account) {
         if (isLastNonDemoAdmin(account)) {
             throw new LastAdminProtectionException();
         }
-        List<String> targetRoles = List.of("PENDING_APPROVAL");
-        postgresAuthStore.deactivateProfessionalAndRevokeSessions(account.email(), account.verified(), targetRoles);
+        List<String> preservedRoles = account.roles() == null ? List.of() : List.copyOf(account.roles());
+        postgresAuthStore.deactivateProfessionalAndRevokeSessions(account.email(), account.verified(), preservedRoles);
         account.approve(false);
         accountsByEmail.put(account.email(), account);
         refreshTokens.values().removeIf(account.email()::equals);
         invalidateChallengesFor(account.email());
-        auditActivation(claims, account, AuditAction.PROFESSIONAL_DEACTIVATED, false);
-        return new ProfessionalActivationResponse(account.email(), "deactivated", account.verified(), false, targetRoles);
+        auditActivation(claims, account, AuditAction.PROFESSIONAL_DEACTIVATED, false, preservedRoles);
+        return new ProfessionalActivationResponse(account.email(), "deactivated", account.verified(), false, preservedRoles);
     }
 
     /** Best-effort, never throws — used only for the ADMIN diagnostics summary flag, not for gating. */
@@ -349,7 +382,7 @@ public class AuthService {
      * request's MDC (set by TraceIdFilter), not an empty string. AuditService.record()
      * is itself fail-safe (never throws), so no try/catch is needed here.
      */
-    private void auditActivation(TokenService.Claims claims, DoctorAccount account, AuditAction action, boolean activated) {
+    private void auditActivation(TokenService.Claims claims, DoctorAccount account, AuditAction action, boolean activated, List<String> roles) {
         if (auditService == null) return;
         String traceId = MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY);
         auditService.record(
@@ -357,7 +390,7 @@ public class AuthService {
             action.name(),
             account.id(),
             traceId,
-            Map.of("entityType", "professional_account", "outcome", "success", "activated", activated)
+            Map.of("entityType", "professional_account", "outcome", "success", "activated", activated, "roles", roles)
         );
     }
 
@@ -464,13 +497,24 @@ public class AuthService {
         );
     }
 
+    /**
+     * P10-B.2: always mints the access token — and the UserResponse embedded alongside
+     * it — from *effective* roles (verified && approved ? account.roles() :
+     * PENDING_APPROVAL), never the account's raw stored roles directly. This matters
+     * because roles are no longer wiped on deactivation (they're preserved for
+     * reactivation) — without this, a login or refresh for a still-unapproved/
+     * deactivated account would mint a token (and show a response body) carrying its
+     * real professional roles. The account's raw roles in storage are otherwise
+     * untouched; this only affects what this one response embeds.
+     */
     private TokenResponse issueTokens(DoctorAccount account) {
-        String accessToken = tokenService.issueAccessToken(account);
+        List<String> effectiveRoles = effectiveRoles(account);
+        String accessToken = tokenService.issueAccessToken(account, effectiveRoles);
         String refreshToken = Base64.getUrlEncoder().withoutPadding().encodeToString(UUID.randomUUID().toString().getBytes());
         Instant expiresAt = Instant.now().plusSeconds(refreshTokenSeconds);
         refreshTokens.put(refreshToken, account.email());
         postgresAuthStore.saveRefreshToken(refreshToken, account.email(), expiresAt);
-        return new TokenResponse(accessToken, refreshToken, "Bearer", tokenService.accessTokenSeconds(), toUser(account));
+        return new TokenResponse(accessToken, refreshToken, "Bearer", tokenService.accessTokenSeconds(), toUser(account, effectiveRoles));
     }
 
     private void revokeRefreshToken(String refreshToken) {
@@ -479,7 +523,13 @@ public class AuthService {
         postgresAuthStore.revokeRefreshToken(refreshToken);
     }
 
+    /** ADMIN-facing / self-activation-result views: shows the account's raw persisted roles (useful — e.g. an ADMIN can see a deactivated account's preserved roles). */
     private UserResponse toUser(DoctorAccount account) {
+        return toUser(account, account.roles());
+    }
+
+    /** {@code /me} and {@code /settings} use this with the caller's *effective* roles instead — see call sites. */
+    private UserResponse toUser(DoctorAccount account, List<String> roles) {
         return new UserResponse(
             account.id(),
             account.fullName(),
@@ -487,12 +537,17 @@ public class AuthService {
             account.licenseNumber(),
             account.specialty(),
             account.institution(),
-            account.roles(),
+            roles,
             account.verified(),
             account.approved(),
             account.twoFactorEnabled(),
             account.onboardingCompleted()
         );
+    }
+
+    /** verified && approved ? account.roles() : PENDING_APPROVAL — see issueTokens/currentUser for why this must never be the raw roles column directly. */
+    private List<String> effectiveRoles(DoctorAccount account) {
+        return account.verified() && account.approved() ? account.roles() : List.of("PENDING_APPROVAL");
     }
 
     private String normalizeEmail(String value) {
