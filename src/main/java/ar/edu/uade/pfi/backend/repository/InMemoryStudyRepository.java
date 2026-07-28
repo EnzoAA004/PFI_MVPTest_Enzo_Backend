@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -178,6 +179,40 @@ public class InMemoryStudyRepository implements StudyRepository {
             }
         }
         throw new IllegalArgumentException("Artifact not found");
+    }
+
+    @Override
+    public StudyRun updateRunMetricsSnapshot(String multiplanarRunId, Map<String, Object> metricsSnapshot) {
+        for (StudyRun run : runsById.values()) {
+            if (!run.multiplanarRunId().equals(multiplanarRunId)) continue;
+            StudyRun updated = new StudyRun(
+                run.id(),
+                run.studyId(),
+                run.multiplanarRunId(),
+                run.traceId(),
+                run.requestedInferenceMode(),
+                run.effectiveInferenceMode(),
+                run.sagittalModelKey(),
+                run.axialModelKey(),
+                run.sagittalArtifactHash(),
+                run.axialArtifactHash(),
+                run.sagittalRunId(),
+                run.axialRunId(),
+                run.assets(),
+                metricsSnapshot,
+                run.artifacts(),
+                run.status(),
+                run.reviewStatus(),
+                run.reviewer(),
+                run.reviewedAt(),
+                run.comments(),
+                run.createdAt(),
+                run.updatedAt()
+            );
+            runsById.put(run.id(), updated);
+            return updated;
+        }
+        throw new IllegalArgumentException("Run not found");
     }
 
     @Override

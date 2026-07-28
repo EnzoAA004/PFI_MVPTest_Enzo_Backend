@@ -61,6 +61,53 @@ mvn.cmd -q test
 
 Resultado: `Tests run: 487, Failures: 0, Errors: 0, Skipped: 0`.
 
+## P9-B.2.1 — reapertura durable del workspace 3D
+
+Referencia AI Module:
+
+- Repositorio: `EnzoAA004/PFI_MVPTest_Enzo_AImodule`
+- Contrato base P9-A.3.1.1: `06185de71a621afd76236a473403a65b9b4623a3`
+
+Referencia Frontend:
+
+- Repositorio: `EnzoAA004/PFI_MVPTest_Enzo_Frontend`
+- Base consumidora P9-C.5: `e1e8d3996bc2f504869096bf263a5ef7a592afa4`
+
+El backend publica el proxy 3D experimental como asset publico y durable:
+
+```json
+{
+  "assetName": "lumbar-3d-mesh.json",
+  "contentType": "application/json",
+  "generated": true,
+  "url": "/api/ai/assets/{multiplanarRunId}/workspace/lumbar-3d-mesh.json"
+}
+```
+
+`relativePath` y cualquier path interno del AI Module se eliminan antes de responder al
+frontend. La misma regla aplica al resultado inmediato de
+`POST /api/ai/multiplanar/run` y a la reapertura desde
+`GET /api/studies/{caseId}` / `GET /api/studies/{caseId}/runs`.
+
+Para reabrir una corrida con el AI Module apagado, cada `StudyRunDetailDto` incluye
+`canonicalRun`: un snapshot canonico derivado de PostgreSQL con `runId`, `traceId`,
+`caseId`, modos, `requestedPlanes`, `completedPlanes`, `planes`, `threeD`, `quality`,
+`review`, `governance`, `humanReviewRequired`, `notClinicalDiagnosis`, `synthetic` y
+`fallbackReason`. No se fabrica una reconstruccion nueva ni un fallback exitoso: se
+devuelve lo persistido.
+
+Validacion durable de payloads:
+
+- `input.png`, `overlay.png` y `mask-preview.png` deben tener `Content-Type: image/png`
+  y firma PNG.
+- `lumbar-3d-mesh.json` debe tener `Content-Type: application/json` y declarar el
+  contrato honesto del proxy: `schemaVersion=pfi.lumbar-geometric-proxy.v1`,
+  `kind=experimental_geometric_proxy`, `method=dual_plane_bbox_proxy`,
+  `anatomicalReconstruction=false`, `volumetricReconstruction=false`,
+  `coordinateSystem=local_proxy_space`, `units=normalized`.
+- HTML, JSON con claims anatomicos/volumetricos, PNG invalido, raw `.npy`, checkpoints
+  o assets privados se rechazan y no quedan como payload durable.
+
 ## Objetivo
 
 Hacer que el backend pueda consumir `POST /v2/multiplanar/run` (`schemaVersion=pfi.multiplanar-run.v2`)

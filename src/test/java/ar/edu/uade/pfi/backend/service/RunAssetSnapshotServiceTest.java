@@ -1,6 +1,7 @@
 package ar.edu.uade.pfi.backend.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -45,7 +46,7 @@ class RunAssetSnapshotServiceTest {
         );
 
         AiServiceOperations ai = mock(AiServiceOperations.class);
-        byte[] pngBytes = {1, 2, 3, 4};
+        byte[] pngBytes = png(1);
         when(ai.getAsset(eq("run-sag-snap"), eq("sagittal"), eq("input.png"))).thenReturn(pngResponse(pngBytes));
         when(ai.getAsset(eq("run-sag-snap"), eq("sagittal"), eq("overlay.png"))).thenReturn(pngResponse(pngBytes));
 
@@ -80,7 +81,7 @@ class RunAssetSnapshotServiceTest {
         );
 
         AiServiceOperations ai = mock(AiServiceOperations.class);
-        byte[] body = "{\"kind\":\"experimental_geometric_proxy\"}".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] body = meshJson();
         when(ai.getAsset(eq("multi-3d-snapshot"), eq("workspace"), eq("lumbar-3d-mesh.json"))).thenReturn(jsonResponse(body));
         FakeRunAssetContentStorage storage = new FakeRunAssetContentStorage();
 
@@ -91,6 +92,52 @@ class RunAssetSnapshotServiceTest {
         assertEquals("stored", stored.storageStatus());
         assertEquals("application/json", stored.contentType());
         assertEquals(1, storage.stored.size());
+    }
+
+    @Test
+    void rejectsPngAssetWhenUpstreamReturnsJsonOrNonPngBytes() {
+        InMemoryStudyRepository repository = new InMemoryStudyRepository();
+        StudyRunService studyRunService = new StudyRunService(repository);
+        Study study = studyRunService.createStudy("CASE-BAD-PNG", "created");
+        RunArtifact input = artifact(study.id(), "run-bad-png", "sagittal", "input.png", "image/png");
+        StudyRun run = studyRunService.createRunWithId(
+            UUID.randomUUID().toString(), study, "multi-bad-png", "trace-bad-png",
+            "real_baseline", "real_baseline", "sagittal_spider", "", "sha256:sag", "",
+            "run-bad-png", "", Map.of(), Map.of(), List.of(input), "completed", "pending", "", null, ""
+        );
+
+        AiServiceOperations ai = mock(AiServiceOperations.class);
+        when(ai.getAsset(eq("run-bad-png"), eq("sagittal"), eq("input.png")))
+            .thenReturn(jsonResponse("{\"html\":\"not-a-png\"}".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+
+        new RunAssetSnapshotService(ai, repository, new FakeRunAssetContentStorage(), null, 5_242_880).snapshot(run);
+
+        RunArtifact reloaded = repository.findRunByMultiplanarRunId("multi-bad-png").orElseThrow().artifacts().get(0);
+        assertEquals("rejected", reloaded.storageStatus());
+    }
+
+    @Test
+    void rejectsUnsafeMeshJsonContract() {
+        InMemoryStudyRepository repository = new InMemoryStudyRepository();
+        StudyRunService studyRunService = new StudyRunService(repository);
+        Study study = studyRunService.createStudy("CASE-BAD-MESH", "created");
+        RunArtifact mesh = artifact(study.id(), "multi-bad-mesh", "workspace", "lumbar-3d-mesh.json", "application/json");
+        StudyRun run = studyRunService.createRunWithId(
+            UUID.randomUUID().toString(), study, "multi-bad-mesh", "trace-bad-mesh",
+            "real_baseline", "real_baseline", "sagittal_spider", "axial_t2_alkafri", "sha256:sag", "sha256:ax",
+            "run-sag-bad-mesh", "run-ax-bad-mesh", Map.of(), Map.of(), List.of(mesh), "completed", "pending", "", null, ""
+        );
+
+        AiServiceOperations ai = mock(AiServiceOperations.class);
+        byte[] unsafe = """
+            {"schemaVersion":"pfi.lumbar-geometric-proxy.v1","kind":"patient_specific_mesh","method":"dual_plane_bbox_proxy","anatomicalReconstruction":true,"volumetricReconstruction":false,"coordinateSystem":"patient_relative_mm","units":"mm"}
+            """.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        when(ai.getAsset(eq("multi-bad-mesh"), eq("workspace"), eq("lumbar-3d-mesh.json"))).thenReturn(jsonResponse(unsafe));
+
+        new RunAssetSnapshotService(ai, repository, new FakeRunAssetContentStorage(), null, 5_242_880).snapshot(run);
+
+        RunArtifact reloaded = repository.findRunByMultiplanarRunId("multi-bad-mesh").orElseThrow().artifacts().get(0);
+        assertEquals("rejected", reloaded.storageStatus());
     }
 
     private RunArtifact artifact(String studyId, String runId, String plane, String assetName, String contentType) {
@@ -107,6 +154,24 @@ class RunAssetSnapshotServiceTest {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         return new ResponseEntity<>(body, headers, HttpStatus.OK);
+    }
+
+    private byte[] png(int marker) {
+        return new byte[] {(byte) 0x89, 0x50, 0x4e, 0x47, (byte) marker};
+    }
+
+    private byte[] meshJson() {
+        return """
+            {
+              "schemaVersion": "pfi.lumbar-geometric-proxy.v1",
+              "kind": "experimental_geometric_proxy",
+              "method": "dual_plane_bbox_proxy",
+              "anatomicalReconstruction": false,
+              "volumetricReconstruction": false,
+              "coordinateSystem": "local_proxy_space",
+              "units": "normalized"
+            }
+            """.getBytes(java.nio.charset.StandardCharsets.UTF_8);
     }
 
     private static final class FakeRunAssetContentStorage implements RunAssetContentStorage {

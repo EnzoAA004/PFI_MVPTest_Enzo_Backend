@@ -171,6 +171,46 @@ class MultiplanarRunResponsePresenterTest {
     }
 
     @Test
+    void publishesWorkspaceThreeDAssetWithoutLeakingRelativePath() throws Exception {
+        MultiplanarRunResponseDto response = fixture();
+        MultiplanarRunResponseDto presented = presenter.present(new MultiplanarRunResponseDto(
+            response.status(),
+            response.schemaVersion(),
+            "multi-contract-001",
+            response.traceId(),
+            response.caseId(),
+            response.workspaceMode(),
+            response.requestedInferenceMode(),
+            response.effectiveInferenceMode(),
+            response.planes(),
+            response.assets(),
+            Map.of(
+                "enabled", true,
+                "status", "experimental_ready",
+                "assets", java.util.List.of(Map.of(
+                    "assetName", "lumbar-3d-mesh.json",
+                    "role", "mesh_3d",
+                    "contentType", "application/json",
+                    "generated", true,
+                    "relativePath", "/outputs/multiplanar_3d/multi-contract-001/lumbar-3d-mesh.json"
+                ))
+            ),
+            response.quality(),
+            response.review(),
+            response.metadata(),
+            true,
+            true,
+            false
+        ));
+
+        Map<String, Object> threeD = presented.threeD();
+        java.util.List<Map<String, Object>> assets = (java.util.List<Map<String, Object>>) threeD.get("assets");
+        assertEquals("/api/ai/assets/multi-contract-001/workspace/lumbar-3d-mesh.json", assets.get(0).get("url"));
+        assertFalse(assets.get(0).containsKey("relativePath"));
+        assertFalse(objectMapper.writeValueAsString(presented).contains("/outputs/"));
+    }
+
+    @Test
     void axialCandidateIsNotPresentedAsRealBaseline() {
         MultiplanarRunResponseDto.PlaneDto axialCandidate = new MultiplanarRunResponseDto.PlaneDto(
             "run-ax-candidate",

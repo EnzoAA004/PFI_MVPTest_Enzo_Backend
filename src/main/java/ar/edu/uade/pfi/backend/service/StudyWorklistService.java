@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -31,13 +32,21 @@ public class StudyWorklistService {
 
     private final StudyRepository repository;
     private final boolean demoEnabled;
+    private final PublicThreeDAssetPublisher threeDAssetPublisher;
 
+    public StudyWorklistService(StudyRepository repository, boolean demoEnabled) {
+        this(repository, demoEnabled, new PublicThreeDAssetPublisher());
+    }
+
+    @Autowired
     public StudyWorklistService(
         StudyRepository repository,
-        @Value("${pfi.demo.enabled:false}") boolean demoEnabled
+        @Value("${pfi.demo.enabled:false}") boolean demoEnabled,
+        PublicThreeDAssetPublisher threeDAssetPublisher
     ) {
         this.repository = repository;
         this.demoEnabled = demoEnabled;
+        this.threeDAssetPublisher = threeDAssetPublisher;
     }
 
     public StudyListResponseDto listStudies() {
@@ -185,7 +194,57 @@ public class StudyWorklistService {
             true,
             DATA_ORIGIN_DATABASE
         );
-        return new StudyRunDetailDto(summary, measurementsByPlane, artifactsByPlane, corrections, run.metricsSnapshot());
+        Map<String, Object> canonicalRun = canonicalRun(study, run);
+        return new StudyRunDetailDto(summary, measurementsByPlane, artifactsByPlane, corrections, publishedMetricsSnapshot(run), canonicalRun);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> publishedMetricsSnapshot(StudyRun run) {
+        Map<String, Object> snapshot = new LinkedHashMap<>(run.metricsSnapshot());
+        Object threeD = snapshot.get("threeD");
+        if (threeD instanceof Map<?, ?> map) {
+            snapshot.put("threeD", threeDAssetPublisher.publish(run.multiplanarRunId(), (Map<String, Object>) map));
+        }
+        return snapshot;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> canonicalRun(Study study, StudyRun run) {
+        Map<String, Object> snapshot = publishedMetricsSnapshot(run);
+        Map<String, Object> canonical = new LinkedHashMap<>();
+        canonical.put("schemaVersion", String.valueOf(snapshot.getOrDefault("sourceSchemaVersion", "pfi.backend-run-snapshot.v2")));
+        canonical.put("runId", run.multiplanarRunId());
+        canonical.put("traceId", run.traceId());
+        canonical.put("caseId", study.caseId());
+        canonical.put("workspaceMode", snapshot.get("workspaceMode"));
+        canonical.put("requestedInferenceMode", run.requestedInferenceMode());
+        canonical.put("effectiveInferenceMode", run.effectiveInferenceMode());
+        canonical.put("status", snapshot.getOrDefault("status", run.status()));
+        canonical.put("requestedPlanes", snapshot.getOrDefault("requestedPlanes", List.of()));
+        canonical.put("completedPlanes", snapshot.getOrDefault("completedPlanes", List.of()));
+        canonical.put("readiness", snapshot.getOrDefault("readiness", Map.of()));
+        canonical.put("planes", snapshot.getOrDefault("planes", Map.of()));
+        canonical.put("threeD", snapshot.get("threeD"));
+        canonical.put("quality", snapshot.getOrDefault("quality", Map.of()));
+        Map<String, Object> review = new LinkedHashMap<>();
+        review.put("status", ReviewStatusMapper.toApiStatus(run.reviewStatus()));
+        review.put("reviewer", blankToNull(run.reviewer()));
+        review.put("reviewedAt", run.reviewedAt() == null ? null : run.reviewedAt().toString());
+        review.put("comments", blankToNull(run.comments()));
+        canonical.put("review", review);
+        // No fabricated positive defaults: a legacy snapshot without a stored
+        // governance map yields humanReviewRequired/notClinicalDiagnosis=null
+        // here, never a fabricated true — the frontend already treats null as
+        // "not evaluable", exactly like a live run missing that field would.
+        Map<String, Object> governance = snapshot.get("governance") instanceof Map<?, ?> map
+            ? (Map<String, Object>) map
+            : Map.of();
+        canonical.put("governance", governance);
+        canonical.put("humanReviewRequired", governance.get("humanReviewRequired"));
+        canonical.put("notClinicalDiagnosis", governance.get("notClinicalDiagnosis"));
+        canonical.put("synthetic", snapshot.get("synthetic"));
+        canonical.put("fallbackReason", snapshot.get("fallbackReason"));
+        return canonical;
     }
 
     private List<String> planesFor(List<InputResource> inputs, StudyRun run) {

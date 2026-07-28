@@ -92,8 +92,32 @@ public class MultiplanarRunPersistenceService {
             ""
         );
         if (runAssetSnapshotService != null) {
-            runAssetSnapshotService.snapshot(persistedRun);
+            boolean meshAvailable = runAssetSnapshotService.snapshot(persistedRun);
+            if (!meshAvailable) {
+                downgradeThreeDIfMeshUnavailable(persistedRun);
+            }
         }
+    }
+
+    /**
+     * The run's metricsSnapshot (with threeD.enabled=true, computed from the AI
+     * Module's own response) is persisted before the workspace mesh is actually
+     * downloaded/validated/stored — that download can still fail afterward. If it
+     * does, this rewrites threeD to an honest blocked state so the backend never
+     * publishes threeD.enabled=true with a URL that points at unavailable content
+     * (no rollback of the whole run: sagittal/axial planes remain valid and reviewable).
+     */
+    @SuppressWarnings("unchecked")
+    private void downgradeThreeDIfMeshUnavailable(ar.edu.uade.pfi.backend.domain.StudyRun persistedRun) {
+        Object rawThreeD = persistedRun.metricsSnapshot().get("threeD");
+        if (!(rawThreeD instanceof Map<?, ?> threeDMap) || !Boolean.TRUE.equals(threeDMap.get("enabled"))) return;
+        Map<String, Object> blockedThreeD = new LinkedHashMap<>((Map<String, Object>) threeDMap);
+        blockedThreeD.put("enabled", false);
+        blockedThreeD.put("status", "experimental_blocked_insufficient_geometry");
+        blockedThreeD.put("assets", List.of());
+        Map<String, Object> updatedSnapshot = new LinkedHashMap<>(persistedRun.metricsSnapshot());
+        updatedSnapshot.put("threeD", blockedThreeD);
+        studyRunService.updateRunMetricsSnapshot(persistedRun.multiplanarRunId(), updatedSnapshot);
     }
 
     private void registerInput(Study study, String plane, String inputId) {
@@ -190,21 +214,36 @@ public class MultiplanarRunPersistenceService {
         Map<String, Object> snapshot = new LinkedHashMap<>();
         snapshot.put("schemaVersion", SNAPSHOT_SCHEMA_VERSION);
         snapshot.put("sourceSchemaVersion", valueOrEmpty(response.schemaVersion()));
+        snapshot.put("status", valueOrEmpty(response.status()));
+        snapshot.put("caseId", valueOrEmpty(response.caseId()));
         snapshot.put("workspaceMode", valueOrEmpty(response.workspaceMode()));
+        snapshot.put("requestedInferenceMode", valueOrEmpty(response.requestedInferenceMode()));
+        snapshot.put("effectiveInferenceMode", valueOrEmpty(response.effectiveInferenceMode()));
+        snapshot.put("requestedPlanes", response.requestedPlanes());
+        snapshot.put("completedPlanes", response.completedPlanes());
         snapshot.put("synthetic", response.synthetic());
+        putIfPresent(snapshot, "fallbackReason", response.fallbackReason());
         snapshot.put("readiness", response.readiness());
         snapshot.put("governance", governanceMap(response.governance()));
         snapshot.put("threeD", response.threeD());
+        snapshot.put("quality", response.quality());
+        snapshot.put("review", response.review());
         Map<String, Object> planes = new LinkedHashMap<>();
-        planes.put("sagittal", planeSnapshot(response.sagittal()));
-        planes.put("axial", planeSnapshot(response.axial()));
+        planes.put("sagittal", planeSnapshot(response.sagittal(), response.governance()));
+        planes.put("axial", planeSnapshot(response.axial(), response.governance()));
         snapshot.put("planes", planes);
         return snapshot;
     }
 
-    private Map<String, Object> planeSnapshot(CanonicalPlaneRun plane) {
+    private Map<String, Object> planeSnapshot(CanonicalPlaneRun plane, CanonicalMultiplanarRun.Governance governance) {
         if (plane == null) return null;
         Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("planeRunId", plane.planeRunId());
+        snapshot.put("plane", plane.plane());
+        snapshot.put("status", plane.status());
+        snapshot.put("effectiveInferenceMode", plane.effectiveInferenceMode());
+        snapshot.put("synthetic", plane.synthetic());
+        putIfPresent(snapshot, "fallbackReason", plane.fallbackReason());
         snapshot.put("model", plane.model());
         snapshot.put("input", plane.input());
         snapshot.put("coordinateSpace", plane.coordinateSpace());
@@ -213,6 +252,8 @@ public class MultiplanarRunPersistenceService {
         snapshot.put("landmarks", plane.landmarks());
         snapshot.put("measurements", transformMeasurements(plane));
         snapshot.put("quality", plane.quality());
+        snapshot.put("humanReviewRequired", governance.humanReviewRequired());
+        snapshot.put("notClinicalDiagnosis", governance.notClinicalDiagnosis());
         return snapshot;
     }
 
@@ -256,6 +297,10 @@ public class MultiplanarRunPersistenceService {
 
     private String artifactHash(CanonicalPlaneRun plane) {
         return plane == null ? "" : text(plane.model().get("artifactHash"));
+    }
+
+    private void putIfPresent(Map<String, Object> target, String key, Object value) {
+        if (value != null) target.put(key, value);
     }
 
     /**

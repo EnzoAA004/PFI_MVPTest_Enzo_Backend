@@ -293,6 +293,10 @@ public class StudyRunService {
         return repository.findRunByTraceId(traceId);
     }
 
+    public StudyRun updateRunMetricsSnapshot(String multiplanarRunId, Map<String, Object> metricsSnapshot) {
+        return repository.updateRunMetricsSnapshot(multiplanarRunId, metricsSnapshot);
+    }
+
     private StudyMetadataDto normalizeMetadata(StudyMetadataDto metadata) {
         if (metadata == null) return null;
         return new StudyMetadataDto(

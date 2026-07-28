@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -13,11 +14,23 @@ public class MultiplanarRunResponsePresenter {
     private static final List<String> PUBLIC_ASSETS = List.of("input.png", "overlay.png", "mask-preview.png");
     private static final List<String> PRIVATE_ASSETS = List.of("mask.npy", "confidence.npy");
 
+    private final PublicThreeDAssetPublisher threeDAssetPublisher;
+
+    public MultiplanarRunResponsePresenter() {
+        this(new PublicThreeDAssetPublisher());
+    }
+
+    @Autowired
+    public MultiplanarRunResponsePresenter(PublicThreeDAssetPublisher threeDAssetPublisher) {
+        this.threeDAssetPublisher = threeDAssetPublisher;
+    }
+
     public MultiplanarRunResponseDto present(MultiplanarRunResponseDto response) {
         if (response == null) return null;
         MultiplanarRunResponseDto.PlanesDto planes = response.planes();
         MultiplanarRunResponseDto.PlaneDto sagittal = planes == null ? null : presentPlane(planes.sagittal());
         MultiplanarRunResponseDto.PlaneDto axial = planes == null ? null : presentPlane(planes.axial());
+        Map<String, Object> threeD = safeMap(response.threeD());
         return new MultiplanarRunResponseDto(
             response.status(),
             response.schemaVersion(),
@@ -29,7 +42,7 @@ public class MultiplanarRunResponsePresenter {
             textOr(response.effectiveInferenceMode(), normalizedWorkspaceMode(sagittal, axial, response.effectiveInferenceMode())),
             planes == null ? null : new MultiplanarRunResponseDto.PlanesDto(sagittal, axial),
             safeMap(response.assets()),
-            safeMap(response.threeD()),
+            threeDAssetPublisher.publish(response.runId(), threeD),
             safeMap(response.quality()),
             safeMap(response.review()),
             safeMap(response.metadata()),

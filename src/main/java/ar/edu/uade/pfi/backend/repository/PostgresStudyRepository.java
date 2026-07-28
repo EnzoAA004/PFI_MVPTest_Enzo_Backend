@@ -642,6 +642,28 @@ public class PostgresStudyRepository implements StudyRepository {
         }
     }
 
+    @Override
+    public StudyRun updateRunMetricsSnapshot(String multiplanarRunId, Map<String, Object> metricsSnapshot) {
+        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+            UPDATE domain_study_runs
+            SET metrics_snapshot = ?::jsonb, updated_at = now()
+            WHERE multiplanar_run_id = ?
+            RETURNING id, study_id, multiplanar_run_id, trace_id, requested_inference_mode, effective_inference_mode,
+                      sagittal_model_key, axial_model_key, sagittal_artifact_hash, axial_artifact_hash,
+                      sagittal_run_id, axial_run_id, assets, metrics_snapshot, status,
+                      review_status, reviewer, reviewed_at, comments, created_at, updated_at
+            """)) {
+            statement.setString(1, objectMapper.writeValueAsString(metricsSnapshot));
+            statement.setString(2, multiplanarRunId);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (!rs.next()) throw new IllegalArgumentException("Run not found");
+                return readRun(connection, rs);
+            }
+        } catch (Exception ex) {
+            throw new IllegalStateException("Could not update run metrics snapshot", ex);
+        }
+    }
+
     private List<DomainAuditEvent> findAuditEvents(String column, String value) {
         try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
             SELECT id, actor, action, entity_id, trace_id, metadata, created_at

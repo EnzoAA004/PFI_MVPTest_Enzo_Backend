@@ -99,13 +99,32 @@ class PostgresRunAssetContentStorageTest {
         );
         StudyRun persisted = repository.saveRun(run(UUID.randomUUID().toString(), study.id(), "multi-p9b2-mesh", "trace-p9b2-mesh", List.of(requestedArtifact), now));
         RunArtifact persistedArtifact = persisted.artifacts().get(0);
-        byte[] json = "{\"kind\":\"experimental_geometric_proxy\"}".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] json = meshJson();
 
         storage.store(persistedArtifact, json, sha256(json));
         RunArtifact stored = repository.updateArtifactStorage(persistedArtifact.id(), "stored", "postgres_bytea", (long) json.length, sha256(json));
 
         assertArrayEquals(json, storage.find(stored.id()).orElseThrow().content());
         assertEquals("application/json", stored.contentType());
+    }
+
+    @Test
+    void rejectsMeshJsonThatClaimsAnatomicalOrVolumetricReconstruction() throws Exception {
+        RunArtifact mesh = new RunArtifact(
+            UUID.randomUUID().toString(),
+            UUID.randomUUID().toString(),
+            "multi-unsafe-mesh",
+            "workspace",
+            "lumbar-3d-mesh.json",
+            "application/json",
+            "lumbar-3d-mesh.json",
+            Instant.parse("2026-07-26T13:00:00Z")
+        );
+        byte[] unsafe = """
+            {"schemaVersion":"pfi.lumbar-geometric-proxy.v1","kind":"experimental_geometric_proxy","method":"dual_plane_bbox_proxy","anatomicalReconstruction":true,"volumetricReconstruction":false,"coordinateSystem":"local_proxy_space","units":"normalized"}
+            """.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+        assertThrows(IllegalArgumentException.class, () -> storage().store(mesh, unsafe, sha256(unsafe)));
     }
 
     private PostgresStudyRepository repository() {
@@ -160,6 +179,20 @@ class PostgresRunAssetContentStorageTest {
 
     private byte[] png(int marker) {
         return new byte[] {(byte) 0x89, 0x50, 0x4e, 0x47, (byte) marker};
+    }
+
+    private byte[] meshJson() {
+        return """
+            {
+              "schemaVersion": "pfi.lumbar-geometric-proxy.v1",
+              "kind": "experimental_geometric_proxy",
+              "method": "dual_plane_bbox_proxy",
+              "anatomicalReconstruction": false,
+              "volumetricReconstruction": false,
+              "coordinateSystem": "local_proxy_space",
+              "units": "normalized"
+            }
+            """.getBytes(java.nio.charset.StandardCharsets.UTF_8);
     }
 
     private String sha256(byte[] value) throws Exception {

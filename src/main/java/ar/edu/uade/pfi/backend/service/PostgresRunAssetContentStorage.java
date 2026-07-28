@@ -4,6 +4,8 @@ import ar.edu.uade.pfi.backend.domain.RunAssetContent;
 import ar.edu.uade.pfi.backend.domain.RunAssetStorageDiagnostics;
 import ar.edu.uade.pfi.backend.domain.RunArtifact;
 import ar.edu.uade.pfi.backend.repository.SqlMigrationRunner;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -15,6 +17,7 @@ import java.sql.ResultSet;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,6 +28,7 @@ import org.springframework.stereotype.Service;
 @ConditionalOnProperty(name = "pfi.persistence.mode", havingValue = "postgres")
 public class PostgresRunAssetContentStorage implements RunAssetContentStorage {
     static final String STORAGE_KIND = "postgres_bytea";
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final String jdbcUrl;
     private final long maxBytes;
@@ -154,6 +158,7 @@ public class PostgresRunAssetContentStorage implements RunAssetContentStorage {
         if (!isAllowedContentType(artifact)) throw new IllegalArgumentException("Only public derived assets can be stored");
         if (content == null || content.length == 0) throw new IllegalArgumentException("Asset payload cannot be empty");
         if (content.length > maxBytes) throw new IllegalArgumentException("Asset payload exceeds max size");
+        validatePayloadContract(artifact, content);
         if (sha256 == null || sha256.isBlank()) throw new IllegalArgumentException("Asset sha256 is required");
     }
 
@@ -162,6 +167,47 @@ public class PostgresRunAssetContentStorage implements RunAssetContentStorage {
             return "workspace".equals(artifact.plane()) && "application/json".equalsIgnoreCase(artifact.contentType());
         }
         return "image/png".equalsIgnoreCase(artifact.contentType());
+    }
+
+    private void validatePayloadContract(RunArtifact artifact, byte[] content) {
+        if ("lumbar-3d-mesh.json".equals(artifact.assetName())) {
+            validateMeshJson(content);
+            return;
+        }
+        if (content.length < 4
+            || (content[0] & 0xff) != 0x89
+            || content[1] != 0x50
+            || content[2] != 0x4e
+            || content[3] != 0x47) {
+            throw new IllegalArgumentException("PNG asset payload is invalid");
+        }
+    }
+
+    private void validateMeshJson(byte[] content) {
+        try {
+            Map<String, Object> mesh = OBJECT_MAPPER.readValue(content, new TypeReference<>() {});
+            requireText(mesh, "schemaVersion", "pfi.lumbar-geometric-proxy.v1");
+            requireText(mesh, "kind", "experimental_geometric_proxy");
+            requireText(mesh, "method", "dual_plane_bbox_proxy");
+            requireBoolean(mesh, "anatomicalReconstruction", false);
+            requireBoolean(mesh, "volumetricReconstruction", false);
+            requireText(mesh, "coordinateSystem", "local_proxy_space");
+            requireText(mesh, "units", "normalized");
+        } catch (Exception ex) {
+            throw new IllegalArgumentException("Mesh JSON asset payload is invalid", ex);
+        }
+    }
+
+    private void requireText(Map<String, Object> mesh, String key, String expected) {
+        if (!expected.equals(mesh.get(key))) {
+            throw new IllegalArgumentException("Mesh JSON contract mismatch");
+        }
+    }
+
+    private void requireBoolean(Map<String, Object> mesh, String key, boolean expected) {
+        if (!Boolean.valueOf(expected).equals(mesh.get(key))) {
+            throw new IllegalArgumentException("Mesh JSON contract mismatch");
+        }
     }
 
     private RunAssetContent readContent(ResultSet rs) throws Exception {

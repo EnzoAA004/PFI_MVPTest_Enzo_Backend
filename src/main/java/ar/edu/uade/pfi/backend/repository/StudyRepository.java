@@ -9,6 +9,7 @@ import ar.edu.uade.pfi.backend.domain.Study;
 import ar.edu.uade.pfi.backend.domain.StudyRun;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 public interface StudyRepository {
@@ -39,6 +40,13 @@ public interface StudyRepository {
     Optional<RunArtifact> findArtifactByRunPlaneAndName(String runId, String plane, String assetName);
 
     RunArtifact updateArtifactStorage(String artifactId, String storageStatus, String storageKind, Long sizeBytes, String sha256);
+
+    /**
+     * Overwrites the persisted metricsSnapshot for a run. Used to downgrade a
+     * run's threeD to a blocked state after the workspace mesh asset failed
+     * validation/storage post-persistence — never to fabricate new data.
+     */
+    StudyRun updateRunMetricsSnapshot(String multiplanarRunId, Map<String, Object> metricsSnapshot);
 
     RunReview saveReview(String multiplanarRunId, String reviewStatus, String reviewer, Instant reviewedAt, String comments, List<MeasurementCorrection> corrections);
 

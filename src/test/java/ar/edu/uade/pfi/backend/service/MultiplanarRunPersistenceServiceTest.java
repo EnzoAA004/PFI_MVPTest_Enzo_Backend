@@ -270,6 +270,76 @@ class MultiplanarRunPersistenceServiceTest {
         assertTrue(recovered.artifacts().stream().allMatch(artifact -> artifact.studyRunId().equals(recovered.id())));
     }
 
+    /**
+     * P9-B.2.1 atomicity gap: the metricsSnapshot (threeD.enabled=true, computed
+     * from the AI Module's own response) is persisted before the workspace mesh is
+     * actually downloaded/validated. If that download later fails or the mesh
+     * content is rejected, the backend must never keep publishing
+     * threeD.enabled=true with a URL that has no stored content behind it.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void downgradesThreeDToBlockedWhenWorkspaceMeshFailsValidationAfterPersistence() throws Exception {
+        ar.edu.uade.pfi.backend.repository.InMemoryStudyRepository repository = new ar.edu.uade.pfi.backend.repository.InMemoryStudyRepository();
+        StudyRunService studyRunService = new StudyRunService(repository);
+
+        AiServiceOperations ai = org.mockito.Mockito.mock(AiServiceOperations.class);
+        org.springframework.http.HttpHeaders pngHeaders = new org.springframework.http.HttpHeaders();
+        pngHeaders.setContentType(org.springframework.http.MediaType.IMAGE_PNG);
+        byte[] pngBytes = {(byte) 0x89, 0x50, 0x4e, 0x47};
+        org.springframework.http.ResponseEntity<byte[]> pngResponse = new org.springframework.http.ResponseEntity<>(pngBytes, pngHeaders, org.springframework.http.HttpStatus.OK);
+        when(ai.getAsset(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq("sagittal"), org.mockito.ArgumentMatchers.anyString())).thenReturn(pngResponse);
+        when(ai.getAsset(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq("axial"), org.mockito.ArgumentMatchers.anyString())).thenReturn(pngResponse);
+        // The upstream mesh claims patient-specific anatomy — must be rejected, never stored.
+        org.springframework.http.HttpHeaders jsonHeaders = new org.springframework.http.HttpHeaders();
+        jsonHeaders.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+        byte[] unsafeMesh = """
+            {"schemaVersion":"pfi.lumbar-geometric-proxy.v1","kind":"patient_specific_mesh","method":"dual_plane_bbox_proxy","anatomicalReconstruction":true,"volumetricReconstruction":false,"coordinateSystem":"local_proxy_space","units":"normalized"}
+            """.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        org.springframework.http.ResponseEntity<byte[]> unsafeMeshResponse = new org.springframework.http.ResponseEntity<>(unsafeMesh, jsonHeaders, org.springframework.http.HttpStatus.OK);
+        when(ai.getAsset(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq("workspace"), org.mockito.ArgumentMatchers.eq("lumbar-3d-mesh.json"))).thenReturn(unsafeMeshResponse);
+
+        RunAssetContentStorage storage = new RunAssetContentStorage() {
+            private final Map<String, ar.edu.uade.pfi.backend.domain.RunAssetContent> stored = new java.util.HashMap<>();
+            @Override public ar.edu.uade.pfi.backend.domain.RunAssetContent store(ar.edu.uade.pfi.backend.domain.RunArtifact artifact, byte[] content, String sha256) {
+                var value = new ar.edu.uade.pfi.backend.domain.RunAssetContent(artifact.id(), content, sha256, content.length, "fake", java.time.Instant.now());
+                stored.put(artifact.id(), value);
+                return value;
+            }
+            @Override public java.util.Optional<ar.edu.uade.pfi.backend.domain.RunAssetContent> find(String artifactId) { return java.util.Optional.ofNullable(stored.get(artifactId)); }
+            @Override public boolean exists(String artifactId) { return stored.containsKey(artifactId); }
+            @Override public ar.edu.uade.pfi.backend.domain.RunAssetContent deleteOrReplace(ar.edu.uade.pfi.backend.domain.RunArtifact artifact, byte[] content, String sha256) { return store(artifact, content, sha256); }
+            @Override public ar.edu.uade.pfi.backend.domain.RunAssetStorageDiagnostics diagnostics() { return new ar.edu.uade.pfi.backend.domain.RunAssetStorageDiagnostics("fake", true, 0, 0, 0); }
+        };
+        RunAssetSnapshotService runAssetSnapshotService = new RunAssetSnapshotService(ai, repository, storage, null, 5_242_880);
+        MultiplanarRunPersistenceService persistence = new MultiplanarRunPersistenceService(studyRunService, runAssetSnapshotService);
+
+        MultiplanarRunRequestDto request = new MultiplanarRunRequestDto(
+            "CASE-BE-MESH-ROLLBACK", "input-sag-mesh-rollback", "input-ax-mesh-rollback", null, null,
+            "sagittal_spider", "axial_t2_alkafri", false,
+            Map.of("inferenceMode", "real_baseline", "allowContractFallback", false)
+        );
+
+        persistence.persistSuccessfulRun(request, response());
+
+        StudyRun persisted = studyRunService.findRunByMultiplanarRunId("multi-be006").orElseThrow();
+        Map<String, Object> snapshot = persisted.metricsSnapshot();
+        Map<String, Object> threeD = (Map<String, Object>) snapshot.get("threeD");
+        assertEquals(false, threeD.get("enabled"));
+        assertEquals("experimental_blocked_insufficient_geometry", threeD.get("status"));
+        assertTrue(((List<?>) threeD.get("assets")).isEmpty());
+
+        // Sagittal/axial planes are not rolled back — only threeD is downgraded.
+        Map<String, Object> planesSnapshot = (Map<String, Object>) snapshot.get("planes");
+        assertTrue(planesSnapshot.containsKey("sagittal"));
+        assertTrue(planesSnapshot.containsKey("axial"));
+
+        ar.edu.uade.pfi.backend.domain.RunArtifact meshArtifact = persisted.artifacts().stream()
+            .filter(artifact -> artifact.assetName().equals("lumbar-3d-mesh.json"))
+            .findFirst().orElseThrow();
+        assertEquals("rejected", meshArtifact.storageStatus());
+    }
+
     private Map<String, Object> asset(String planeRunId, String plane, String assetName) {
         Map<String, Object> asset = new LinkedHashMap<>();
         asset.put("assetName", assetName);

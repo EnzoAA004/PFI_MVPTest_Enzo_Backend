@@ -6,6 +6,7 @@ import ar.edu.uade.pfi.backend.dto.MultiplanarRunResponseDto;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
@@ -17,6 +18,17 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class CanonicalMultiplanarRunLegacyPresenter {
+    private final PublicThreeDAssetPublisher threeDAssetPublisher;
+
+    public CanonicalMultiplanarRunLegacyPresenter() {
+        this(new PublicThreeDAssetPublisher());
+    }
+
+    @Autowired
+    public CanonicalMultiplanarRunLegacyPresenter(PublicThreeDAssetPublisher threeDAssetPublisher) {
+        this.threeDAssetPublisher = threeDAssetPublisher;
+    }
+
     public MultiplanarRunResponseDto toLegacyResponse(CanonicalMultiplanarRun canonical) {
         if (canonical == null) return null;
         MultiplanarRunResponseDto.PlanesDto planes = new MultiplanarRunResponseDto.PlanesDto(
@@ -34,7 +46,7 @@ public class CanonicalMultiplanarRunLegacyPresenter {
             canonical.effectiveInferenceMode(),
             planes,
             Map.of(),
-            canonical.threeD(),
+            threeDAssetPublisher.publish(canonical.multiplanarRunId(), canonical.threeD()),
             canonical.quality(),
             canonical.review(),
             Map.of(),

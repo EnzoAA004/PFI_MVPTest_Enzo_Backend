@@ -1,6 +1,7 @@
 package ar.edu.uade.pfi.backend.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -169,6 +170,55 @@ class StudyWorklistServicePostgresTest {
         assertEquals(14.1, latestDetail.corrections().get(0).afterValue().get("reviewerValue"));
         assertTrue(latestDetail.artifactsByPlane().get("sagittal").get(0).get("proxyUrl").toString()
             .startsWith("/api/ai/assets/run-sag-latest/sagittal/overlay.png"));
+
+        Map<String, Object> canonicalRun = latestDetail.canonicalRun();
+        assertEquals("multi-p8a-latest", canonicalRun.get("runId"));
+        assertEquals("trace-p8a-latest", canonicalRun.get("traceId"));
+        assertEquals("CASE-P8A-REAL", canonicalRun.get("caseId"));
+        assertEquals(false, canonicalRun.get("synthetic"));
+        assertNull(canonicalRun.get("fallbackReason"));
+        Map<String, Object> canonicalThreeD = (Map<String, Object>) canonicalRun.get("threeD");
+        List<Map<String, Object>> publicThreeDAssets = (List<Map<String, Object>>) canonicalThreeD.get("assets");
+        assertEquals("/api/ai/assets/multi-p8a-latest/workspace/lumbar-3d-mesh.json", publicThreeDAssets.get(0).get("url"));
+        assertFalse(publicThreeDAssets.get(0).containsKey("relativePath"));
+        String canonicalJson = assertDoesNotThrow(() -> new ObjectMapper().writeValueAsString(canonicalRun));
+        assertFalse(canonicalJson.contains("/outputs/"));
+    }
+
+    /**
+     * P9-B.2.1 gap: a legacy row persisted before governance was captured in the
+     * snapshot (metricsSnapshot with no "governance" key at all) must never make
+     * canonicalRun report humanReviewRequired/notClinicalDiagnosis=true as a
+     * fabricated positive default — that would misrepresent an unknown value as
+     * a confirmed safety guarantee.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void legacySnapshotWithoutGovernanceNeverFabricatesHumanReviewRequiredTrue() throws Exception {
+        Instant createdAt = Instant.parse("2026-01-05T10:00:00Z");
+        Study study = repository.saveStudy(new Study(
+            UUID.randomUUID().toString(), "CASE-LEGACY-NO-GOVERNANCE", "ready", null,
+            null, "MRI", null, "medium", createdAt, createdAt
+        ));
+        Map<String, Object> legacySnapshotWithoutGovernance = Map.of(
+            "schemaVersion", "pfi.backend-run-snapshot.v1",
+            "planes", Map.of("sagittal", Map.of("measurements", List.of()))
+        );
+        repository.saveRun(new StudyRun(
+            UUID.randomUUID().toString(), study.id(), "multi-legacy-no-gov", "trace-legacy-no-gov",
+            "real_baseline", "real_baseline", "sagittal_spider", "", "sha256:sag", "",
+            "run-sag-legacy", "", Map.of(), legacySnapshotWithoutGovernance,
+            List.of(new RunArtifact(UUID.randomUUID().toString(), UUID.randomUUID().toString(), "run-sag-legacy", "sagittal", "overlay.png", "image/png", "overlay.png", createdAt)),
+            "completed", "pending", "", null, "", createdAt, createdAt
+        ));
+
+        StudyDetailResponseDto detail = service.getStudy("CASE-LEGACY-NO-GOVERNANCE");
+        Map<String, Object> canonicalRun = detail.runs().get(0).canonicalRun();
+
+        assertNull(canonicalRun.get("humanReviewRequired"));
+        assertNull(canonicalRun.get("notClinicalDiagnosis"));
+        Map<String, Object> governance = (Map<String, Object>) canonicalRun.get("governance");
+        assertTrue(governance.isEmpty());
     }
 
     @Test
@@ -206,25 +256,7 @@ class StudyWorklistServicePostgresTest {
             sagittalRunId,
             axialRunId,
             Map.of("workspace", "workspace.json"),
-            Map.of(
-                "planes", Map.of(
-                    "sagittal", Map.of("measurements", List.of(Map.of(
-                        "id", "disc-height-l45",
-                        "labelKey", "Disc Height L4-L5",
-                        "value", 13.8,
-                        "unit", "mm",
-                        "confidence", 0.82,
-                        "linkedLandmarkIds", List.of("lm-l4", "lm-l5")
-                    ))),
-                    "axial", Map.of("measurements", axialRunId.isBlank() ? List.of() : List.of(Map.of(
-                        "id", "canal-diameter-l45",
-                        "labelKey", "Central Canal Diameter",
-                        "value", 14.2,
-                        "unit", "mm",
-                        "confidence", 0.76
-                    )))
-                )
-            ),
+            metricsSnapshot(multiplanarRunId, sagittalRunId, axialRunId),
             artifacts,
             "completed",
             "pending",
@@ -233,6 +265,54 @@ class StudyWorklistServicePostgresTest {
             "",
             createdAt,
             createdAt
+        );
+    }
+
+    private Map<String, Object> metricsSnapshot(String multiplanarRunId, String sagittalRunId, String axialRunId) {
+        return Map.of(
+            "schemaVersion", "pfi.backend-run-snapshot.v2",
+            "sourceSchemaVersion", "pfi.multiplanar-run.v2",
+            "status", "completed",
+            "requestedPlanes", axialRunId.isBlank() ? List.of("sagittal") : List.of("sagittal", "axial"),
+            "completedPlanes", axialRunId.isBlank() ? List.of("sagittal") : List.of("sagittal", "axial"),
+            "synthetic", false,
+            "governance", Map.of("humanReviewRequired", true, "notClinicalDiagnosis", true),
+            "threeD", Map.of(
+                "enabled", !axialRunId.isBlank(),
+                "status", axialRunId.isBlank() ? "blocked_missing_axial" : "experimental_ready",
+                "assets", axialRunId.isBlank() ? List.of() : List.of(Map.of(
+                    "assetName", "lumbar-3d-mesh.json",
+                    "role", "mesh_3d",
+                    "contentType", "application/json",
+                    "generated", true,
+                    "relativePath", "/outputs/multiplanar_3d/" + multiplanarRunId + "/lumbar-3d-mesh.json"
+                )),
+                "reconstruction", Map.of(
+                    "kind", "experimental_geometric_proxy",
+                    "method", "dual_plane_bbox_proxy",
+                    "anatomicalReconstruction", false,
+                    "volumetricReconstruction", false,
+                    "coordinateSystem", "local_proxy_space",
+                    "units", "normalized"
+                )
+            ),
+            "planes", Map.of(
+                "sagittal", Map.of("measurements", List.of(Map.of(
+                    "id", "disc-height-l45",
+                    "labelKey", "Disc Height L4-L5",
+                    "value", 13.8,
+                    "unit", "mm",
+                    "confidence", 0.82,
+                    "linkedLandmarkIds", List.of("lm-l4", "lm-l5")
+                ))),
+                "axial", Map.of("measurements", axialRunId.isBlank() ? List.of() : List.of(Map.of(
+                    "id", "canal-diameter-l45",
+                    "labelKey", "Central Canal Diameter",
+                    "value", 14.2,
+                    "unit", "mm",
+                    "confidence", 0.76
+                )))
+            )
         );
     }
 
@@ -262,6 +342,7 @@ class StudyWorklistServicePostgresTest {
         @Override public List<RunArtifact> findArtifactsByRunId(String studyRunId) { throw new UnsupportedOperationException(); }
         @Override public Optional<RunArtifact> findArtifactByRunPlaneAndName(String runId, String plane, String assetName) { throw new UnsupportedOperationException(); }
         @Override public RunArtifact updateArtifactStorage(String artifactId, String storageStatus, String storageKind, Long sizeBytes, String sha256) { throw new UnsupportedOperationException(); }
+        @Override public StudyRun updateRunMetricsSnapshot(String multiplanarRunId, Map<String, Object> metricsSnapshot) { throw new UnsupportedOperationException(); }
         @Override public RunReview saveReview(String multiplanarRunId, String reviewStatus, String reviewer, Instant reviewedAt, String comments, List<MeasurementCorrection> corrections) { throw new UnsupportedOperationException(); }
         @Override public RunReview saveReview(String multiplanarRunId, String reviewStatus, String reviewer, Instant reviewedAt, String comments, List<MeasurementCorrection> corrections, DomainAuditEvent auditEvent) { throw new UnsupportedOperationException(); }
         @Override public Optional<RunReview> findReviewByMultiplanarRunId(String multiplanarRunId) { throw new UnsupportedOperationException(); }

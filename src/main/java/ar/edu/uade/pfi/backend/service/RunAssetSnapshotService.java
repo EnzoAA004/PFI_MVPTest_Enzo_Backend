@@ -4,6 +4,8 @@ import ar.edu.uade.pfi.backend.client.AiServiceOperations;
 import ar.edu.uade.pfi.backend.domain.RunArtifact;
 import ar.edu.uade.pfi.backend.domain.StudyRun;
 import ar.edu.uade.pfi.backend.repository.StudyRepository;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.Map;
@@ -22,6 +24,7 @@ public class RunAssetSnapshotService {
     private static final Set<String> PUBLIC_ASSETS = Set.of("input.png", "overlay.png", "mask-preview.png", "lumbar-3d-mesh.json");
     private static final String PNG_CONTENT_TYPE = "image/png";
     private static final String JSON_CONTENT_TYPE = "application/json";
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final AiServiceOperations aiServiceClient;
     private final StudyRepository repository;
@@ -54,11 +57,24 @@ public class RunAssetSnapshotService {
         this.maxBytes = maxBytes;
     }
 
-    public void snapshot(StudyRun run) {
-        if (run == null || storage == null || run.artifacts() == null) return;
+    /**
+     * Downloads, validates and stores every public artifact of the run.
+     * Returns false only when the workspace 3D mesh was present among the
+     * run's artifacts and ended up in any state other than "stored" — the
+     * caller (MultiplanarRunPersistenceService) uses this to downgrade an
+     * already-persisted threeD.enabled=true snapshot to a blocked state,
+     * so the mesh URL is never published pointing at unavailable content.
+     */
+    public boolean snapshot(StudyRun run) {
+        if (run == null || storage == null || run.artifacts() == null) return true;
+        boolean meshAvailable = true;
         for (RunArtifact artifact : run.artifacts()) {
-            snapshot(artifact, run.traceId());
+            RunArtifact result = snapshot(artifact, run.traceId());
+            if ("lumbar-3d-mesh.json".equals(artifact.assetName()) && !"stored".equals(result.storageStatus())) {
+                meshAvailable = false;
+            }
         }
+        return meshAvailable;
     }
 
     public RunArtifact backfill(RunArtifact artifact, String traceId) {
@@ -78,7 +94,7 @@ public class RunAssetSnapshotService {
             if (upstream.getStatusCode().value() == HttpStatus.NOT_FOUND.value()) {
                 return missing(artifact, traceId);
             }
-            validateResponse(upstream, body);
+            validateResponse(artifact, upstream, body);
             String sha256 = sha256(body);
             storage.deleteOrReplace(artifact, body, sha256);
             RunArtifact stored = repository.updateArtifactStorage(artifact.id(), "stored", PostgresRunAssetContentStorage.STORAGE_KIND, (long) body.length, sha256);
@@ -104,14 +120,15 @@ public class RunAssetSnapshotService {
         return missing;
     }
 
-    private void validateResponse(ResponseEntity<byte[]> response, byte[] body) {
+    private void validateResponse(RunArtifact artifact, ResponseEntity<byte[]> response, byte[] body) {
         if (!response.getStatusCode().is2xxSuccessful()) throw new IllegalArgumentException("Asset upstream status is not successful");
         String contentType = response.getHeaders().getFirst(HttpHeaders.CONTENT_TYPE);
-        if (contentType == null || !isExpectedContentType(contentType, response)) {
+        if (contentType == null || !isExpectedContentType(artifact, contentType)) {
             throw new IllegalArgumentException("Asset content type is not allowed");
         }
         if (body == null || body.length == 0) throw new IllegalArgumentException("Asset payload cannot be empty");
         if (body.length > maxBytes) throw new IllegalArgumentException("Asset payload exceeds max size");
+        validatePayloadContract(artifact, body);
     }
 
     private boolean isPublicAsset(RunArtifact artifact) {
@@ -123,9 +140,51 @@ public class RunAssetSnapshotService {
         return PNG_CONTENT_TYPE.equalsIgnoreCase(artifact.contentType());
     }
 
-    private boolean isExpectedContentType(String contentType, ResponseEntity<byte[]> response) {
+    private boolean isExpectedContentType(RunArtifact artifact, String contentType) {
         String normalized = contentType.toLowerCase();
-        return normalized.startsWith(PNG_CONTENT_TYPE) || normalized.startsWith(JSON_CONTENT_TYPE);
+        if ("lumbar-3d-mesh.json".equals(artifact.assetName())) return normalized.startsWith(JSON_CONTENT_TYPE);
+        return normalized.startsWith(PNG_CONTENT_TYPE);
+    }
+
+    private void validatePayloadContract(RunArtifact artifact, byte[] body) {
+        if ("lumbar-3d-mesh.json".equals(artifact.assetName())) {
+            validateMeshJson(body);
+            return;
+        }
+        if (body.length < 4
+            || (body[0] & 0xff) != 0x89
+            || body[1] != 0x50
+            || body[2] != 0x4e
+            || body[3] != 0x47) {
+            throw new IllegalArgumentException("PNG asset payload is invalid");
+        }
+    }
+
+    private void validateMeshJson(byte[] body) {
+        try {
+            Map<String, Object> mesh = OBJECT_MAPPER.readValue(body, new TypeReference<>() {});
+            requireText(mesh, "schemaVersion", "pfi.lumbar-geometric-proxy.v1");
+            requireText(mesh, "kind", "experimental_geometric_proxy");
+            requireText(mesh, "method", "dual_plane_bbox_proxy");
+            requireBoolean(mesh, "anatomicalReconstruction", false);
+            requireBoolean(mesh, "volumetricReconstruction", false);
+            requireText(mesh, "coordinateSystem", "local_proxy_space");
+            requireText(mesh, "units", "normalized");
+        } catch (Exception ex) {
+            throw new IllegalArgumentException("Mesh JSON asset payload is invalid", ex);
+        }
+    }
+
+    private void requireText(Map<String, Object> mesh, String key, String expected) {
+        if (!expected.equals(mesh.get(key))) {
+            throw new IllegalArgumentException("Mesh JSON contract mismatch");
+        }
+    }
+
+    private void requireBoolean(Map<String, Object> mesh, String key, boolean expected) {
+        if (!Boolean.valueOf(expected).equals(mesh.get(key))) {
+            throw new IllegalArgumentException("Mesh JSON contract mismatch");
+        }
     }
 
     private String sha256(byte[] body) {
