@@ -1,8 +1,10 @@
 package ar.edu.uade.pfi.backend.domain;
 
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Collections;
 
 public record CanonicalPlaneRun(
     String planeRunId,
@@ -23,14 +25,19 @@ public record CanonicalPlaneRun(
 ) {
     public CanonicalPlaneRun {
         Objects.requireNonNull(plane, "plane");
-        model = model == null ? Map.of() : Map.copyOf(model);
-        input = input == null ? Map.of() : Map.copyOf(input);
-        coordinateSpace = coordinateSpace == null ? Map.of() : Map.copyOf(coordinateSpace);
+        model = immutableMap(model);
+        input = immutableMap(input);
+        coordinateSpace = immutableMap(coordinateSpace);
         series = series == null ? List.of() : List.copyOf(series);
         assets = assets == null ? List.of() : List.copyOf(assets);
         masks = masks == null ? List.of() : List.copyOf(masks);
         landmarks = landmarks == null ? List.of() : List.copyOf(landmarks);
         measurements = measurements == null ? List.of() : List.copyOf(measurements);
-        quality = quality == null ? Map.of() : Map.copyOf(quality);
+        quality = immutableMap(quality);
+    }
+
+    private static <K, V> Map<K, V> immutableMap(Map<K, V> value) {
+        if (value == null || value.isEmpty()) return Map.of();
+        return Collections.unmodifiableMap(new LinkedHashMap<>(value));
     }
 }

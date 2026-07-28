@@ -2,6 +2,65 @@
 
 Estado: implementado. Rollback disponible sin revertir commit ni migraciones.
 
+## P9-B.2 — persistencia sagital-axial y assets 3D experimentales
+
+Referencia AI Module:
+
+- Repositorio: `EnzoAA004/PFI_MVPTest_Enzo_AImodule`
+- Contrato base P9-A.3.1.1: `06185de71a621afd76236a473403a65b9b4623a3`
+
+El backend conserva el contrato honesto de P9-A.3.1.1: el objeto `threeD` se persiste
+como proxy geometrico experimental cuando corresponde (`kind=experimental_geometric_proxy`,
+`method=dual_plane_bbox_proxy`, `anatomicalReconstruction=false`,
+`volumetricReconstruction=false`, `coordinateSystem=local_proxy_space`,
+`mappingSource=config`, `mappingValidated=false`). No se lo renombra como
+reconstruccion anatomica, volumetrica, clinica ni paciente-especifica.
+
+Persistencia y reapertura:
+
+- `AiThreeDV2Dto` acepta `assets`, `reconstruction` y `warnings` del contrato P9-A.3.1.1.
+- `CanonicalMultiplanarRun`/`CanonicalPlaneRun` preservan mapas con valores `null`
+  del contrato upstream, por ejemplo `sourcePlaneRunIds.axial=null` en estudios legacy.
+- `MultiplanarRunPersistenceService` guarda snapshots por plano dentro de
+  `metricsSnapshot.planes`, incluyendo series, masks, landmarks, measurements, quality,
+  model metadata, `artifactHash`, `trainingStatus`, `baselineReady`,
+  `availableForRealInference`, `readiness`, `runtimeQualification`,
+  `qualityGatePassed`, warnings y metadata geometrica disponible.
+- `threeD` completo se conserva en `metricsSnapshot.threeD`, incluyendo estados
+  bloqueados (`blocked_missing_axial`, `experimental_blocked_missing_anatomical_mapping`,
+  `experimental_blocked_insufficient_geometry`) sin fabricar geometria.
+- Los assets `threeD.assets` admitidos se persisten como `RunArtifact` con
+  `plane=workspace`, `runId=<multiplanarRunId>` y `assetName=lumbar-3d-mesh.json`.
+- La migracion `docs/migrations/V20260728_012_workspace_run_artifacts.sql` amplia el
+  check constraint de `domain_run_artifacts.plane` para aceptar `workspace`, sin borrar
+  ni recrear tablas.
+- `RunAssetSnapshotService` y `PostgresRunAssetContentStorage` almacenan durablemente
+  PNGs publicos y el mesh JSON publico `workspace/lumbar-3d-mesh.json`; no guardan
+  paths internos del AI Module.
+- `GET /api/ai/assets/{runId}/{plane}/{assetName}` sirve primero el payload durable
+  con su `Content-Type` persistido, por lo que puede reabrirse un mesh JSON aunque el
+  AI Module este apagado.
+
+Comandos ejecutados desde copia temporal fuera de OneDrive
+`C:\tmp\PFI_MVPTest_Enzo_Backend_p9b2_test`, con JDK 21
+`C:\Program Files\Eclipse Adoptium\jdk-21.0.11.10-hotspot`:
+
+```powershell
+$env:JAVA_HOME='C:\Program Files\Eclipse Adoptium\jdk-21.0.11.10-hotspot'
+$env:Path="$env:JAVA_HOME\bin;$env:Path"
+mvn.cmd -q "-Dtest=MultiplanarRunPersistenceServiceTest,RunAssetSnapshotServiceTest,PostgresRunAssetContentStorageTest,AiAssetDurableProxyControllerTest" test
+```
+
+Resultado: `Tests run: 13, Failures: 0, Errors: 0, Skipped: 0`.
+
+```powershell
+$env:JAVA_HOME='C:\Program Files\Eclipse Adoptium\jdk-21.0.11.10-hotspot'
+$env:Path="$env:JAVA_HOME\bin;$env:Path"
+mvn.cmd -q test
+```
+
+Resultado: `Tests run: 487, Failures: 0, Errors: 0, Skipped: 0`.
+
 ## Objetivo
 
 Hacer que el backend pueda consumir `POST /v2/multiplanar/run` (`schemaVersion=pfi.multiplanar-run.v2`)

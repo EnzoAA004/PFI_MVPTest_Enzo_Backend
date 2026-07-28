@@ -83,7 +83,38 @@ class MultiplanarRunPersistenceServiceTest {
         assertEquals(2, studyRunService.findInputs(study).size());
         assertTrue(byRunId.artifacts().stream().anyMatch(artifact -> artifact.runId().equals("run-sag-be006") && artifact.assetName().equals("overlay.png")));
         assertTrue(byRunId.artifacts().stream().anyMatch(artifact -> artifact.runId().equals("run-ax-be006") && artifact.assetName().equals("mask-preview.png")));
+        assertTrue(byRunId.artifacts().stream().anyMatch(artifact ->
+            artifact.runId().equals("multi-be006")
+                && artifact.plane().equals("workspace")
+                && artifact.assetName().equals("lumbar-3d-mesh.json")
+                && artifact.contentType().equals("application/json")
+        ));
         assertTrue(byRunId.artifacts().stream().noneMatch(artifact -> artifact.artifactRef().contains("/") || artifact.artifactRef().contains("\\") || artifact.artifactRef().contains("..")));
+
+        Map<String, Object> snapshot = byRunId.metricsSnapshot();
+        Map<String, Object> threeD = (Map<String, Object>) snapshot.get("threeD");
+        Map<String, Object> reconstruction = (Map<String, Object>) threeD.get("reconstruction");
+        assertEquals(true, threeD.get("enabled"));
+        assertEquals("experimental_geometric_proxy", reconstruction.get("kind"));
+        assertEquals("dual_plane_bbox_proxy", reconstruction.get("method"));
+        assertEquals(false, reconstruction.get("anatomicalReconstruction"));
+        assertEquals(false, reconstruction.get("volumetricReconstruction"));
+        assertEquals("local_proxy_space", reconstruction.get("coordinateSystem"));
+        assertEquals("config", reconstruction.get("mappingSource"));
+        assertEquals(false, reconstruction.get("mappingValidated"));
+
+        Map<String, Object> planesSnapshot = (Map<String, Object>) snapshot.get("planes");
+        Map<String, Object> sagittalSnapshot = (Map<String, Object>) planesSnapshot.get("sagittal");
+        Map<String, Object> axialSnapshot = (Map<String, Object>) planesSnapshot.get("axial");
+        Map<String, Object> sagittalModel = (Map<String, Object>) sagittalSnapshot.get("model");
+        Map<String, Object> axialModel = (Map<String, Object>) axialSnapshot.get("model");
+        assertEquals(true, sagittalModel.get("baselineReady"));
+        assertEquals("real_baseline_ready", sagittalModel.get("readiness"));
+        assertEquals(false, axialModel.get("baselineReady"));
+        assertEquals(true, axialModel.get("availableForRealInference"));
+        assertEquals("real_candidate_ready", axialModel.get("readiness"));
+        assertEquals("axial_candidate_runtime_ready", axialModel.get("runtimeQualification"));
+        assertEquals(false, axialModel.get("qualityGatePassed"));
     }
 
     @Test
@@ -252,8 +283,13 @@ class MultiplanarRunPersistenceServiceTest {
     private CanonicalMultiplanarRun response() {
         CanonicalPlaneRun sagittal = new CanonicalPlaneRun(
             "run-sag-be006", "sagittal", "completed", "real_baseline", false, null,
-            Map.of("modelKey", "sagittal_spider", "artifactHash", "sha256:sag-be006"),
-            Map.of("inputId", "input-sag-be006"),
+            Map.of(
+                "modelKey", "sagittal_spider",
+                "artifactHash", "sha256:sag-be006",
+                "baselineReady", true,
+                "readiness", "real_baseline_ready"
+            ),
+            Map.of("inputId", "input-sag-be006", "selectedSliceIndex", 8, "sliceCount", 17, "selectedAxis", 2, "inPlaneSpacingMm", List.of(0.7, 0.7)),
             Map.of(),
             List.of(Map.of("label", "canal_lumbar")),
             List.of(asset("run-sag-be006", "sagittal", "overlay.png")),
@@ -264,8 +300,17 @@ class MultiplanarRunPersistenceServiceTest {
         );
         CanonicalPlaneRun axial = new CanonicalPlaneRun(
             "run-ax-be006", "axial", "completed", "real_baseline", false, null,
-            Map.of("modelKey", "axial_t2_alkafri", "artifactHash", "sha256:ax-be006"),
-            Map.of("inputId", "input-ax-be006"),
+            Map.of(
+                "modelKey", "axial_t2_alkafri",
+                "artifactHash", "sha256:ax-be006",
+                "trainingStatus", "candidate_below_quality_gate",
+                "baselineReady", false,
+                "availableForRealInference", true,
+                "readiness", "real_candidate_ready",
+                "runtimeQualification", "axial_candidate_runtime_ready",
+                "qualityGatePassed", false
+            ),
+            Map.of("inputId", "input-ax-be006", "selectedSliceIndex", 2, "sliceCount", 12, "selectedAxis", 0),
             Map.of(),
             List.of(Map.of("label", "estenosis")),
             List.of(asset("run-ax-be006", "axial", "mask-preview.png")),
@@ -281,8 +326,35 @@ class MultiplanarRunPersistenceServiceTest {
             "multiplanar_run_ready", "multiplanar-run-v1", "multi-be006", "trace-be006", "CASE-BE-006",
             "dual_plane_with_3d_context", "real_baseline", "real_baseline",
             List.of("sagittal", "axial"), List.of("sagittal", "axial"), false, null,
-            Map.of(), planes, Map.of(), Map.of(), Map.of("status", "pendiente"),
+            Map.of(), planes, threeD("multi-be006", "run-sag-be006", "run-ax-be006"), Map.of(), Map.of("status", "pendiente"),
             new CanonicalMultiplanarRun.Governance(true, true, true, false)
+        );
+    }
+
+    private Map<String, Object> threeD(String runId, String sagittalRunId, String axialRunId) {
+        return Map.of(
+            "enabled", true,
+            "status", "experimental_ready",
+            "sourcePlaneRunIds", Map.of("sagittal", sagittalRunId, "axial", axialRunId),
+            "requiredInputs", List.of("sagittal_masks", "axial_masks", "explicit_anatomical_mapping"),
+            "assets", List.of(Map.of(
+                "assetName", "lumbar-3d-mesh.json",
+                "role", "mesh_3d",
+                "contentType", "application/json",
+                "generated", true,
+                "relativePath", "/assets/" + runId + "/workspace/lumbar-3d-mesh.json"
+            )),
+            "reconstruction", Map.of(
+                "kind", "experimental_geometric_proxy",
+                "method", "dual_plane_bbox_proxy",
+                "anatomicalReconstruction", false,
+                "volumetricReconstruction", false,
+                "coordinateSystem", "local_proxy_space",
+                "units", "normalized",
+                "mappingSource", "config",
+                "mappingValidated", false
+            ),
+            "warnings", List.of("experimental_proxy_not_clinical_3d")
         );
     }
 

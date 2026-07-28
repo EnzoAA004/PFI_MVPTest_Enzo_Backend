@@ -81,6 +81,33 @@ class PostgresRunAssetContentStorageTest {
         assertThrows(IllegalArgumentException.class, () -> storage().store(raw, new byte[] {1, 2, 3}, "abc"));
     }
 
+    @Test
+    void storesWorkspaceLumbarMeshJsonPayload() throws Exception {
+        PostgresStudyRepository repository = repository();
+        PostgresRunAssetContentStorage storage = storage();
+        Instant now = Instant.parse("2026-07-26T12:45:00Z");
+        Study study = repository.saveStudy(new Study(UUID.randomUUID().toString(), "CASE-P9B2-MESH", "ready", now, now));
+        RunArtifact requestedArtifact = new RunArtifact(
+            UUID.randomUUID().toString(),
+            UUID.randomUUID().toString(),
+            "multi-p9b2-mesh",
+            "workspace",
+            "lumbar-3d-mesh.json",
+            "application/json",
+            "lumbar-3d-mesh.json",
+            now
+        );
+        StudyRun persisted = repository.saveRun(run(UUID.randomUUID().toString(), study.id(), "multi-p9b2-mesh", "trace-p9b2-mesh", List.of(requestedArtifact), now));
+        RunArtifact persistedArtifact = persisted.artifacts().get(0);
+        byte[] json = "{\"kind\":\"experimental_geometric_proxy\"}".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+        storage.store(persistedArtifact, json, sha256(json));
+        RunArtifact stored = repository.updateArtifactStorage(persistedArtifact.id(), "stored", "postgres_bytea", (long) json.length, sha256(json));
+
+        assertArrayEquals(json, storage.find(stored.id()).orElseThrow().content());
+        assertEquals("application/json", stored.contentType());
+    }
+
     private PostgresStudyRepository repository() {
         return new PostgresStudyRepository(new ObjectMapper(), jdbcUrl(), true);
     }

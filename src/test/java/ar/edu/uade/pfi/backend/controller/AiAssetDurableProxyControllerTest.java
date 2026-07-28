@@ -61,6 +61,33 @@ class AiAssetDurableProxyControllerTest {
     }
 
     @Test
+    void getWorkspaceMeshJsonServesPersistedPayloadWithAiModuleOff() throws Exception {
+        AiServiceOperations ai = Mockito.mock(AiServiceOperations.class);
+        InMemoryStudyRepository repository = repositoryWithArtifact(
+            "multi-3d-stored",
+            "trace-3d-stored",
+            "multi-3d-stored",
+            "workspace",
+            "lumbar-3d-mesh.json",
+            "application/json"
+        );
+        RunArtifact artifact = repository.findArtifactByRunPlaneAndName("multi-3d-stored", "workspace", "lumbar-3d-mesh.json").orElseThrow();
+        FakeStorage storage = new FakeStorage();
+        byte[] mesh = "{\"kind\":\"experimental_geometric_proxy\"}".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        storage.store(artifact, mesh, sha256(mesh));
+        repository.updateArtifactStorage(artifact.id(), "stored", "postgres_bytea", (long) mesh.length, sha256(mesh));
+
+        mockMvc(ai, repository, storage, null)
+            .perform(get("/api/ai/assets/multi-3d-stored/workspace/lumbar-3d-mesh.json"))
+            .andExpect(status().isOk())
+            .andExpect(header().string("X-PFI-Asset-Source", "postgres"))
+            .andExpect(header().string(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE))
+            .andExpect(content().bytes(mesh));
+
+        Mockito.verifyNoInteractions(ai);
+    }
+
+    @Test
     void getAssetBackfillsOnceWhenMetadataExistsWithoutPayload() throws Exception {
         AiServiceOperations ai = Mockito.mock(AiServiceOperations.class);
         InMemoryStudyRepository repository = repositoryWithArtifact("multi-backfill", "trace-backfill", "run-sag-backfill", "input.png");
@@ -120,6 +147,10 @@ class AiAssetDurableProxyControllerTest {
     }
 
     private InMemoryStudyRepository repositoryWithArtifact(String multiplanarRunId, String traceId, String planeRunId, String assetName) {
+        return repositoryWithArtifact(multiplanarRunId, traceId, planeRunId, "sagittal", assetName, "image/png");
+    }
+
+    private InMemoryStudyRepository repositoryWithArtifact(String multiplanarRunId, String traceId, String planeRunId, String plane, String assetName, String contentType) {
         InMemoryStudyRepository repository = new InMemoryStudyRepository();
         Instant now = Instant.parse("2026-07-26T13:00:00Z");
         Study study = repository.saveStudy(new Study(UUID.randomUUID().toString(), "CASE-" + multiplanarRunId, "ready", now, now));
@@ -139,7 +170,7 @@ class AiAssetDurableProxyControllerTest {
             "",
             Map.of("sagittal", Map.of(assetName, assetName)),
             Map.of("humanReviewRequired", true, "notClinicalDiagnosis", true),
-            List.of(new RunArtifact(UUID.randomUUID().toString(), studyRunId, planeRunId, "sagittal", assetName, "image/png", assetName, now)),
+            List.of(new RunArtifact(UUID.randomUUID().toString(), studyRunId, planeRunId, plane, assetName, contentType, assetName, now)),
             "completed",
             "pending",
             "",

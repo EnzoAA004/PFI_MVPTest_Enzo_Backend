@@ -151,10 +151,17 @@ public class PostgresRunAssetContentStorage implements RunAssetContentStorage {
     private void validate(RunArtifact artifact, byte[] content, String sha256) {
         if (artifact == null) throw new IllegalArgumentException("Artifact is required");
         UUID.fromString(artifact.id());
-        if (!"image/png".equalsIgnoreCase(artifact.contentType())) throw new IllegalArgumentException("Only PNG derived assets can be stored");
+        if (!isAllowedContentType(artifact)) throw new IllegalArgumentException("Only public derived assets can be stored");
         if (content == null || content.length == 0) throw new IllegalArgumentException("Asset payload cannot be empty");
         if (content.length > maxBytes) throw new IllegalArgumentException("Asset payload exceeds max size");
         if (sha256 == null || sha256.isBlank()) throw new IllegalArgumentException("Asset sha256 is required");
+    }
+
+    private boolean isAllowedContentType(RunArtifact artifact) {
+        if ("lumbar-3d-mesh.json".equals(artifact.assetName())) {
+            return "workspace".equals(artifact.plane()) && "application/json".equalsIgnoreCase(artifact.contentType());
+        }
+        return "image/png".equalsIgnoreCase(artifact.contentType());
     }
 
     private RunAssetContent readContent(ResultSet rs) throws Exception {

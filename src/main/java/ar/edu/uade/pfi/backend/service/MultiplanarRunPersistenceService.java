@@ -84,7 +84,7 @@ public class MultiplanarRunPersistenceService {
             valueOrEmpty(planeRunId(axial)),
             Map.of(),
             metricsSnapshot(response),
-            artifacts(studyRunId, sagittal, axial, now),
+            artifacts(studyRunId, response, sagittal, axial, now),
             response.synthetic() ? "completed_synthetic" : "completed",
             "pending",
             "",
@@ -101,17 +101,18 @@ public class MultiplanarRunPersistenceService {
         studyRunService.createInput(study, plane, inputId, "ai-module-input", 0);
     }
 
-    private List<RunArtifact> artifacts(String studyRunId, CanonicalPlaneRun sagittal, CanonicalPlaneRun axial, Instant now) {
+    private List<RunArtifact> artifacts(String studyRunId, CanonicalMultiplanarRun response, CanonicalPlaneRun sagittal, CanonicalPlaneRun axial, Instant now) {
         List<RunArtifact> artifacts = new ArrayList<>();
         addArtifacts(artifacts, studyRunId, "sagittal", sagittal, now);
         addArtifacts(artifacts, studyRunId, "axial", axial, now);
+        addWorkspaceArtifacts(artifacts, studyRunId, response, now);
         return artifacts;
     }
 
     private void addArtifacts(List<RunArtifact> artifacts, String studyRunId, String plane, CanonicalPlaneRun planeRun, Instant now) {
         if (planeRun == null || blank(planeRun.planeRunId())) return;
         for (Map<String, Object> asset : planeRun.assets()) {
-            if (!isValidAssetMetadata(asset, planeRun.planeRunId())) continue;
+            if (!isValidAssetMetadata(asset, planeRun.planeRunId(), plane)) continue;
             String assetName = text(asset.get("assetName"));
             String contentType = blankOrDefault(text(asset.get("contentType")), "application/octet-stream");
             artifacts.add(new RunArtifact(
@@ -127,16 +128,40 @@ public class MultiplanarRunPersistenceService {
         }
     }
 
+    private void addWorkspaceArtifacts(List<RunArtifact> artifacts, String studyRunId, CanonicalMultiplanarRun response, Instant now) {
+        Map<String, Object> threeD = response.threeD();
+        Object assetsValue = threeD.get("assets");
+        if (!(assetsValue instanceof List<?> assets)) return;
+        for (Object value : assets) {
+            if (!(value instanceof Map<?, ?> rawAsset)) continue;
+            Map<String, Object> asset = objectMap(rawAsset);
+            if (!isValidAssetMetadata(asset, response.multiplanarRunId(), "workspace")) continue;
+            String assetName = text(asset.get("assetName"));
+            String contentType = blankOrDefault(text(asset.get("contentType")), "application/octet-stream");
+            artifacts.add(new RunArtifact(
+                UUID.randomUUID().toString(),
+                studyRunId,
+                response.multiplanarRunId(),
+                "workspace",
+                assetName,
+                contentType,
+                assetName,
+                now
+            ));
+        }
+    }
+
     /**
      * Enforces the v2 asset-metadata contract before it is trusted for persistence:
      * generated must be true, relativePath must be a same-origin relative asset path
      * (never a filesystem-absolute path, a foreign host, or a directory traversal) and
      * must reference the plane it claims to belong to.
      */
-    private boolean isValidAssetMetadata(Map<String, Object> asset, String planeRunId) {
+    private boolean isValidAssetMetadata(Map<String, Object> asset, String planeRunId, String plane) {
         String assetName = text(asset.get("assetName"));
         if (blank(assetName)) return false;
         if (!Boolean.TRUE.equals(asset.get("generated"))) return false;
+        if (!isAllowedAsset(assetName, text(asset.get("contentType")))) return false;
         String relativePath = text(asset.get("relativePath"));
         if (blank(relativePath)) return false;
         String normalized = relativePath.toLowerCase(Locale.ROOT);
@@ -144,7 +169,21 @@ public class MultiplanarRunPersistenceService {
         if (normalized.matches("^[a-z][a-z0-9+.-]*://.*")) return false;
         if (normalized.matches("^[a-z]:\\\\.*") || normalized.matches("^[a-z]:/.*")) return false;
         if (normalized.contains("localhost") || normalized.contains("cloudflare") || normalized.contains("host.docker.internal")) return false;
-        return relativePath.contains(planeRunId);
+        if (!relativePath.contains(planeRunId)) return false;
+        return relativePath.contains("/" + plane + "/" + assetName);
+    }
+
+    private boolean isAllowedAsset(String assetName, String contentType) {
+        if ("lumbar-3d-mesh.json".equals(assetName)) return "application/json".equalsIgnoreCase(contentType);
+        return List.of("input.png", "overlay.png", "mask-preview.png").contains(assetName) && "image/png".equalsIgnoreCase(contentType);
+    }
+
+    private Map<String, Object> objectMap(Map<?, ?> raw) {
+        Map<String, Object> copy = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : raw.entrySet()) {
+            if (entry.getKey() instanceof String key) copy.put(key, entry.getValue());
+        }
+        return copy;
     }
 
     private Map<String, Object> metricsSnapshot(CanonicalMultiplanarRun response) {

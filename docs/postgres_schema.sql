@@ -127,7 +127,7 @@ CREATE TABLE IF NOT EXISTS domain_run_artifacts (
     id UUID PRIMARY KEY,
     study_run_id UUID NOT NULL REFERENCES domain_study_runs(id) ON DELETE CASCADE,
     run_id TEXT NOT NULL,
-    plane TEXT NOT NULL CHECK (plane IN ('sagittal', 'axial')),
+    plane TEXT NOT NULL CHECK (plane IN ('sagittal', 'axial', 'workspace')),
     asset_name TEXT NOT NULL,
     content_type TEXT NOT NULL,
     artifact_ref TEXT NOT NULL,

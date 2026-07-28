@@ -1,8 +1,10 @@
 package ar.edu.uade.pfi.backend.domain;
 
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Collections;
 
 public record CanonicalMultiplanarRun(
     String status,
@@ -30,11 +32,11 @@ public record CanonicalMultiplanarRun(
         Objects.requireNonNull(governance, "governance");
         requestedPlanes = requestedPlanes == null ? List.of() : List.copyOf(requestedPlanes);
         completedPlanes = completedPlanes == null ? List.of() : List.copyOf(completedPlanes);
-        readiness = readiness == null ? Map.of() : Map.copyOf(readiness);
-        planes = planes == null ? Map.of() : Map.copyOf(planes);
-        threeD = threeD == null ? Map.of() : Map.copyOf(threeD);
-        quality = quality == null ? Map.of() : Map.copyOf(quality);
-        review = review == null ? Map.of() : Map.copyOf(review);
+        readiness = immutableMap(readiness);
+        planes = immutableMap(planes);
+        threeD = immutableMap(threeD);
+        quality = immutableMap(quality);
+        review = immutableMap(review);
     }
 
     public CanonicalPlaneRun sagittal() {
@@ -46,4 +48,9 @@ public record CanonicalMultiplanarRun(
     }
 
     public record Governance(boolean humanReviewRequired, boolean notClinicalDiagnosis, boolean deidentified, boolean diagnosisGenerated) {}
+
+    private static <K, V> Map<K, V> immutableMap(Map<K, V> value) {
+        if (value == null || value.isEmpty()) return Map.of();
+        return Collections.unmodifiableMap(new LinkedHashMap<>(value));
+    }
 }

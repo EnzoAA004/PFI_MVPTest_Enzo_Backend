@@ -19,8 +19,9 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class RunAssetSnapshotService {
-    private static final Set<String> PUBLIC_ASSETS = Set.of("input.png", "overlay.png", "mask-preview.png");
+    private static final Set<String> PUBLIC_ASSETS = Set.of("input.png", "overlay.png", "mask-preview.png", "lumbar-3d-mesh.json");
     private static final String PNG_CONTENT_TYPE = "image/png";
+    private static final String JSON_CONTENT_TYPE = "application/json";
 
     private final AiServiceOperations aiServiceClient;
     private final StudyRepository repository;
@@ -66,9 +67,9 @@ public class RunAssetSnapshotService {
     }
 
     private RunArtifact snapshot(RunArtifact artifact, String traceId) {
-        if (!isPublicPng(artifact)) {
+        if (!isPublicAsset(artifact)) {
             RunArtifact rejected = repository.updateArtifactStorage(artifact.id(), "rejected", null, null, null);
-            audit("asset.snapshot.rejected", artifact, traceId, Map.of("reason", "not_public_png"));
+            audit("asset.snapshot.rejected", artifact, traceId, Map.of("reason", "not_public_asset"));
             return rejected;
         }
         try {
@@ -106,20 +107,25 @@ public class RunAssetSnapshotService {
     private void validateResponse(ResponseEntity<byte[]> response, byte[] body) {
         if (!response.getStatusCode().is2xxSuccessful()) throw new IllegalArgumentException("Asset upstream status is not successful");
         String contentType = response.getHeaders().getFirst(HttpHeaders.CONTENT_TYPE);
-        if (contentType == null || !contentType.toLowerCase().startsWith(PNG_CONTENT_TYPE)) {
-            throw new IllegalArgumentException("Only image/png assets can be stored");
+        if (contentType == null || !isExpectedContentType(contentType, response)) {
+            throw new IllegalArgumentException("Asset content type is not allowed");
         }
         if (body == null || body.length == 0) throw new IllegalArgumentException("Asset payload cannot be empty");
         if (body.length > maxBytes) throw new IllegalArgumentException("Asset payload exceeds max size");
     }
 
-    private boolean isPublicPng(RunArtifact artifact) {
-        return artifact != null
-            && PUBLIC_ASSETS.contains(artifact.assetName())
-            && PNG_CONTENT_TYPE.equalsIgnoreCase(artifact.contentType())
-            && !artifact.assetName().contains("/")
-            && !artifact.assetName().contains("\\")
-            && !artifact.assetName().contains("..");
+    private boolean isPublicAsset(RunArtifact artifact) {
+        if (artifact == null || !PUBLIC_ASSETS.contains(artifact.assetName())) return false;
+        if (artifact.assetName().contains("/") || artifact.assetName().contains("\\") || artifact.assetName().contains("..")) return false;
+        if ("lumbar-3d-mesh.json".equals(artifact.assetName())) {
+            return "workspace".equals(artifact.plane()) && JSON_CONTENT_TYPE.equalsIgnoreCase(artifact.contentType());
+        }
+        return PNG_CONTENT_TYPE.equalsIgnoreCase(artifact.contentType());
+    }
+
+    private boolean isExpectedContentType(String contentType, ResponseEntity<byte[]> response) {
+        String normalized = contentType.toLowerCase();
+        return normalized.startsWith(PNG_CONTENT_TYPE) || normalized.startsWith(JSON_CONTENT_TYPE);
     }
 
     private String sha256(byte[] body) {
