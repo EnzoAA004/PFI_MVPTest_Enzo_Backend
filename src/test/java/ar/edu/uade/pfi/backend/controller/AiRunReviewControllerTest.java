@@ -1,6 +1,8 @@
 package ar.edu.uade.pfi.backend.controller;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.mock;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -61,6 +63,13 @@ class AiRunReviewControllerTest {
     }
 
     @Test
+    void cannotBeConstructedWithoutAuthorizationService() {
+        assertThrows(NullPointerException.class, () ->
+            new AiRunReviewController(mock(RunReviewService.class), mock(AuditService.class), null)
+        );
+    }
+
+    @Test
     void registersAndRetrievesProfessionalReviewWithCorrections() throws Exception {
         seedRun("multi-review-001", "trace-review-001");
 
@@ -97,6 +106,21 @@ class AiRunReviewControllerTest {
             .andExpect(jsonPath("$.reviewStatus").value("observed"))
             .andExpect(jsonPath("$.comments").value("Medicion observada para ajuste academico."))
             .andExpect(jsonPath("$.corrections[0].label").value("Area del canal"));
+    }
+
+    @Test
+    void doctorCanRegisterReview() throws Exception {
+        seedRun("multi-review-doctor", "trace-review-doctor");
+
+        mockMvc.perform(post("/api/ai/runs/multi-review-doctor/review")
+                .with(doctor())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"reviewStatus":"accepted","reviewer":"dr-demo","comments":"Aceptado por profesional."}
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.reviewStatus").value("accepted"))
+            .andExpect(jsonPath("$.reviewer").value("dr-demo"));
     }
 
     @Test
@@ -242,6 +266,16 @@ class AiRunReviewControllerTest {
             request.setAttribute(
                 AuthFilter.AUTH_CLAIMS_ATTRIBUTE,
                 new TokenService.Claims("reviewer-id", "reviewer@pfi.local", "Reviewer", List.of("REVIEWER"))
+            );
+            return request;
+        };
+    }
+
+    private static RequestPostProcessor doctor() {
+        return request -> {
+            request.setAttribute(
+                AuthFilter.AUTH_CLAIMS_ATTRIBUTE,
+                new TokenService.Claims("doctor-id", "doctor@pfi.local", "Doctor", List.of("DOCTOR"))
             );
             return request;
         };

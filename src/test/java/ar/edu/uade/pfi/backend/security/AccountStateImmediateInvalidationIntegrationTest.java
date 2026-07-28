@@ -2,6 +2,7 @@ package ar.edu.uade.pfi.backend.security;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -87,6 +88,8 @@ class AccountStateImmediateInvalidationIntegrationTest {
         RoleAuthorizationService authorizationService = new RoleAuthorizationService(auditService);
         MockEnvironment production = new MockEnvironment();
         production.setActiveProfiles("production");
+        assertTrue(List.of(production.getActiveProfiles()).contains("production"));
+        assertTrue(store.enabled());
 
         authService = new AuthService(passwordHasher, tokenService, store, false, 604800, production, false, auditService);
         AuthAccountStateService accountStateService = new AuthAccountStateService(store, production);

@@ -13,6 +13,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
 class AiContractControllerTest {
+    private static final String POISON = "http://ai-module.internal:8000 refused C:\\secret\\stack /tmp/model token=abc";
 
     @Test
     void pipelineSchemaProxiesAiModuleAndForcesGovernanceFlags() {
@@ -47,7 +48,7 @@ class AiContractControllerTest {
     @Test
     void pipelineSchemaReturnsDegradedFallbackWhenAiModuleIsUnavailable() {
         WebClient webClient = WebClient.builder()
-            .exchangeFunction(request -> Mono.error(new IllegalStateException("connection refused")))
+            .exchangeFunction(request -> Mono.error(new IllegalStateException(POISON)))
             .build();
         AiContractController controller = new AiContractController(webClient, new AiServiceProperties("http://ai-module", 1, "v1"));
 
@@ -62,7 +63,8 @@ class AiContractControllerTest {
         assertEquals(true, response.get("degradedMode"));
         assertEquals(true, response.get("humanReviewRequired"));
         assertEquals(true, response.get("notClinicalDiagnosis"));
-        assertTrue(String.valueOf(response.get("message")).contains("AI Module is not available"));
+        assertEquals("AI Module no disponible.", response.get("message"));
+        assertNoPoison(response);
         assertTrue(response.containsKey("rootFields"));
         assertTrue(response.containsKey("guarantees"));
     }
@@ -106,7 +108,7 @@ class AiContractControllerTest {
     @Test
     void pipelineSchemaVerificationReturnsDegradedFallbackWhenAiModuleIsUnavailable() {
         WebClient webClient = WebClient.builder()
-            .exchangeFunction(request -> Mono.error(new IllegalStateException("connection refused")))
+            .exchangeFunction(request -> Mono.error(new IllegalStateException(POISON)))
             .build();
         AiContractController controller = new AiContractController(webClient, new AiServiceProperties("http://ai-module", 1, "v1"));
 
@@ -120,6 +122,15 @@ class AiContractControllerTest {
         assertEquals(false, response.get("valid"));
         assertEquals(false, response.get("aiModuleAvailable"));
         assertEquals(true, response.get("degradedMode"));
-        assertTrue(String.valueOf(response.get("message")).contains("not available"));
+        assertEquals("Verificacion de contrato no disponible.", response.get("message"));
+        assertNoPoison(response);
+    }
+
+    private void assertNoPoison(Map<String, Object> response) {
+        String serialized = response.toString();
+        assertFalse(serialized.contains("ai-module.internal"));
+        assertFalse(serialized.contains("C:\\"));
+        assertFalse(serialized.contains("/tmp/model"));
+        assertFalse(serialized.contains("token=abc"));
     }
 }

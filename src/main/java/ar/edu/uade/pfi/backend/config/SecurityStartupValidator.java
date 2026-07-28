@@ -14,8 +14,8 @@ import org.springframework.stereotype.Component;
  * `mvn test`) unless SPRING_PROFILES_ACTIVE explicitly contains "production"/"prod" —
  * default/dev/test runs are unaffected. In production it refuses to let the context
  * finish starting if any of: the JWT signing key, auth being enabled, demo mode being
- * disabled, dev verification codes being hidden, or CORS being pinned to real HTTPS
- * origins (no wildcard) does not hold.
+ * disabled, dev verification codes being hidden, PostgreSQL persistence being enabled,
+ * or CORS being pinned to real HTTPS origins (no wildcard) does not hold.
  */
 @Component
 public class SecurityStartupValidator {
@@ -28,6 +28,7 @@ public class SecurityStartupValidator {
     private final boolean authEnabled;
     private final boolean demoEnabled;
     private final boolean exposeDevCodes;
+    private final String persistenceMode;
     private final String corsAllowedOrigins;
     private final String corsAllowedOriginPatterns;
     private final boolean allowPreviewPatterns;
@@ -38,6 +39,7 @@ public class SecurityStartupValidator {
         @Value("${pfi.auth.enabled:true}") boolean authEnabled,
         @Value("${pfi.auth.demo-enabled:false}") boolean demoEnabled,
         @Value("${pfi.auth.expose-dev-codes:false}") boolean exposeDevCodes,
+        @Value("${pfi.persistence.mode:memory}") String persistenceMode,
         @Value("${pfi.cors.allowed-origins:}") String corsAllowedOrigins,
         @Value("${pfi.cors.allowed-origin-patterns:}") String corsAllowedOriginPatterns,
         @Value("${pfi.cors.allow-preview-patterns:false}") boolean allowPreviewPatterns
@@ -47,6 +49,7 @@ public class SecurityStartupValidator {
         this.authEnabled = authEnabled;
         this.demoEnabled = demoEnabled;
         this.exposeDevCodes = exposeDevCodes;
+        this.persistenceMode = persistenceMode;
         this.corsAllowedOrigins = corsAllowedOrigins;
         this.corsAllowedOriginPatterns = corsAllowedOriginPatterns;
         this.allowPreviewPatterns = allowPreviewPatterns;
@@ -61,6 +64,7 @@ public class SecurityStartupValidator {
         validateAuthEnabled();
         validateDemoDisabled();
         validateDevCodesHidden();
+        validatePostgresPersistence();
         validateCors();
     }
 
@@ -95,6 +99,12 @@ public class SecurityStartupValidator {
         if (exposeDevCodes) {
             fail("pfi.auth.expose-dev-codes (PFI_AUTH_EXPOSE_DEV_CODES) must be false in production; "
                 + "verification codes must never be returned to clients");
+        }
+    }
+
+    private void validatePostgresPersistence() {
+        if (!"postgres".equalsIgnoreCase(persistenceMode == null ? "" : persistenceMode.trim())) {
+            fail("pfi.persistence.mode (PFI_PERSISTENCE_MODE) must be postgres in production");
         }
     }
 

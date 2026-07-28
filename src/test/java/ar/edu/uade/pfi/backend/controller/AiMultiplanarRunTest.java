@@ -7,6 +7,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -48,6 +49,21 @@ import org.springframework.web.server.ResponseStatusException;
 
 class AiMultiplanarRunTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Test
+    void contractFallbackDoesNotExposeInternalExceptionMessage() throws Exception {
+        AiServiceOperations ai = org.mockito.Mockito.mock(AiServiceOperations.class);
+        when(ai.getMultiplanarContract()).thenThrow(new RuntimeException("http://ai-module.internal:8000 refused C:\\secret\\stack"));
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new AiMultiplanarController(ai))
+            .setControllerAdvice(new ApiExceptionHandler())
+            .build();
+
+        mockMvc.perform(get("/api/ai/multiplanar/contract"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.message").value("AI Module no disponible."))
+            .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("ai-module.internal"))))
+            .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("C:\\"))));
+    }
 
     @Test
     void runUsesInputIdsAndReturnsFrozenResponseFields() throws Exception {

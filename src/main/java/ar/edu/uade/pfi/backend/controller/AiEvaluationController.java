@@ -74,7 +74,7 @@ public class AiEvaluationController {
         try {
             return aiServiceClient.readiness();
         } catch (RuntimeException ex) {
-            return Map.of("status", "unavailable", "message", ex.getMessage());
+            return Map.of("status", "unavailable", "message", "AI Module no disponible.");
         }
     }
 
@@ -82,7 +82,7 @@ public class AiEvaluationController {
         try {
             return aiServiceClient.getRecentAgentReports(100);
         } catch (RuntimeException ex) {
-            return Map.of("status", "unavailable", "count", 0, "items", List.of(), "message", ex.getMessage());
+            return Map.of("status", "unavailable", "count", 0, "items", List.of(), "message", "Reportes de evaluacion no disponibles.");
         }
     }
 }

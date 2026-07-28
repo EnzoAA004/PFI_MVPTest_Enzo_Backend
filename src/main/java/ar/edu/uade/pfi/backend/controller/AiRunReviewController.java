@@ -7,6 +7,7 @@ import ar.edu.uade.pfi.backend.service.AuditService;
 import ar.edu.uade.pfi.backend.service.RunReviewService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -23,19 +24,11 @@ public class AiRunReviewController {
     private final AuditService auditService;
     private final RoleAuthorizationService authorizationService;
 
-    public AiRunReviewController(RunReviewService service) {
-        this(service, null, null);
-    }
-
-    public AiRunReviewController(RunReviewService service, AuditService auditService) {
-        this(service, auditService, null);
-    }
-
     @Autowired
     public AiRunReviewController(RunReviewService service, AuditService auditService, RoleAuthorizationService authorizationService) {
-        this.service = service;
+        this.service = Objects.requireNonNull(service, "service");
         this.auditService = auditService;
-        this.authorizationService = authorizationService;
+        this.authorizationService = Objects.requireNonNull(authorizationService, "authorizationService");
     }
 
     @PostMapping("/{multiplanarRunId}/review")
@@ -65,9 +58,7 @@ public class AiRunReviewController {
     }
 
     private void requireProfessional(String multiplanarRunId, HttpServletRequest request) {
-        if (authorizationService != null) {
-            authorizationService.requireProfessional(request, multiplanarRunId);
-        }
+        authorizationService.requireProfessional(request, multiplanarRunId);
     }
 
     private RunReviewResponseDto saveAndAudit(String multiplanarRunId, RunReviewRequestDto request) {

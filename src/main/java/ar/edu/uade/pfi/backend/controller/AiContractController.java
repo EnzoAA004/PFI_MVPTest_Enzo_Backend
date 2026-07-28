@@ -10,7 +10,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.Exceptions;
 
 @RestController
 @RequestMapping("/api/ai/pipeline")
@@ -65,8 +64,6 @@ public class AiContractController {
     }
 
     private Map<String, Object> fallbackSchema(RuntimeException ex) {
-        Throwable unwrapped = Exceptions.unwrap(ex);
-        String message = unwrapped.getMessage() == null ? "unknown error" : compactMessage(unwrapped.getMessage());
         return Map.ofEntries(
             Map.entry("schemaVersion", "visual-review-contract-v1"),
             Map.entry("status", "degraded_fallback"),
@@ -78,7 +75,7 @@ public class AiContractController {
             Map.entry("degradedMode", true),
             Map.entry("humanReviewRequired", true),
             Map.entry("notClinicalDiagnosis", true),
-            Map.entry("message", "AI Module is not available: " + message),
+            Map.entry("message", "AI Module no disponible."),
             Map.entry("rootFields", Map.ofEntries(
                 Map.entry("runId", "Identificador estable de la corrida tecnica."),
                 Map.entry("caseId", "Identificador de caso de-identificado."),
@@ -119,8 +116,6 @@ public class AiContractController {
     }
 
     private Map<String, Object> fallbackVerification(RuntimeException ex) {
-        Throwable unwrapped = Exceptions.unwrap(ex);
-        String message = unwrapped.getMessage() == null ? "unknown error" : compactMessage(unwrapped.getMessage());
         return Map.ofEntries(
             Map.entry("schemaVersion", "visual-review-contract-v1"),
             Map.entry("schemaHash", "backend-fallback-visual-review-contract-v1"),
@@ -135,12 +130,7 @@ public class AiContractController {
             Map.entry("humanReviewRequired", true),
             Map.entry("notClinicalDiagnosis", true),
             Map.entry("missingRootFields", List.of()),
-            Map.entry("message", "AI Module contract verification is not available: " + message)
+            Map.entry("message", "Verificacion de contrato no disponible.")
         );
-    }
-
-    private String compactMessage(String value) {
-        String oneLine = value.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ').trim();
-        return oneLine.length() > 180 ? oneLine.substring(0, 180) + "..." : oneLine;
     }
 }

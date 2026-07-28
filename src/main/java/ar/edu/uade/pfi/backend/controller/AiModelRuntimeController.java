@@ -5,16 +5,15 @@ import ar.edu.uade.pfi.backend.client.AiServiceClient;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
- * P10-B.2: internal model runtime configuration (pytorch device/version, artifact
- * state) has no documented professional consumer — same rationale as
- * /api/ai/readiness and /api/ai/models/verify (P10-A.1) — so it is ADMIN-only.
- * Previously this endpoint had no authorization check at all beyond AuthFilter's
- * blanket "any authenticated professional" gate.
+ * Internal model runtime configuration (pytorch device/version, artifact state) is
+ * ADMIN-only for the same reason as /api/ai/readiness and /api/ai/models/verify.
  */
 @RestController
 @RequestMapping("/api/ai/models")
@@ -37,14 +36,7 @@ public class AiModelRuntimeController {
             response.putIfAbsent("notClinicalDiagnosis", true);
             return response;
         } catch (RuntimeException ex) {
-            // Never ex.getMessage() — could carry an AI Module host/path/stack detail.
-            return Map.of(
-                "status", "pytorch_runtime_unavailable",
-                "message", "AI Module no disponible.",
-                "proxiedByBackend", true,
-                "humanReviewRequired", true,
-                "notClinicalDiagnosis", true
-            );
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "AI Module no disponible.");
         }
     }
 }

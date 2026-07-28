@@ -20,6 +20,8 @@ Endpoints protegidos:
 
 Si el rol es insuficiente, la respuesta es `403` con mensaje semantico `Rol insuficiente`. Los intentos denegados se auditan como `access.denied` sin tokens, credenciales ni datos identificables. No existe endpoint de cache clear en este backend al momento de BE-010.
 
+Politica de activacion profesional: por compatibilidad, la primera activacion institucional de una cuenta cuyo unico rol almacenado sea `PENDING_APPROVAL` asigna inicialmente `DOCTOR, REVIEWER`. Las reactivaciones posteriores preservan exactamente el set de roles existente y no reemplazan roles ya significativos.
+
 ## GET /api/ai/health
 
 Consulta `GET /health` del AI Module.

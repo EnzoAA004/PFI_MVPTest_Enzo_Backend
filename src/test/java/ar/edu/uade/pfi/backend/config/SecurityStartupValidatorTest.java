@@ -13,25 +13,25 @@ class SecurityStartupValidatorTest {
     @Test
     void nonProductionProfileNeverBlocksStartupRegardlessOfConfig() {
         MockEnvironment env = new MockEnvironment();
-        assertDoesNotThrow(() -> validator(env, "", false, true, true, "", "*", true).validate());
+        assertDoesNotThrow(() -> validator(env, "", false, true, true, "memory", "", "*", true).validate());
     }
 
     @Test
     void productionWithBlankSecretFailsStartup() {
         assertThrows(IllegalStateException.class,
-            () -> validator(production(), "", true, false, false, EXACT_ORIGIN, "", false).validate());
+            () -> validator(production(), "", true, false, false, "postgres", EXACT_ORIGIN, "", false).validate());
     }
 
     @Test
     void productionWithDemoDefaultSecretFailsStartup() {
         assertThrows(IllegalStateException.class,
-            () -> validator(production(), "pfi-demo-change-me-2026", true, false, false, EXACT_ORIGIN, "", false).validate());
+            () -> validator(production(), "pfi-demo-change-me-2026", true, false, false, "postgres", EXACT_ORIGIN, "", false).validate());
     }
 
     @Test
     void productionWithWeakShortSecretFailsStartup() {
         assertThrows(IllegalStateException.class,
-            () -> validator(production(), "too-short", true, false, false, EXACT_ORIGIN, "", false).validate());
+            () -> validator(production(), "too-short", true, false, false, "postgres", EXACT_ORIGIN, "", false).validate());
     }
 
     @Test
@@ -39,61 +39,67 @@ class SecurityStartupValidatorTest {
         MockEnvironment env = new MockEnvironment();
         env.setActiveProfiles("prod");
         assertThrows(IllegalStateException.class,
-            () -> validator(env, "", true, false, false, EXACT_ORIGIN, "", false).validate());
+            () -> validator(env, "", true, false, false, "postgres", EXACT_ORIGIN, "", false).validate());
     }
 
     @Test
     void productionWithAuthDisabledFailsStartup() {
         assertThrows(IllegalStateException.class,
-            () -> validator(production(), STRONG_SECRET, false, false, false, EXACT_ORIGIN, "", false).validate());
+            () -> validator(production(), STRONG_SECRET, false, false, false, "postgres", EXACT_ORIGIN, "", false).validate());
     }
 
     @Test
     void productionWithDemoEnabledFailsStartup() {
         assertThrows(IllegalStateException.class,
-            () -> validator(production(), STRONG_SECRET, true, true, false, EXACT_ORIGIN, "", false).validate());
+            () -> validator(production(), STRONG_SECRET, true, true, false, "postgres", EXACT_ORIGIN, "", false).validate());
     }
 
     @Test
     void productionWithExposeDevCodesTrueFailsStartup() {
         assertThrows(IllegalStateException.class,
-            () -> validator(production(), STRONG_SECRET, true, false, true, EXACT_ORIGIN, "", false).validate());
+            () -> validator(production(), STRONG_SECRET, true, false, true, "postgres", EXACT_ORIGIN, "", false).validate());
     }
 
     @Test
     void productionWithExposeDevCodesFalseStartsCleanly() {
         assertDoesNotThrow(
-            () -> validator(production(), STRONG_SECRET, true, false, false, EXACT_ORIGIN, "", false).validate());
+            () -> validator(production(), STRONG_SECRET, true, false, false, "postgres", EXACT_ORIGIN, "", false).validate());
+    }
+
+    @Test
+    void productionWithoutPostgresPersistenceFailsStartup() {
+        assertThrows(IllegalStateException.class,
+            () -> validator(production(), STRONG_SECRET, true, false, false, "memory", EXACT_ORIGIN, "", false).validate());
     }
 
     @Test
     void productionWithoutHttpsOriginFailsStartup() {
         assertThrows(IllegalStateException.class,
-            () -> validator(production(), STRONG_SECRET, true, false, false, "", "", false).validate());
+            () -> validator(production(), STRONG_SECRET, true, false, false, "postgres", "", "", false).validate());
     }
 
     @Test
     void productionWithLiteralWildcardOriginFailsStartup() {
         assertThrows(IllegalStateException.class,
-            () -> validator(production(), STRONG_SECRET, true, false, false, "*", "", false).validate());
+            () -> validator(production(), STRONG_SECRET, true, false, false, "postgres", "*", "", false).validate());
     }
 
     @Test
     void productionWithPatternsButPreviewNotAllowedFailsStartup() {
         assertThrows(IllegalStateException.class,
-            () -> validator(production(), STRONG_SECRET, true, false, false, EXACT_ORIGIN, "https://*.vercel.app", false).validate());
+            () -> validator(production(), STRONG_SECRET, true, false, false, "postgres", EXACT_ORIGIN, "https://*.vercel.app", false).validate());
     }
 
     @Test
     void productionWithPatternsAndPreviewExplicitlyAllowedStartsCleanly() {
         assertDoesNotThrow(() -> validator(
-            production(), STRONG_SECRET, true, false, false, EXACT_ORIGIN, "https://*.vercel.app", true).validate());
+            production(), STRONG_SECRET, true, false, false, "postgres", EXACT_ORIGIN, "https://*.vercel.app", true).validate());
     }
 
     @Test
     void productionWithExactHttpsOriginAndStrongSecretStartsCleanly() {
         assertDoesNotThrow(
-            () -> validator(production(), STRONG_SECRET, true, false, false, EXACT_ORIGIN, "", false).validate());
+            () -> validator(production(), STRONG_SECRET, true, false, false, "postgres", EXACT_ORIGIN, "", false).validate());
     }
 
     private MockEnvironment production() {
@@ -108,13 +114,14 @@ class SecurityStartupValidatorTest {
         boolean authEnabled,
         boolean demoEnabled,
         boolean exposeDevCodes,
+        String persistenceMode,
         String corsAllowedOrigins,
         String corsAllowedOriginPatterns,
         boolean allowPreviewPatterns
     ) {
         return new SecurityStartupValidator(
             env, jwtSecret, authEnabled, demoEnabled, exposeDevCodes,
-            corsAllowedOrigins, corsAllowedOriginPatterns, allowPreviewPatterns
+            persistenceMode, corsAllowedOrigins, corsAllowedOriginPatterns, allowPreviewPatterns
         );
     }
 }

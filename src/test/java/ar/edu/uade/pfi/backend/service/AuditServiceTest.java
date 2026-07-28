@@ -105,10 +105,21 @@ class AuditServiceTest {
 
         seedRun();
         MockMvc reviewMvc = MockMvcBuilders
-            .standaloneSetup(new AiRunReviewController(new RunReviewService(repository), auditService))
+            .standaloneSetup(new AiRunReviewController(
+                new RunReviewService(repository),
+                auditService,
+                new ar.edu.uade.pfi.backend.auth.RoleAuthorizationService(auditService)
+            ))
             .setControllerAdvice(new ApiExceptionHandler(auditService))
             .build();
         reviewMvc.perform(post("/api/ai/runs/multi-audit-review/review")
+                .with(request -> {
+                    request.setAttribute(
+                        ar.edu.uade.pfi.backend.auth.AuthFilter.AUTH_CLAIMS_ATTRIBUTE,
+                        new ar.edu.uade.pfi.backend.auth.TokenService.Claims("reviewer-id", "reviewer@pfi.local", "Reviewer", List.of("REVIEWER"))
+                    );
+                    return request;
+                })
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {"reviewStatus":"accepted","reviewer":"dra-audit","comments":"Revision aceptada"}

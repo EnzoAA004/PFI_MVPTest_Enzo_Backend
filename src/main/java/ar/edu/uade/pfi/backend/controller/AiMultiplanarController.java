@@ -73,7 +73,7 @@ public class AiMultiplanarController {
             response.putIfAbsent("notClinicalDiagnosis", true);
             return response;
         } catch (RuntimeException ex) {
-            return fallback(ex.getMessage());
+            return fallback();
         }
     }
 
@@ -225,13 +225,13 @@ public class AiMultiplanarController {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
-    private Map<String, Object> fallback(String message) {
+    private Map<String, Object> fallback() {
         return Map.of(
             "status", "multiplanar_unavailable",
             "schemaVersion", "multiplanar-workspace-v1",
             "workspaceMode", "dual_plane_with_3d_context",
             "panels", List.of("sagittal", "axial", "three_d"),
-            "message", message == null ? "AI Module unavailable" : message,
+            "message", "AI Module no disponible.",
             "proxiedByBackend", true,
             "degradedMode", true,
             "humanReviewRequired", true,

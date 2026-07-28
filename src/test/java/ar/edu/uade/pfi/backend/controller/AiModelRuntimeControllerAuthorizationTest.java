@@ -35,11 +35,12 @@ class AiModelRuntimeControllerAuthorizationTest {
     private static final String SECRET = "ai-runtime-authz-test-secret-32-bytes!!";
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final TokenService tokenService = new TokenService(objectMapper, SECRET, 3600);
+    private AiServiceClient client;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        AiServiceClient client = mock(AiServiceClient.class);
+        client = mock(AiServiceClient.class);
         when(client.getModelRuntime()).thenReturn(Map.of("status", "pytorch_runtime_ready", "device", "cpu"));
         AuditService auditService = new AuditService(new InMemoryStudyRepository());
         RoleAuthorizationService authorizationService = new RoleAuthorizationService(auditService);
@@ -86,6 +87,18 @@ class AiModelRuntimeControllerAuthorizationTest {
         mockMvc.perform(get("/api/ai/models/runtime").header("Authorization", bearer(List.of("ADMIN"))))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.status").value("pytorch_runtime_ready"));
+    }
+
+    @Test
+    void adminGetsUniform503WhenAiModuleRuntimeFails() throws Exception {
+        when(client.getModelRuntime()).thenThrow(new RuntimeException("http://ai-module:8000/models/runtime refused C:\\secret\\stack"));
+
+        mockMvc.perform(get("/api/ai/models/runtime").header("Authorization", bearer(List.of("ADMIN"))))
+            .andExpect(status().isServiceUnavailable())
+            .andExpect(jsonPath("$.code").value("UPSTREAM_UNAVAILABLE"))
+            .andExpect(jsonPath("$.message").value("El modulo de IA no esta disponible temporalmente."))
+            .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("ai-module"))))
+            .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("C:\\"))));
     }
 
     private String bearer(List<String> roles) {

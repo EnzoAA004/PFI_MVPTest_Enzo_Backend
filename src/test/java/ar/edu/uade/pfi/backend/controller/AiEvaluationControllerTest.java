@@ -37,6 +37,21 @@ class AiEvaluationControllerTest {
             .andExpect(jsonPath("$.latestRunId").value("run-test"));
     }
 
+    @Test
+    void fallbacksDoNotExposeInternalExceptionMessages() throws Exception {
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new AiEvaluationController(new BrokenAi())).build();
+
+        mvc.perform(get("/api/ai/evaluation/contract"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.readiness.message").value("AI Module no disponible."))
+            .andExpect(jsonPath("$.readiness.message").value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("ai-module.internal"))));
+
+        mvc.perform(get("/api/ai/evaluation/summary"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.reports.message").value("Reportes de evaluacion no disponibles."))
+            .andExpect(jsonPath("$.reports.message").value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("C:\\"))));
+    }
+
     static class FakeAi implements AiServiceOperations {
         public Map<String, Object> health() { return Map.of("status", "ok"); }
         public Map<String, Object> readiness() { return Map.of("status", "contract_ready"); }
@@ -47,5 +62,14 @@ class AiEvaluationControllerTest {
         public Map<String, Object> getAgentReport(String runId) { return Map.of("runId", runId); }
         public Map<String, Object> getAgentReportSummary(String runId) { return Map.of("runId", runId); }
         public Map<String, Object> getRecentAgentReports(int limit) { return Map.of("count", 1, "items", List.of(Map.of("runId", "run-test"))); }
+    }
+
+    static class BrokenAi extends FakeAi {
+        @Override public Map<String, Object> readiness() {
+            throw new RuntimeException("http://ai-module.internal:8000 refused C:\\secret\\stack");
+        }
+        @Override public Map<String, Object> getRecentAgentReports(int limit) {
+            throw new RuntimeException("http://ai-module.internal:8000 refused C:\\secret\\stack");
+        }
     }
 }
