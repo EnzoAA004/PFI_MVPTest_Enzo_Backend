@@ -133,7 +133,7 @@ class SystemDiagnosticsServiceTest {
             .findFirst()
             .orElseThrow();
 
-        assertEquals(8, autowired.getParameterCount());
+        assertEquals(9, autowired.getParameterCount());
         assertEquals(AiServiceOperations.class, autowired.getParameterTypes()[0]);
         assertEquals(PostgresReviewStoreService.class, autowired.getParameterTypes()[1]);
         assertEquals(AuthService.class, autowired.getParameterTypes()[2]);

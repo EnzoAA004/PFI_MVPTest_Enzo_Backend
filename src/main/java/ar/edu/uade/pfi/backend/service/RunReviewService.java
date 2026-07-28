@@ -15,6 +15,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -23,15 +24,25 @@ public class RunReviewService {
 
     private final StudyRepository repository;
     private final Clock clock;
+    private final OperationalMetricsService metrics;
 
     @Autowired
+    public RunReviewService(StudyRepository repository, @Nullable OperationalMetricsService metrics) {
+        this(repository, Clock.systemUTC(), metrics);
+    }
+
     public RunReviewService(StudyRepository repository) {
-        this(repository, Clock.systemUTC());
+        this(repository, Clock.systemUTC(), null);
     }
 
     RunReviewService(StudyRepository repository, Clock clock) {
+        this(repository, clock, null);
+    }
+
+    RunReviewService(StudyRepository repository, Clock clock, OperationalMetricsService metrics) {
         this.repository = repository;
         this.clock = clock;
+        this.metrics = metrics;
     }
 
     public RunReviewResponseDto saveReview(String multiplanarRunId, RunReviewRequestDto request) {
@@ -53,6 +64,7 @@ public class RunReviewService {
                 corrections(run.id(), request.corrections(), now),
                 auditEvent(multiplanarRunId, run.traceId(), reviewer, status, request.corrections(), now)
             );
+            if (metrics != null) metrics.incrementReviewsSaved();
             return toResponse(review);
         } catch (RunReviewException ex) {
             throw ex;

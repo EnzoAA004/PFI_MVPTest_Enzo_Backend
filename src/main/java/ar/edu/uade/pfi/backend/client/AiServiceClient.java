@@ -15,6 +15,7 @@ import ar.edu.uade.pfi.backend.service.AiMultiplanarContractViolationException;
 import ar.edu.uade.pfi.backend.service.AiMultiplanarUpstreamException;
 import ar.edu.uade.pfi.backend.service.MultiplanarRealBaselineContractValidator;
 import ar.edu.uade.pfi.backend.service.MultiplanarV2RealBaselineValidator;
+import ar.edu.uade.pfi.backend.service.OperationalMetricsService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -23,12 +24,15 @@ import java.util.Map;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
 import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.MultipartBodyBuilder;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
@@ -37,6 +41,16 @@ import org.springframework.web.server.ResponseStatusException;
 import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 
+/**
+ * The only HTTP client for the AI Module. Never sends the user's JWT/refresh token,
+ * email, or roles — this call is backend-to-AI-Module, not a passthrough of the
+ * frontend's own credentials. Every call carries the current request's X-Trace-Id (read
+ * from MDC, set by TraceIdFilter) so a support engineer can correlate a single
+ * frontend→backend→AI-Module round trip by one id — see
+ * docs/P10_B_ERRORS_AUDIT_OBSERVABILITY.md §9. For a background/non-HTTP-request process
+ * with nothing in MDC, no header is sent rather than inventing one that would look like a
+ * request-scoped id it isn't.
+ */
 @Component
 public class AiServiceClient implements AiServiceOperations {
     private static final ParameterizedTypeReference<Map<String, Object>> MAP_RESPONSE = new ParameterizedTypeReference<>() {};
@@ -50,6 +64,7 @@ public class AiServiceClient implements AiServiceOperations {
     private final MultiplanarRealBaselineContractValidator v1StrictValidator;
     private final MultiplanarV2RealBaselineValidator v2StrictValidator;
     private final ObjectMapper objectMapper;
+    private final OperationalMetricsService metrics;
 
     public AiServiceClient(
         WebClient aiWebClient,
@@ -61,6 +76,21 @@ public class AiServiceClient implements AiServiceOperations {
         MultiplanarV2RealBaselineValidator v2StrictValidator,
         ObjectMapper objectMapper
     ) {
+        this(aiWebClient, properties, v2RequestMapper, v2ResponseAdapter, v1ResponseAdapter, v1StrictValidator, v2StrictValidator, objectMapper, null);
+    }
+
+    @Autowired
+    public AiServiceClient(
+        WebClient aiWebClient,
+        AiServiceProperties properties,
+        AiMultiplanarV2RequestMapper v2RequestMapper,
+        AiMultiplanarV2ResponseAdapter v2ResponseAdapter,
+        AiMultiplanarV1ResponseAdapter v1ResponseAdapter,
+        MultiplanarRealBaselineContractValidator v1StrictValidator,
+        MultiplanarV2RealBaselineValidator v2StrictValidator,
+        ObjectMapper objectMapper,
+        @Nullable OperationalMetricsService metrics
+    ) {
         this.aiWebClient = aiWebClient;
         this.timeout = Duration.ofSeconds(properties.resolvedTimeoutSeconds());
         this.multiplanarContractVersion = properties.resolvedMultiplanarContractVersion();
@@ -70,6 +100,15 @@ public class AiServiceClient implements AiServiceOperations {
         this.v1StrictValidator = v1StrictValidator;
         this.v2StrictValidator = v2StrictValidator;
         this.objectMapper = objectMapper;
+        this.metrics = metrics;
+    }
+
+    /** Every AI Module call carries the current request's trace id as a header — see class docs. */
+    private void applyTraceHeader(HttpHeaders headers) {
+        String traceId = MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY);
+        if (traceId != null && !traceId.isBlank()) {
+            headers.set(TraceIdFilter.TRACE_ID_HEADER, traceId);
+        }
     }
 
     @Override
@@ -84,7 +123,7 @@ public class AiServiceClient implements AiServiceOperations {
 
     @Override
     public Object models() {
-        return execute(() -> aiWebClient.get().uri("/models").retrieve().bodyToMono(Object.class).block(timeout));
+        return execute(() -> aiWebClient.get().uri("/models").headers(this::applyTraceHeader).retrieve().bodyToMono(Object.class).block(timeout));
     }
 
     @Override
@@ -100,6 +139,7 @@ public class AiServiceClient implements AiServiceOperations {
     public Map<String, Object> syncModels(boolean force) {
         return execute(() -> aiWebClient.post()
             .uri(uriBuilder -> uriBuilder.path("/models/sync").queryParam("force", force).build())
+            .headers(this::applyTraceHeader)
             .exchangeToMono(response -> mapResponseOrError(response, "models/sync"))
             .block(timeout));
     }
@@ -114,6 +154,7 @@ public class AiServiceClient implements AiServiceOperations {
         PipelineRunRequestDto tracedRequest = withTraceMetadata(request);
         return execute(() -> aiWebClient.post()
             .uri("/pipeline/run")
+            .headers(this::applyTraceHeader)
             .bodyValue(tracedRequest)
             .exchangeToMono(response -> mapResponseOrError(response, "pipeline/run"))
             .block(timeout));
@@ -129,6 +170,7 @@ public class AiServiceClient implements AiServiceOperations {
         return execute(() -> aiWebClient.post()
             .uri("/inputs")
             .contentType(MediaType.MULTIPART_FORM_DATA)
+            .headers(this::applyTraceHeader)
             .bodyValue(body.build())
             .retrieve()
             .bodyToMono(AiInputResponseDto.class)
@@ -139,6 +181,7 @@ public class AiServiceClient implements AiServiceOperations {
     public ResponseEntity<byte[]> getAsset(String runId, String plane, String assetName) {
         return execute(() -> aiWebClient.get()
             .uri(uriBuilder -> uriBuilder.path("/assets/{runId}/{plane}/{assetName}").build(runId, plane, assetName))
+            .headers(this::applyTraceHeader)
             .exchangeToMono(response -> {
                 if (response.statusCode().is2xxSuccessful()) {
                     return response.toEntity(byte[].class);
@@ -169,6 +212,7 @@ public class AiServiceClient implements AiServiceOperations {
         MultiplanarRunRequestDto tracedRequest = withTraceMetadata(request);
         MultiplanarRunResponseDto response = execute(() -> aiWebClient.post()
             .uri("/multiplanar/run")
+            .headers(this::applyTraceHeader)
             .bodyValue(tracedRequest)
             .exchangeToMono(clientResponse -> {
                 if (clientResponse.statusCode().is2xxSuccessful()) {
@@ -189,7 +233,12 @@ public class AiServiceClient implements AiServiceOperations {
     private CanonicalMultiplanarRun runMultiplanarV2(MultiplanarRunRequestDto request) {
         String traceId = MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY);
         AiMultiplanarV2RequestDto v2Request = v2RequestMapper.toV2Request(request, traceId);
-        TraceIdConsistencyGuard.require(v2Request.traceId(), traceId);
+        try {
+            TraceIdConsistencyGuard.require(v2Request.traceId(), traceId);
+        } catch (AiMultiplanarContractViolationException ex) {
+            if (metrics != null) metrics.incrementAiContractViolations();
+            throw ex;
+        }
 
         AiMultiplanarV2ResponseDto response = executeV2(() -> aiWebClient.post()
             .uri("/v2/multiplanar/run")
@@ -239,12 +288,12 @@ public class AiServiceClient implements AiServiceOperations {
 
     @Override
     public Map<String, Object> getAgentReport(String runId) {
-        return execute(() -> aiWebClient.get().uri("/agent/report/{runId}", runId).retrieve().bodyToMono(MAP_RESPONSE).block(timeout));
+        return execute(() -> aiWebClient.get().uri("/agent/report/{runId}", runId).headers(this::applyTraceHeader).retrieve().bodyToMono(MAP_RESPONSE).block(timeout));
     }
 
     @Override
     public Map<String, Object> getAgentReportSummary(String runId) {
-        return execute(() -> aiWebClient.get().uri("/agent/report/{runId}/summary", runId).retrieve().bodyToMono(MAP_RESPONSE).block(timeout));
+        return execute(() -> aiWebClient.get().uri("/agent/report/{runId}/summary", runId).headers(this::applyTraceHeader).retrieve().bodyToMono(MAP_RESPONSE).block(timeout));
     }
 
     @Override
@@ -252,6 +301,7 @@ public class AiServiceClient implements AiServiceOperations {
         int safeLimit = Math.max(1, Math.min(limit, 100));
         return execute(() -> aiWebClient.get()
             .uri(uriBuilder -> uriBuilder.path("/agent/reports").queryParam("limit", safeLimit).build())
+            .headers(this::applyTraceHeader)
             .retrieve()
             .bodyToMono(MAP_RESPONSE)
             .block(timeout));
@@ -273,7 +323,7 @@ public class AiServiceClient implements AiServiceOperations {
     }
 
     private Map<String, Object> getMap(String path) {
-        return execute(() -> aiWebClient.get().uri(path).retrieve().bodyToMono(MAP_RESPONSE).block(timeout));
+        return execute(() -> aiWebClient.get().uri(path).headers(this::applyTraceHeader).retrieve().bodyToMono(MAP_RESPONSE).block(timeout));
     }
 
     private Mono<Map<String, Object>> mapResponseOrError(org.springframework.web.reactive.function.client.ClientResponse response, String operation) {
@@ -333,22 +383,31 @@ public class AiServiceClient implements AiServiceOperations {
     }
 
     private <T> T execute(Supplier<T> supplier) {
+        long startedAt = System.currentTimeMillis();
         try {
-            return supplier.get();
+            T result = supplier.get();
+            recordAiCall(true, startedAt);
+            return result;
         } catch (RuntimeException ex) {
+            recordAiCall(false, startedAt);
             throw translateException(ex);
         }
     }
 
     private <T> T executeV2(Supplier<T> supplier, String traceId) {
+        long startedAt = System.currentTimeMillis();
         try {
-            return supplier.get();
+            T result = supplier.get();
+            recordAiCall(true, startedAt);
+            return result;
         } catch (RuntimeException ex) {
+            recordAiCall(false, startedAt);
             Throwable unwrapped = Exceptions.unwrap(ex);
             if (unwrapped instanceof AiMultiplanarUpstreamException upstream) {
                 throw upstream;
             }
             if (unwrapped instanceof AiMultiplanarContractViolationException contractViolation) {
+                if (metrics != null) metrics.incrementAiContractViolations();
                 throw contractViolation;
             }
             if (isTimeout(unwrapped)) {
@@ -357,6 +416,11 @@ public class AiServiceClient implements AiServiceOperations {
             String message = unwrapped.getMessage() == null ? "unknown error" : compactMessage(unwrapped.getMessage());
             throw new AiMultiplanarUpstreamException(HttpStatus.BAD_GATEWAY, "AI_MODULE_ERROR", "AI Module (v2) no esta disponible: " + message, traceId);
         }
+    }
+
+    private void recordAiCall(boolean succeeded, long startedAtMs) {
+        if (metrics == null) return;
+        metrics.recordAiCall(succeeded, System.currentTimeMillis() - startedAtMs);
     }
 
     private boolean isTimeout(Throwable unwrapped) {

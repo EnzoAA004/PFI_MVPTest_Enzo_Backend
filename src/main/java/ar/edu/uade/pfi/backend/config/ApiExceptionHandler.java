@@ -2,22 +2,24 @@ package ar.edu.uade.pfi.backend.config;
 
 import ar.edu.uade.pfi.backend.auth.AdminAccountProtectedException;
 import ar.edu.uade.pfi.backend.auth.LastAdminProtectionException;
-import ar.edu.uade.pfi.backend.service.AuditService;
+import ar.edu.uade.pfi.backend.config.error.ApiErrorWriter;
 import ar.edu.uade.pfi.backend.service.AiContractViolationException;
 import ar.edu.uade.pfi.backend.service.AiMultiplanarContractViolationException;
 import ar.edu.uade.pfi.backend.service.AiMultiplanarUpstreamException;
 import ar.edu.uade.pfi.backend.service.AssetContentUnavailableException;
+import ar.edu.uade.pfi.backend.service.AuditService;
 import ar.edu.uade.pfi.backend.service.DatabaseUnavailableException;
+import ar.edu.uade.pfi.backend.service.OperationalMetricsService;
 import ar.edu.uade.pfi.backend.service.RunReviewException;
 import ar.edu.uade.pfi.backend.service.StudyMetadataException;
 import ar.edu.uade.pfi.backend.service.StudyNotFoundException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
-import java.time.Instant;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.lang.Nullable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -27,18 +29,32 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.server.ResponseStatusException;
 
+/**
+ * Single mapping point from any exception to the one API error contract
+ * (see {@code ApiErrorResponse}/{@code ApiErrorWriter}). Never logs or returns the raw
+ * exception message on a 5xx, the exception's fully-qualified class name, SQL, a JDBC
+ * URL, an AI Module URL, a local filesystem path, or a stack trace in the response body.
+ */
 @RestControllerAdvice
 public class ApiExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
     private final AuditService auditService;
+    private final OperationalMetricsService metrics;
+    private final ApiErrorWriter apiErrorWriter;
 
     public ApiExceptionHandler() {
-        this(null);
+        this(null, null);
+    }
+
+    public ApiExceptionHandler(AuditService auditService) {
+        this(auditService, null);
     }
 
     @Autowired
-    public ApiExceptionHandler(AuditService auditService) {
+    public ApiExceptionHandler(@Nullable AuditService auditService, @Nullable OperationalMetricsService metrics) {
         this.auditService = auditService;
+        this.metrics = metrics;
+        this.apiErrorWriter = new ApiErrorWriter(new ObjectMapper());
     }
 
     @ExceptionHandler(ResponseStatusException.class)
@@ -137,6 +153,11 @@ public class ApiExceptionHandler {
         );
     }
 
+    /**
+     * Catch-all. Never surfaces ex.getMessage() (which could contain SQL, a JDBC URL, an
+     * AI Module URL, or a local path) in either the body or the log line — only the
+     * sanitized, fixed public message and the exception's simple class name.
+     */
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<Map<String, Object>> handleRuntime(RuntimeException ex, HttpServletRequest request) {
         return buildError(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "Error interno del backend", request, ex);
@@ -150,40 +171,60 @@ public class ApiExceptionHandler {
         Exception ex
     ) {
         String traceId = traceId(request);
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("status", "error");
-        body.put("code", code);
-        body.put("message", message);
-        body.put("traceId", traceId);
-        body.put("path", request.getRequestURI());
-        body.put("method", request.getMethod());
-        body.put("timestamp", Instant.now().toString());
-        body.put("humanReviewRequired", true);
-        body.put("notClinicalDiagnosis", true);
+        Map<String, Object> body = apiErrorWriter.body(code, message, traceId, request.getRequestURI(), request.getMethod(), status.value());
 
-        if (status.is5xxServerError()) {
-            log.error("api_error traceId={} code={} status={} path={} message={}", traceId, code, status.value(), request.getRequestURI(), ex.getMessage(), ex);
-        } else {
-            log.warn("api_error traceId={} code={} status={} path={} message={}", traceId, code, status.value(), request.getRequestURI(), ex.getMessage());
-        }
+        logError(status, code, traceId, request, ex, (Boolean) body.get("retryable"));
+        recordMetrics(status, code);
         auditError(traceId, code, status, request);
         return ResponseEntity.status(status)
             .header(TraceIdFilter.TRACE_ID_HEADER, traceId)
             .body(body);
     }
 
+    /**
+     * Structured, sanitized log line — never ex.getMessage() and never the exception's
+     * fully-qualified name (package + class), only its simple class name. A sanitized
+     * stack is only emitted at DEBUG (never in the public body, never at WARN/ERROR by
+     * default) so it stays available for local troubleshooting without becoming the
+     * default production log volume/leak surface.
+     */
+    private void logError(HttpStatus status, String code, String traceId, HttpServletRequest request, Exception ex, boolean retryable) {
+        String exceptionType = ex.getClass().getSimpleName();
+        String category = ar.edu.uade.pfi.backend.config.error.ApiErrorCode.fromCode(code).category().name();
+        String line = "event=api_error traceId={} code={} category={} status={} method={} path={} exceptionType={} retryable={}";
+        Object[] args = {traceId, code, category, status.value(), request.getMethod(), request.getRequestURI(), exceptionType, retryable};
+        if (status.is5xxServerError()) {
+            log.error(line, args);
+        } else {
+            log.warn(line, args);
+        }
+        if (log.isDebugEnabled()) {
+            log.debug("event=api_error_detail traceId={} exceptionType={} message={}", traceId, exceptionType,
+                SafeLogSanitizer.sanitizeMessage(ex.getMessage()));
+        }
+    }
+
+    private void recordMetrics(HttpStatus status, String code) {
+        if (metrics == null) return;
+        if (status == HttpStatus.UNAUTHORIZED) {
+            metrics.incrementAuthenticationFailures();
+        } else if (status == HttpStatus.FORBIDDEN) {
+            metrics.incrementAuthorizationDenials();
+        } else if ("DATABASE_UNAVAILABLE".equals(code)) {
+            metrics.incrementDatabaseUnavailable();
+        } else if ("AI_CONTRACT_VIOLATION".equals(code) || "AI_MULTIPLANAR_CONTRACT_VIOLATION".equals(code)) {
+            metrics.incrementAiContractViolations();
+        }
+    }
+
     private void auditError(String traceId, String code, HttpStatus status, HttpServletRequest request) {
         if (auditService == null) return;
-        try {
-            auditService.record("backend", "error.http", request.getRequestURI(), traceId, Map.of(
-                "code", code,
-                "status", status.value(),
-                "method", request.getMethod(),
-                "path", request.getRequestURI()
-            ));
-        } catch (RuntimeException ignored) {
-            // Never mask the original API error with audit persistence problems.
-        }
+        auditService.record("backend", "error.http", request.getRequestURI(), traceId, Map.of(
+            "code", code,
+            "status", status.value(),
+            "method", request.getMethod(),
+            "path", request.getRequestURI()
+        ));
     }
 
     private String traceId(HttpServletRequest request) {

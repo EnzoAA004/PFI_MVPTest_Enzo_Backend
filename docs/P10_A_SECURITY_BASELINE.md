@@ -29,6 +29,14 @@ is treated as `PENDING_APPROVAL` for the whole request. Bootstrap-admin detectio
 marked **(P10-A.2.2)** reflect this; see
 `docs/P10_A2_ADMIN_BOOTSTRAP_AND_ACTIVATION.md` for full detail.
 
+**P10-B** (base `4e206398471ec8ce6091e3892f1a7a1bee3f472d`) is a separate, additive pass
+that does not change any authentication/authorization decision documented in this file —
+it unifies the error response contract, adds request tracing/actor logging, hardens
+audit sanitization, and adds in-memory operational metrics + an ADMIN-only
+`observability` diagnostics section. See
+`docs/P10_B_ERRORS_AUDIT_OBSERVABILITY.md` for the full detail; nothing in this file was
+rewritten to describe it.
+
 ## 0. Architecture reality check (audit finding #1)
 
 This backend does **not** use Spring Security / `SecurityFilterChain` / `@PreAuthorize`.

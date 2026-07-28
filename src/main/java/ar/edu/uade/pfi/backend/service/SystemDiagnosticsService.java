@@ -12,6 +12,7 @@ import java.util.Map;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -24,6 +25,7 @@ public class SystemDiagnosticsService {
     private final String persistenceMode;
     private final AiMultiplanarContractVersion multiplanarContractVersion;
     private final boolean adminBootstrapEnabled;
+    private final OperationalMetricsService metrics;
 
     SystemDiagnosticsService(
         AiServiceOperations aiServiceClient,
@@ -51,6 +53,7 @@ public class SystemDiagnosticsService {
         this.persistenceMode = persistenceMode;
         this.multiplanarContractVersion = multiplanarContractVersion;
         this.adminBootstrapEnabled = false;
+        this.metrics = null;
     }
 
     @Autowired
@@ -62,7 +65,8 @@ public class SystemDiagnosticsService {
         AiServiceProperties aiServiceProperties,
         @Value("${pfi.auth.enabled:true}") boolean authEnabled,
         @Value("${pfi.persistence.mode:memory}") String persistenceMode,
-        @Value("${pfi.auth.bootstrap-admin-enabled:false}") boolean adminBootstrapEnabled
+        @Value("${pfi.auth.bootstrap-admin-enabled:false}") boolean adminBootstrapEnabled,
+        @Nullable OperationalMetricsService metrics
     ) {
         this.aiServiceClient = aiServiceClient;
         this.postgresReviewStoreService = postgresReviewStoreService;
@@ -72,6 +76,7 @@ public class SystemDiagnosticsService {
         this.persistenceMode = persistenceMode;
         this.multiplanarContractVersion = aiServiceProperties.resolvedMultiplanarContractVersion();
         this.adminBootstrapEnabled = adminBootstrapEnabled;
+        this.metrics = metrics;
     }
 
     public Map<String, Object> diagnostics() {
@@ -94,9 +99,23 @@ public class SystemDiagnosticsService {
         result.put("evaluationEvidence", aiModule.getOrDefault("evaluationEvidence", evidenceUnavailable("not_checked")));
         result.put("adminAccountConfigured", authService.hasConfiguredAdminSafe());
         result.put("adminBootstrapEnabled", adminBootstrapEnabled);
+        result.put("observability", observability());
         result.put("humanReviewRequired", true);
         result.put("notClinicalDiagnosis", true);
         return result;
+    }
+
+    /**
+     * In-memory, fixed-shape counters only — see docs/P10_B_ERRORS_AUDIT_OBSERVABILITY.md
+     * for the honest limitations (resets on restart, not Cloud Monitoring). Never
+     * includes emails, actorIds, caseIds, runIds, individual traceIds, URLs, secrets,
+     * paths, file names, or stack traces — every field here is a fixed counter/average.
+     */
+    private Map<String, Object> observability() {
+        if (metrics == null) {
+            return Map.of("status", "unavailable");
+        }
+        return metrics.snapshot();
     }
 
     private Map<String, Object> assetStorageDiagnostics() {

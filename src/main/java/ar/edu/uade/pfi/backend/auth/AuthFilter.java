@@ -1,17 +1,20 @@
 package ar.edu.uade.pfi.backend.auth;
 
-import ar.edu.uade.pfi.backend.config.TraceIdFilter;
+import ar.edu.uade.pfi.backend.config.error.ApiErrorWriter;
+import ar.edu.uade.pfi.backend.service.OperationalMetricsService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -23,6 +26,11 @@ import org.springframework.web.filter.OncePerRequestFilter;
 @Component
 public class AuthFilter extends OncePerRequestFilter {
     public static final String AUTH_CLAIMS_ATTRIBUTE = "pfi.auth.claims";
+    /** Technical actor id (JWT subject, post-revalidation) — set here so TraceIdFilter can log it without depending on controllers. */
+    public static final String ACTOR_ID_ATTRIBUTE = "pfi.auth.actorId";
+    /** Technical, effective roles (post-revalidation) — same rationale as ACTOR_ID_ATTRIBUTE. */
+    public static final String ACTOR_ROLES_ATTRIBUTE = "pfi.auth.actorRoles";
+    private static final Set<String> KNOWN_ROLES = Set.of("ADMIN", "DOCTOR", "REVIEWER", "PENDING_APPROVAL");
     private static final String DEMO_DOCTOR_PATH = "/api/auth/demo-doctor";
     private static final Set<String> PUBLIC_AUTH_PATHS = Set.of(
         "/api/auth/register",
@@ -40,19 +48,36 @@ public class AuthFilter extends OncePerRequestFilter {
     private final boolean authEnabled;
     private final boolean demoEnabled;
     private final Environment environment;
+    private final ApiErrorWriter apiErrorWriter;
+    private final OperationalMetricsService metrics;
 
+    public AuthFilter(
+        TokenService tokenService,
+        AuthAccountStateService accountStateService,
+        boolean authEnabled,
+        boolean demoEnabled,
+        Environment environment
+    ) {
+        this(tokenService, accountStateService, authEnabled, demoEnabled, environment, null, null);
+    }
+
+    @Autowired
     public AuthFilter(
         TokenService tokenService,
         AuthAccountStateService accountStateService,
         @Value("${pfi.auth.enabled:true}") boolean authEnabled,
         @Value("${pfi.auth.demo-enabled:false}") boolean demoEnabled,
-        Environment environment
+        Environment environment,
+        @Nullable ApiErrorWriter apiErrorWriter,
+        @Nullable OperationalMetricsService metrics
     ) {
         this.tokenService = tokenService;
         this.accountStateService = accountStateService;
         this.authEnabled = authEnabled;
         this.demoEnabled = demoEnabled;
         this.environment = environment;
+        this.apiErrorWriter = apiErrorWriter != null ? apiErrorWriter : new ApiErrorWriter(new ObjectMapper());
+        this.metrics = metrics;
     }
 
     @Override
@@ -64,31 +89,48 @@ public class AuthFilter extends OncePerRequestFilter {
         }
         String header = request.getHeader("Authorization");
         if (header == null || !header.startsWith("Bearer ") || header.substring(7).trim().isEmpty()) {
+            incrementAuthenticationFailures();
             writeError(request, response, HttpServletResponse.SC_UNAUTHORIZED, "AUTHENTICATION_REQUIRED", "Autenticacion requerida.");
             return;
         }
         TokenService.Claims tokenClaims = tokenService.verify(header.substring(7).trim());
         if (tokenClaims == null) {
+            incrementAuthenticationFailures();
             writeError(request, response, HttpServletResponse.SC_UNAUTHORIZED, "AUTHENTICATION_REQUIRED", "Autenticacion requerida.");
             return;
         }
         AuthAccountStateService.Resolution resolution = accountStateService.resolve(tokenClaims);
         if (resolution.status() == AuthAccountStateService.Status.STATE_UNAVAILABLE) {
+            if (metrics != null) metrics.incrementAuthStateUnavailable();
             writeError(request, response, HttpServletResponse.SC_SERVICE_UNAVAILABLE, "AUTH_STATE_UNAVAILABLE",
                 "No fue posible validar el estado actual de la sesion.");
             return;
         }
         if (resolution.status() != AuthAccountStateService.Status.OK) {
+            incrementAuthenticationFailures();
             writeError(request, response, HttpServletResponse.SC_UNAUTHORIZED, "AUTHENTICATION_REQUIRED", "Autenticacion requerida.");
             return;
         }
         TokenService.Claims claims = resolution.claims();
         if (isRestrictedAccount(claims) && !PENDING_ALLOWED_PATHS.contains(request.getRequestURI())) {
+            if (metrics != null) metrics.incrementAuthorizationDenials();
             writeError(request, response, HttpServletResponse.SC_FORBIDDEN, "ACCESS_DENIED", "No tiene permisos para realizar esta operacion.");
             return;
         }
         request.setAttribute(AUTH_CLAIMS_ATTRIBUTE, claims);
+        request.setAttribute(ACTOR_ID_ATTRIBUTE, claims.subject());
+        request.setAttribute(ACTOR_ROLES_ATTRIBUTE, technicalRoles(claims.roles()));
         filterChain.doFilter(request, response);
+    }
+
+    private void incrementAuthenticationFailures() {
+        if (metrics != null) metrics.incrementAuthenticationFailures();
+    }
+
+    /** Only ever logs/exposes roles from the known, fixed set — never an arbitrary claim value. */
+    private String technicalRoles(List<String> roles) {
+        if (roles == null || roles.isEmpty()) return "";
+        return roles.stream().filter(KNOWN_ROLES::contains).sorted().reduce((a, b) -> a + "," + b).orElse("");
     }
 
     private static final Set<String> RECOGNIZED_ACTIVE_ROLES = Set.of("DOCTOR", "REVIEWER", "ADMIN");
@@ -129,25 +171,7 @@ public class AuthFilter extends OncePerRequestFilter {
         return false;
     }
 
-    private void writeError(HttpServletRequest request, HttpServletResponse response, int status, String code, String message)
-        throws IOException {
-        response.setStatus(status);
-        response.setContentType("application/json");
-        response.setHeader("Cache-Control", "no-store");
-        String traceId = traceId(request);
-        response.setHeader(TraceIdFilter.TRACE_ID_HEADER, traceId);
-        response.getWriter().write(
-            "{\"status\":\"error\",\"code\":\"" + code + "\",\"message\":\"" + message
-                + "\",\"traceId\":\"" + traceId + "\",\"timestamp\":\"" + Instant.now() + "\"}"
-        );
-    }
-
-    private String traceId(HttpServletRequest request) {
-        Object attribute = request.getAttribute(TraceIdFilter.TRACE_ID_ATTRIBUTE);
-        if (attribute instanceof String value && !value.isBlank()) {
-            return value;
-        }
-        String header = request.getHeader(TraceIdFilter.TRACE_ID_HEADER);
-        return header == null || header.isBlank() ? "unavailable" : header;
+    private void writeError(HttpServletRequest request, HttpServletResponse response, int status, String code, String message) {
+        apiErrorWriter.writeError(request, response, status, code, message);
     }
 }
