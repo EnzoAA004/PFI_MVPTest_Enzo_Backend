@@ -12,6 +12,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,6 +30,10 @@ public class AuditService {
     private static final int MAX_DEPTH = 5;
     private static final int MAX_LIST_ELEMENTS = 20;
     private static final int MAX_STRING_LENGTH = 160;
+    /** P10-B.1 §10: the same field-level controls now apply to actor/entityId/traceId/action, not just metadata. */
+    private static final int MAX_IDENTIFIER_LENGTH = 100;
+    private static final int MAX_TRACE_ID_LENGTH = 96;
+    private static final Pattern SAFE_ACTION_PATTERN = Pattern.compile("^[A-Za-z0-9_.]{1,80}$");
 
     private final StudyRepository repository;
     private final Clock clock;
@@ -62,10 +67,10 @@ public class AuditService {
      * across every caller.
      */
     public AuditEventResponseDto record(String actor, String action, String entityId, String traceId, Map<String, Object> metadata) {
-        String safeActor = safeText(actor, "system");
-        String safeAction = safeText(action, "unknown");
-        String safeEntityId = safeText(entityId, "");
-        String safeTraceId = safeText(traceId, "");
+        String safeActor = sanitizeIdentifier(actor, "system");
+        String safeAction = sanitizeAction(action);
+        String safeEntityId = sanitizeIdentifier(entityId, "");
+        String safeTraceId = sanitizeTraceId(traceId);
         try {
             DomainAuditEvent event = repository.saveAuditEvent(new DomainAuditEvent(
                 UUID.randomUUID().toString(),
@@ -156,6 +161,34 @@ public class AuditService {
     private String safeText(String value, String fallback) {
         if (value == null || value.isBlank()) return fallback;
         return value.trim();
+    }
+
+    /**
+     * actor/entityId: never an email, token, path, or URL — {@link SafeLogSanitizer}'s
+     * whole-value check redacts the entire identifier rather than trying to partially
+     * mask it (an identifier that's half-redacted is still not a safe technical id).
+     * Length-capped independently of the metadata string cap.
+     */
+    private String sanitizeIdentifier(String value, String fallback) {
+        String text = safeText(value, fallback);
+        if (!text.isEmpty() && SafeLogSanitizer.isSensitive(text)) return "[redacted]";
+        return text.length() > MAX_IDENTIFIER_LENGTH ? text.substring(0, MAX_IDENTIFIER_LENGTH) : text;
+    }
+
+    /** action: only a safe technical format (letters/digits/underscore/dot) — anything else has its unsafe characters stripped, never dropped/rejected outright. */
+    private String sanitizeAction(String value) {
+        String text = safeText(value, "unknown");
+        if (SAFE_ACTION_PATTERN.matcher(text).matches()) return text;
+        String stripped = text.replaceAll("[^A-Za-z0-9_.]", "-");
+        if (stripped.isBlank()) return "unknown";
+        return stripped.length() > 80 ? stripped.substring(0, 80) : stripped;
+    }
+
+    /** Same sanitize-and-cap contract as TraceIdFilter's own incoming-header handling — kept consistent so an audited traceId always matches the one a caller could search logs for. */
+    private String sanitizeTraceId(String value) {
+        if (value == null || value.isBlank()) return "";
+        String sanitized = value.trim().replaceAll("[^a-zA-Z0-9._:-]", "-");
+        return sanitized.length() > MAX_TRACE_ID_LENGTH ? sanitized.substring(0, MAX_TRACE_ID_LENGTH) : sanitized;
     }
 
     private AuditEventResponseDto toResponse(DomainAuditEvent event) {

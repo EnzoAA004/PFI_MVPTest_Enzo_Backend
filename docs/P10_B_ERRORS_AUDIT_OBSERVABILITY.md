@@ -9,6 +9,53 @@ account-state integrity. P10-B does not change any of that — it makes the back
 sanitized, and traceable end-to-end, in preparation for Railway today and Google Cloud
 later.
 
+## 0. P10-B.1 hotfix (base `40dfe7dac0045b9bc7e80d93e3354288ac250c27`)
+
+A post-review pass on P10-B found four real problems, all closed in this pass — sections
+below are updated in place to reflect the corrected behavior rather than kept as two
+divergent documents:
+
+1. **Some 5xx handlers still returned `ex.getMessage()`.** `ApiExceptionHandler`'s
+   `AiContractViolationException`/`AiMultiplanarContractViolationException`/
+   `AiMultiplanarUpstreamException`/`DatabaseUnavailableException` handlers used
+   `safeMessage(ex.getMessage(), status)`, which fell through to the exception's own
+   message whenever it was non-blank — and `AiServiceClient` was, at the time, populating
+   those messages from the upstream response body/message. **Fixed**: every 5xx handler
+   now uses a fixed message from `ApiErrorCode.publicMessage()` looked up by code, never
+   `ex.getMessage()`; `ResponseStatusException` on a 5xx does the same. See §1/§2.
+2. **`ApiErrorCode` didn't contain every code the backend actually emits.** `RUN_NOT_FOUND`,
+   `INVALID_REVIEW_STATUS`, `REVIEWER_REQUIRED`, `REVIEW_COMMENT_REQUIRED`,
+   `INVALID_SUBJECT_REFERENCE`, `SUBJECT_REFERENCE_CONFLICT`, `INVALID_REVIEW_PRIORITY`,
+   and every `AiMultiplanarV2ErrorCodeMapper` code (`AI_INVALID_REQUEST`,
+   `AI_NO_PLANE_REQUESTED`, `AI_INPUT_NOT_FOUND`, `AI_MODEL_NOT_FOUND`,
+   `AI_MODEL_PLANE_MISMATCH`, `AI_MODEL_NOT_READY`, `AI_CONTRACT_FALLBACK_DISABLED`,
+   `AI_REAL_INFERENCE_FAILED`, `AI_INVALID_RESPONSE`, `AI_UNSUPPORTED_INFERENCE_MODE`,
+   `AI_MODULE_ERROR`, `AI_MODULE_TIMEOUT`) were missing, so `ApiErrorCode.fromCode(...)`
+   silently fell back to `UNKNOWN`'s category/retryable for all of them (the literal code
+   string in the response body was still correct — only its category/retryable
+   classification was wrong). **Fixed**: full catalog in §3, enforced by
+   `ApiErrorCodeCoverageTest`.
+3. **Activation/deactivation audited the email as `entityId` with no real actor/trace.**
+   `AuthService.auditActivation` used the hardcoded actor `"backend-admin"`, the target's
+   *email* as `entityId`, and an empty `traceId`. **Fixed**: `actorId = claims.subject()`
+   (the acting ADMIN's technical id), `entityId = account.id()` (the target's technical
+   id), `traceId` from the current request's MDC, `action` from the `AuditAction` catalog.
+   See §10.
+4. **An AI call could count as `aiCallsSucceeded` before its result was validated.** Both
+   `runMultiplanarV1`/`runMultiplanarV2` recorded success right after the HTTP
+   call/deserialization returned — before the adapter and the strict contract validator
+   ran — so an HTTP 200 with an invalid contract was counted as a success, and a
+   contract-violation could be double-counted against `aiContractViolations` (once in
+   `AiServiceClient`, again in `ApiExceptionHandler`). **Fixed**: success is now recorded
+   only after HTTP → deserialize → adapt → validate all complete; `AiServiceClient` is the
+   sole authority for `AI_MULTIPLANAR_CONTRACT_VIOLATION`'s counter (`ApiExceptionHandler`
+   no longer increments it). See §13/§13a.
+
+Also closed: AI Module calls with nothing in MDC (a background/non-request-scoped call)
+previously sent **no** `X-Trace-Id` header at all; they now send a freshly generated
+`technical-<uuid>`, resolved once per call and reused consistently for both the header and
+the v2 request body. See §9.
+
 ## 1. Architecture
 
 ```
@@ -98,13 +145,44 @@ consumed is preserved unchanged — this is a classification pass, not a renamin
 | `AI_CONTRACT_VIOLATION` | AI_CONTRACT | no |
 | `AI_MULTIPLANAR_CONTRACT_VIOLATION` | AI_CONTRACT | no |
 | `INPUT_TOO_LARGE` | VALIDATION | no |
-| `RUN_REVIEW_ERROR` | RESOURCE | no |
+| `RUN_REVIEW_ERROR` | RESOURCE | no — **reserved/historical, never actually emitted** (RunReviewException always carries a more specific code below) |
 | `CLIENT_ERROR` (generic 4xx fallback) | VALIDATION | no |
 | `INTERNAL_ERROR` | INTERNAL | no |
+| `RUN_NOT_FOUND` | RESOURCE | no |
+| `INVALID_REVIEW_STATUS` | VALIDATION | no |
+| `REVIEWER_REQUIRED` | VALIDATION | no |
+| `REVIEW_COMMENT_REQUIRED` | VALIDATION | no |
+| `INVALID_SUBJECT_REFERENCE` | VALIDATION | no |
+| `SUBJECT_REFERENCE_CONFLICT` | RESOURCE | no |
+| `INVALID_REVIEW_PRIORITY` | VALIDATION | no |
+| `AI_INVALID_REQUEST` | VALIDATION | no |
+| `AI_NO_PLANE_REQUESTED` | VALIDATION | no |
+| `AI_INPUT_NOT_FOUND` | RESOURCE | no |
+| `AI_MODEL_NOT_FOUND` | RESOURCE | no |
+| `AI_MODEL_PLANE_MISMATCH` | AI_CONTRACT (documented choice — see catalog javadoc) | no |
+| `AI_MODEL_NOT_READY` | AI_UPSTREAM | no |
+| `AI_CONTRACT_FALLBACK_DISABLED` | AI_CONTRACT | no |
+| `AI_REAL_INFERENCE_FAILED` | AI_UPSTREAM | no (never auto-retried on POST regardless) |
+| `AI_INVALID_RESPONSE` | AI_CONTRACT | no |
+| `AI_UNSUPPORTED_INFERENCE_MODE` | VALIDATION | no |
+| `AI_MODULE_ERROR` | AI_UPSTREAM | **yes** (forced false on a non-idempotent inference POST regardless — §5) |
+| `AI_MODULE_TIMEOUT` | AI_UPSTREAM | **yes** (same override) — this is the code v2 timeouts actually use |
 | `UNKNOWN` (defensive fallback only) | INTERNAL | no |
 
-No historical alias renames were needed — `codeForStatus()` in `ApiExceptionHandler`
-(mapping a bare `ResponseStatusException` status to a code) is unchanged from P10-A.
+**P10-B.1**: this table is now audited complete — every code path in
+`ApiExceptionHandler`, `AuthFilter`, `RunReviewException`, `StudyMetadataException`,
+`AiMultiplanarUpstreamException`, and `AiMultiplanarV2ErrorCodeMapper` resolves to a real
+entry here, enforced by `ApiErrorCodeCoverageTest` (an explicit, versioned list of domain
+codes — not a filesystem-path-dependent search). `AI_TIMEOUT` remains as a
+reserved/historical entry — no current code path emits that literal string;
+`AI_MODULE_TIMEOUT` is what v2 timeouts actually use. No historical alias renames were
+needed — `codeForStatus()` in `ApiExceptionHandler` (mapping a bare
+`ResponseStatusException` status to a code) is unchanged from P10-A.
+
+`AiMultiplanarV2ErrorCodeMapper.Mapped` (P10-B.1 §7) now carries a typed `ApiErrorCode
+backendCode` instead of a free `String` — upstream AI Module codes can never inject an
+arbitrary string into the backend's public code; only this fixed mapping table decides
+what comes out.
 
 ## 4. Categories
 
@@ -147,12 +225,42 @@ authorization/security code, and every internal error without a proven safe-retr
   individually replaced, the rest of the message survives, so log lines stay useful.
 
 Detects (regex-based, defense-in-depth, not a perfect DLP tool): Bearer tokens, JWTs,
-JDBC URLs with credentials, URLs with userinfo, Windows paths, `/tmp` and `/app` paths,
+any `jdbc:` URL (credentials or not — P10-B.1: previously only JDBC URLs *with* explicit
+credentials were caught), URLs with userinfo, **any `http(s)://` URL at all** (P10-B.1
+addition), `localhost`/`127.0.0.1`/`0.0.0.0`/`host.docker.internal`/
+`*.trycloudflare.com`/`*.internal` hosts (P10-B.1 addition), private IPv4 addresses —
+`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` (P10-B.1 addition), Windows paths, `/tmp`
+and `/app` paths, common Linux system-directory paths (`/var`, `/opt`, `/home`, `/etc`,
+`/usr`, `/srv`, `/data`, `/mnt`, `/root` — P10-B.1 addition), full query strings,
 `key=value`/`key: value` secret pairs (password/secret/token/credential/authorization/
 apikey), emails, common medical/image filenames (`.dcm`, `.nii`, `.png`, `.jpg`, ...),
 and a length/non-printable-ratio heuristic for binary-looking content. Every result is
 capped at 200 characters. See `SafeLogSanitizerTest` for the full coverage (synthetic
 examples only, never a real secret).
+
+## 6b. `DiagnosticsSanitizer` (P10-B.1 §5)
+
+`service/DiagnosticsSanitizer.java` — a second, purpose-built recursive sanitizer for AI
+Module diagnostics responses embedded in `GET /api/system/diagnostics`. Unlike
+`AuditService.sanitize()`, it's a **blocklist**, not a strict allowlist: the upstream
+health/readiness/models responses have many benign fields (`schemaVersion`, model
+key/version, artifact hash, quality status, `multiplanarEndpoint`, ...) that must survive
+unchanged for v1/v2 verification to keep working. It drops keys matching an **exact,
+case-insensitive** name — `url`, `baseUrl`, `path`, `file`, `filename`, `localPath`,
+`storagePath`, `token`, `secret`, `credential`, `authorization`, `password`, `host`,
+`port` — and, separately, redacts any remaining string *value* that
+`SafeLogSanitizer.isSensitive(...)` flags, recursively over nested maps/lists (capped at
+depth 6 / 50 list elements).
+
+Exact-match, not substring-match, on purpose: an early substring-based implementation
+wrongly redacted `reportCount` (contains `"port"`) and would have wrongly redacted
+`profile` (contains `"file"`) — caught by `DiagnosticsSanitizerTest` during development.
+
+`SystemDiagnosticsService` applies it to every upstream response it embeds (`health`,
+`readiness`, `models`, `getEvaluationEvidence`, `warmup`) and no longer puts
+`compact(ex.getMessage())` into a diagnostics field on failure — fixed messages instead:
+*"AI Module no disponible."*, *"Readiness no disponible."*, *"Evidencia no disponible."*,
+*"Modelos no disponibles."*
 
 ## 7. Logs
 
@@ -199,9 +307,15 @@ header (v1/pipeline embedded the trace id in the request body's `metadata` map i
 which is preserved unchanged for backward contract compatibility). `TraceIdConsistencyGuard`
 (unchanged) still validates that the v2 request body's `traceId` matches the header.
 
-For a call with nothing in MDC (a background/non-HTTP-request process), no header is
-sent at all — the client never invents an id that would misleadingly look
-request-scoped. Verified end-to-end with WireMock in `AiTracePropagationTest`.
+**P10-B.1**: for a call with nothing in MDC (a background/non-HTTP-request process), the
+client now sends a freshly generated `technical-<uuid>` instead of omitting the header
+(the P10-B behavior). The id is resolved once per logical call
+(`AiServiceClient.resolveTraceId()`) and reused consistently for that call's header and,
+for the v2 contract, its request body's `traceId` field too — never written back to MDC,
+never shared across threads/calls. Verified end-to-end with WireMock in
+`AiTracePropagationTest` (`technicalTraceIdIsSentWhenThereIsNoCurrentTraceId`,
+`eachCallWithoutMdcGetsItsOwnFreshTechnicalTraceId`,
+`v2CallWithoutMdcUsesTheSameTechnicalTraceIdInBodyAndHeader`).
 
 **Never sent to the AI Module**: the user's JWT/access token, refresh token, email, or
 roles — this was already true before P10-B (confirmed by re-reading `AiServiceClient` in
@@ -217,17 +331,40 @@ full — no `Authorization` header is ever set), and is now explicitly regressio
 
 **Deliberately not migrated wholesale**: existing historical literal action strings
 (`"asset.snapshot.stored"`, `"auth.login.completed"`, `"access.denied"`,
-`"multiplanar.run.completed"`, ...) are untouched — some already exactly match a catalog
-name (`PROFESSIONAL_ACTIVATED`/`PROFESSIONAL_DEACTIVATED` in `AuthService`), and nothing
-currently consuming those strings breaks. The catalog exists so *new* critical operations
-have one place to draw a stable action name from, per the task's own instruction not to
-force a breaking rename in this pass.
+`"multiplanar.run.completed"`, `"review.updated"`, ...) are untouched where two existing
+tests assert on their exact literal (`AuditServiceTest`, `AiRunReviewControllerTest` both
+assert `action == "review.updated"` — renaming that specific one would need an explicit
+compatibility strategy this pass didn't invent, per the task's own instruction). The
+catalog exists so *new*/touched critical operations have one place to draw a stable
+action name from.
 
-Audit events already carried (unchanged): `actorId` (technical), `action`, `entityId`
-(technical — activation/deactivation already used `account.email()` as the technical
-identifier since P10-A.2.1; this was not touched in P10-B since it is not a "new call
-site" and changing it risks breaking existing audit queries by email), `traceId`,
-`timestamp`, `outcome` (via metadata), sanitized `metadata`.
+**P10-B.1 §11 — actual consumers** (the catalog is no longer purely aspirational):
+
+- `AuthService.activate`/`deactivate` now pass `AuditAction.PROFESSIONAL_ACTIVATED.name()`
+  / `AuditAction.PROFESSIONAL_DEACTIVATED.name()` (previously the literal strings
+  `"PROFESSIONAL_ACTIVATED"`/`"PROFESSIONAL_DEACTIVATED"` — same value, now sourced from
+  the enum instead of a hand-typed literal that could drift).
+- `AiMultiplanarController.auditStrictFailure` now uses
+  `AuditAction.AI_RUN_FAILED.name()` instead of the old ad hoc
+  `"multiplanar.real_baseline.failed"` string (no test asserted on that literal, so this
+  one *was* safe to rename).
+- `REVIEW_SAVED`/`AUTH_LOGIN_SUCCEEDED`/`AUTH_LOGIN_FAILED`/`AUTH_REFRESH_SUCCEEDED`/
+  `AUTH_REFRESH_FAILED`/`ADMIN_BOOTSTRAP_CREATED`/`AI_INPUT_UPLOADED`/
+  `AI_RUN_REQUESTED`/`AI_RUN_COMPLETED`/`REVIEW_UPDATED`/`ASSET_REQUESTED`/
+  `ACCESS_DENIED`/`SECURITY_STATE_UNAVAILABLE` remain unconsumed — each maps to an
+  existing call site that already has its own tested literal (e.g. `RunReviewService`'s
+  audit event is a raw `DomainAuditEvent` built inline with `"review.updated"`, checked by
+  name in two tests), so migrating them needs the same one-at-a-time, test-verified
+  treatment as the two done here, not a blanket rename.
+
+Audit events already carried (unchanged): `actorId`, `action`, `entityId`, `traceId`,
+`timestamp`, `outcome` (via metadata), sanitized `metadata`. **P10-B.1 §9**: for
+activation/deactivation specifically, `actorId` is now `claims.subject()` (the acting
+ADMIN's technical id, not the hardcoded string `"backend-admin"`), `entityId` is now
+`account.id()` (the target account's technical id, not its email — closing a real gap:
+P10-B's own text here previously said this was "unchanged since P10-A.2.1" and used the
+email, which was itself never correct for this hardening effort), and `traceId` comes
+from the current request's MDC (not an empty string).
 
 ## 11. `AuditService` hardening
 
@@ -241,6 +378,26 @@ metadata growth, not expected to bind in normal operation):
 - max recursion depth: 5 (a map nested past this is dropped, not partially rendered)
 - max list elements: 20
 - max string length: 160 (unchanged from before P10-B)
+
+**P10-B.1 §10**: the same field-level controls now apply to `actor`, `entityId`,
+`traceId`, and `action` too — previously only `metadata` was sanitized, so a call site
+could (and, in `AuthService.auditActivation`'s case per §0/§10 above, did) pass an email
+straight into `entityId` and have it persisted verbatim. `record()` now runs every field
+through:
+
+- `actor`/`entityId` → `SafeLogSanitizer.isSensitive(...)` whole-value check (an email,
+  token, path, or URL becomes `"[redacted]"` entirely, not partially masked), capped at
+  100 characters.
+- `action` → must match `^[A-Za-z0-9_.]{1,80}$`; anything else has its unsafe characters
+  replaced with `-` rather than being silently dropped or rejected outright.
+- `traceId` → the same sanitize-and-cap contract as `TraceIdFilter`'s own incoming-header
+  handling (`[a-zA-Z0-9._:-]` only, capped at 96 chars), so an audited traceId always
+  matches what a caller could actually search logs for.
+
+No historical audit *event already persisted* is retroactively modified — this only
+changes what a future `record()` call writes. Covered by `AuditServiceSanitizationTest`,
+including `emailAttemptedAsEntityIdIsNeverPersisted` (the exact regression scenario from
+§0 item 3).
 
 ## 12. Audit failures never mask the real operation
 
@@ -279,10 +436,43 @@ covers every request), `AuthFilter` (authenticationFailures/authorizationDenials
 authStateUnavailable for its own direct 401/403/503 writes), `ApiExceptionHandler`
 (authenticationFailures/authorizationDenials for a `ResponseStatusException`-originated
 401/403 that never went through `AuthFilter` — e.g. `RoleAuthorizationService`'s 403;
-plus `databaseUnavailable`/`aiContractViolations` by code), `AiServiceClient`
-(aiCallsTotal/Succeeded/Failed/duration in `execute`/`executeV2`, aiContractViolations on
-a contract-violation exception or a `TraceIdConsistencyGuard` mismatch), `RunReviewService`
+plus `databaseUnavailable`; `aiContractViolations` **only** for the single-plane
+`AI_CONTRACT_VIOLATION` code — see the P10-B.1 note below), `AiServiceClient`
+(aiCallsTotal/Succeeded/Failed/duration around the *whole* logical operation — §13a below
+— plus `aiContractViolations` for `AI_MULTIPLANAR_CONTRACT_VIOLATION`), `RunReviewService`
 (reviewsSaved on a successful `saveReview`), `AuditService` (auditWriteFailures).
+
+### 13a. `aiCallsSucceeded` requires a validated canonical result (P10-B.1 §12)
+
+P10-B recorded `aiCallsSucceeded` as soon as the HTTP call + JSON deserialization
+returned — for `runMultiplanarV1`/`runMultiplanarV2`, that happened *before* the response
+adapter and the strict contract validator ran, both of which live outside the original
+`execute`/`executeV2` wrapper. An HTTP 200 with a response that then failed strict
+contract validation was therefore counted as a **success**.
+
+Fixed: `runMultiplanarV1`/`runMultiplanarV2` now wrap the *entire* pipeline — HTTP
+dispatch (via metric-free `executeHttp`/`dispatchV2Http` helpers) → deserialize → adapt →
+validate — in one try/catch that calls `recordAiCall(true, ...)` only after the validator
+returns successfully, and `recordAiCall(false, ...)` on any exception from any stage
+(transport, timeout, JSON, adapter, validator, `TraceIdConsistencyGuard`, or contract).
+Every other `AiServiceClient` call (`health`, `models`, `getAsset`, ...) still records
+success/failure automatically around just the HTTP call itself, since there is no further
+validation stage for those. Verified by
+`AiServiceClientContractViolationMetricsTest.aHttp200WithAnInvalidContractNeverCountsAsSucceeded`.
+
+**P10-B.1 §13 — exactly-once contract-violation counting.** P10-B had
+`ApiExceptionHandler.recordMetrics` increment `aiContractViolations` for *both*
+`AI_CONTRACT_VIOLATION` and `AI_MULTIPLANAR_CONTRACT_VIOLATION`, while `AiServiceClient`
+*also* incremented it for every `AiMultiplanarContractViolationException` it caught
+(`TraceIdConsistencyGuard` mismatches, and — after this pass — both v1's and v2's strict
+validator failures) — every multiplanar contract violation was counted twice. Fixed by
+splitting authority per code: `AiServiceClient` is the **sole** counter for
+`AI_MULTIPLANAR_CONTRACT_VIOLATION` (it's the only place that sees the full
+HTTP→adapter→validator pipeline for a multiplanar run), and `ApiExceptionHandler` remains
+the only counter for the older, single-plane `AI_CONTRACT_VIOLATION` code (raised from
+`AiBackendService`/`SagittalRealBaselineContractValidator`, a path `AiServiceClient` never
+sees). Verified by a WireMock test asserting `aiContractViolations` increases by exactly
+1 for a single multiplanar contract violation.
 
 Every new dependency on `OperationalMetricsService` (and `ApiErrorWriter` where relevant)
 is `@Nullable` on its `@Autowired` constructor parameter — a `@WebMvcTest` slice that
@@ -323,19 +513,21 @@ No endpoint's authorization level changed in P10-B.
 
 ## 16. Upstream error classification (AI Module)
 
-Unchanged from P10-A/pre-existing `AiServiceClient` logic, now documented explicitly:
-
 | Condition | Code | Status |
 |---|---|---|
-| Timeout | `AI_MODULE_TIMEOUT` (v2) / generic timeout mapping (v1) | 504 |
-| Connection refused / host unreachable | mapped to `ResponseStatusException`/`AiMultiplanarUpstreamException` | 502/503 depending on path |
-| Upstream 5xx | `AI_MODULE_ERROR` / `UPSTREAM_UNAVAILABLE` | 502 |
-| Upstream 4xx | passed through as the AI Module's own rejection | matches upstream |
-| Malformed/unstructured JSON body on a v2 error | `AiMultiplanarV2ErrorCodeMapper.UNKNOWN` | 502 |
+| Timeout | `AI_MODULE_TIMEOUT` | 504 |
+| Connection refused / host unreachable / unstructured 5xx | `UPSTREAM_UNAVAILABLE` (generic calls) / `AI_MODULE_ERROR` (v2 dispatch) | 502/503 |
+| Upstream 4xx (v1/generic, no structured DTO) | fixed local message, upstream status preserved | matches upstream status |
+| Upstream 4xx/5xx (v2, structured `AiStructuredErrorV2Dto.code`) | mapped via `AiMultiplanarV2ErrorCodeMapper` to one of `AI_INVALID_REQUEST`/`AI_NO_PLANE_REQUESTED`/`AI_INPUT_NOT_FOUND`/`AI_MODEL_NOT_FOUND`/`AI_MODEL_PLANE_MISMATCH`/`AI_MODEL_NOT_READY`/`AI_CONTRACT_FALLBACK_DISABLED`/`AI_REAL_INFERENCE_FAILED`/`AI_INVALID_RESPONSE`/`AI_UNSUPPORTED_INFERENCE_MODE` | per mapping table in `AiMultiplanarV2ErrorCodeMapper` |
+| Malformed/unstructured JSON body on a v2 error | `AiMultiplanarV2ErrorCodeMapper.UNKNOWN` → `AI_MODULE_ERROR` | 502 |
 | Trace id mismatch (v2 body vs. header) | `AI_MULTIPLANAR_CONTRACT_VIOLATION` | 502 |
 
-The AI Module's base URL is never included in any error message or diagnostics field
-(verified by `SystemDiagnosticsServiceTest` and `SensitiveDataLeakRegressionTest`).
+**P10-B.1 §3**: the upstream response body is now used **only** to deserialize
+`AiStructuredErrorV2Dto` — never copied into the public message. When the body isn't
+structured (or isn't v2 at all), the public message is always one of the fixed strings in
+§0 item 1/§3's catalog, regardless of what the AI Module actually said. The AI Module's
+base URL/host/port are never included in any error message, log line, or diagnostics
+field (verified by `SystemDiagnosticsServiceTest` and `SensitiveDataLeakRegressionTest`).
 
 ## 17. Database error classification (unchanged)
 
@@ -348,7 +540,7 @@ returned — confirmed by `SensitiveDataLeakRegressionTest` and the existing `Au
 
 ## 18. Tests
 
-New suites (all passing, see §22):
+New suites from P10-B (all passing, see §23):
 
 - `ApiErrorWriterTest` — contract fields, retryable resolution (including the
   contract-violation-on-502 regression case), header/body writing, never throws.
@@ -363,17 +555,54 @@ New suites (all passing, see §22):
   entry caps, `record()` never throws and increments the failure metric.
 - `OperationalMetricsServiceTest` — every counter increments correctly, averages compute
   correctly, fixed key-count assertion (no per-request cardinality).
-- `AiTracePropagationTest` (WireMock) — every AI Module call carries the current
-  X-Trace-Id, no header sent when MDC is empty, no `Authorization` header ever sent.
+- `AiTracePropagationTest` (WireMock) — every AI Module call carries a trace id header.
 - `ObservabilityDiagnosticsTest` — sanitized shape, graceful degradation without metrics.
 - `SensitiveDataLeakRegressionTest` — end-to-end sweep across `AuthFilter`,
-  `ApiExceptionHandler` for a JWT-looking `Authorization` header, a JDBC-URL-bearing
-  runtime exception, Windows/`/tmp` paths, an AI Module private URL, and a password sent
-  in a request body/query string.
+  `ApiExceptionHandler`, AI-upstream exceptions, and diagnostics.
+
+**New suites from P10-B.1**:
+
+- `ApiErrorCodeCoverageTest` (`client` package, alongside the package-private
+  `AiMultiplanarV2ErrorCodeMapper`) — every `AiMultiplanarV2ErrorCodeMapper` result, every
+  `RunReviewService`/`StudyMetadataException`/`AuthFilter` code, and every generic-status
+  code resolves to a real catalog entry, never `UNKNOWN`. Uses an explicit, versioned list
+  of domain codes rather than a filesystem-path-dependent search, per the task's own
+  instruction.
+- `DiagnosticsSanitizerTest` — drops exact sensitive keys without false-positiving on
+  substrings (`reportCount`/`profile`), preserves allowed diagnostic fields, redacts
+  sensitive values under allowed keys, recurses into nested maps/lists.
+- `AiServiceClientContractViolationMetricsTest` (WireMock) — a single strict-validator
+  failure increments `aiContractViolations` by exactly 1 (not 2); an HTTP 200 with an
+  invalid contract never increments `aiCallsSucceeded`.
+- `AuditServiceSanitizationTest` (extended) — `emailAttemptedAsEntityIdIsNeverPersisted`,
+  path-like actor redaction, unsafe-character stripping in `action`, oversized `traceId`
+  capping.
+- `AiTracePropagationTest` (extended) — `technicalTraceIdIsSentWhenThereIsNoCurrentTraceId`,
+  `eachCallWithoutMdcGetsItsOwnFreshTechnicalTraceId`,
+  `v2CallWithoutMdcUsesTheSameTechnicalTraceIdInBodyAndHeader`,
+  `aiCallsNeverCarryJwtEmailOrRolesHeaders` (replaces the old P10-B
+  "no header sent" test, which is no longer correct behavior).
+- `SensitiveDataLeakRegressionTest` (extended) — a single synthetic "poison" message
+  (JDBC URL + `trycloudflare.com` + `localhost` + `/tmp` + `/app` + Windows path +
+  password + token + email, all combined) run through `DatabaseUnavailableException`,
+  `AiContractViolationException`, `AiMultiplanarContractViolationException`,
+  `AiMultiplanarUpstreamException`, `ResponseStatusException` at 502/503, ADMIN
+  diagnostics with a failing AI Module, a captured Logback `ListAppender` (default log
+  level, not DEBUG), and a captured audit event — confirmed absent from all of them.
+- `ProfessionalActivationIntegrationTest`/`ApprovalEndpointControllerTest`/
+  `LastAdminProtectionTest`/`ProfessionalActivationControllerTest` — unchanged assertions,
+  re-verified green against the new `auditActivation` signature (no test asserted on the
+  old `"backend-admin"`/email-as-entityId behavior, so nothing needed updating there —
+  only `ApiExceptionHandlerContractTest`/`ApiExceptionHandlerTest` needed a one-character
+  message-text update, `"Error interno del backend"` → `"Error interno del backend."`,
+  to match the task-mandated fixed catalog string).
 
 Existing suites updated only where the constructor surface genuinely grew (additive
-`@Nullable` parameters): `SystemDiagnosticsServiceTest` (constructor now takes 9 params).
-No test's *assertions* about existing behavior changed — only signatures.
+`@Nullable` parameters) or a fixed message gained the task-mandated trailing period:
+`SystemDiagnosticsServiceTest` (constructor now takes 9 params),
+`ApiExceptionHandlerContractTest`/`ApiExceptionHandlerTest` (message text). No test's
+*functional* assertions about auth/roles/bootstrap/activation/studies/assets/review/the
+multiplanar contract/the presenter changed.
 
 ## 19. Limitations — honest, not to be oversold
 
@@ -413,11 +642,14 @@ No test's *assertions* about existing behavior changed — only signatures.
 Frontend, AI Module, Railway/GCP infrastructure, the multiplanar contract (v1 or v2),
 `schema pfi.multiplanar-run.v2`, the sagittal/axial models, hashes, manifests,
 measurements, quality gates, study persistence, `raw_*` semantics,
-`humanReviewRequired`, `notClinicalDiagnosis`. Verified via `git status`/`git diff`
-scope (only `config/`, `config/error/`, `auth/AuthFilter.java`,
-`auth/AdminAccountProtectedException.java`-adjacent files were touched, plus
-`service/` audit/metrics/review/diagnostics files and `client/AiServiceClient.java`) and
-by the full pre-existing test suite (351 tests from P10-A.2.2) staying green unchanged.
+`humanReviewRequired`, `notClinicalDiagnosis`. Verified via `git status`/`git diff` scope
+and by the full pre-existing test suite (351 tests from P10-A.2.2, then 414 after P10-B)
+staying functionally green — P10-B.1 touched `config/`, `config/error/`,
+`auth/AuthFilter.java`, `auth/AuthService.java` (activation audit only),
+`controller/AiMultiplanarController.java` (one audit action string), `service/`
+audit/metrics/review/diagnostics files, `client/AiServiceClient.java`, and
+`client/AiMultiplanarV2ErrorCodeMapper.java` — no controller route, DTO shape, or
+persistence schema changed.
 
 ## 22. Rollback
 
@@ -425,8 +657,9 @@ Every change is additive or a narrowing of an existing surface, and there is no 
 migration:
 
 - `ApiErrorWriter`/`ApiErrorCode`/`ApiErrorResponse`/`SafeLogSanitizer`/
-  `OperationalMetricsService`/`AuditAction` are all new files — deleting them and
-  reverting their few call sites restores the P10-A.2.2 behavior exactly.
+  `OperationalMetricsService`/`AuditAction`/`DiagnosticsSanitizer` (P10-B.1) are all new
+  files — deleting them and reverting their few call sites restores the prior behavior
+  exactly.
 - Every new constructor dependency added to an existing class (`AuthFilter`,
   `CorsResponseFilter`, `TraceIdFilter`, `ApiExceptionHandler`, `AuditService`,
   `AiServiceClient`, `RunReviewService`, `SystemDiagnosticsService`) is either
@@ -435,6 +668,11 @@ migration:
 - No data was migrated, no table was altered, no environment variable is newly
   *required* (all new behavior activates automatically once `OperationalMetricsService`
   is on the classpath — there is no new required config).
+- P10-B.1 specifically: `ApiErrorCode.publicMessage()` and `DiagnosticsSanitizer` are pure
+  functions with no state; `AiMultiplanarV2ErrorCodeMapper.Mapped.backendCode()` changing
+  type from `String` to `ApiErrorCode` is a package-private, non-breaking change (the
+  class itself is `final class` inside the `client` package, never exposed publicly) — a
+  revert of just the P10-B.1 commit is independent of the P10-B commit beneath it.
 
 ## 23. Evidence of tests
 
@@ -444,10 +682,31 @@ $env:Path = "$env:JAVA_HOME\bin;$env:Path"
 mvn clean test
 ```
 
-**BUILD SUCCESS. Total tests: 414, Failures: 0, Errors: 0** (was 351 at P10-A.2.2; +63
-new tests, 0 removed, 0 behavior-changing modifications to pre-existing test
-assertions — only additive `@Nullable` constructor-signature updates in
-`SystemDiagnosticsServiceTest`). Compiled with `--release 17` (unchanged `pom.xml`),
-executed on Temurin 21 per the task's instruction (`JAVA_HOME` must point at a JDK 21
-install — Mockito's inline mock maker cannot instrument classes under a JDK 25
-`JAVA_HOME`, a pre-existing environment caveat carried over from P10-A.2.2, not new here).
+**BUILD SUCCESS. Total tests: 454, Failures: 0, Errors: 0, ~58s** (was 351 at P10-A.2.2,
+414 after P10-B; +40 new tests in this P10-B.1 pass, 0 removed). Behavior-changing
+modifications to pre-existing test assertions were limited to exactly two: the
+`"Error interno del backend"` → `"Error interno del backend."` message-text update
+(`ApiExceptionHandlerContractTest`, `ApiExceptionHandlerTest`) and the additive
+`@Nullable`-only `SystemDiagnosticsServiceTest` constructor-arity assertion from P10-B.
+No auth/roles/bootstrap/activation/study/asset/review/contract-v1/contract-v2/presenter
+assertion changed. Compiled with `--release 17` (unchanged `pom.xml`), executed on
+Temurin 21 per the task's instruction (`JAVA_HOME` must point at a JDK 21 install —
+Mockito's inline mock maker cannot instrument classes under a JDK 25 `JAVA_HOME`, a
+pre-existing environment caveat, not new here; Docker Desktop must also be running for
+the Testcontainers-backed Postgres suites).
+
+### Pending risks (honest, not resolved in this pass)
+
+- `RUN_REVIEW_ERROR` and `AI_TIMEOUT` remain in the `ApiErrorCode` catalog as
+  reserved/historical entries that no current code path emits — harmless, but worth
+  removing in a future cleanup pass if they're confirmed to stay permanently dead.
+- `REVIEW_SAVED`/most of the `AuditAction` catalog is still unconsumed by production code
+  (only `PROFESSIONAL_ACTIVATED`/`PROFESSIONAL_DEACTIVATED`/`AI_RUN_FAILED` were migrated
+  this pass) — `RunReviewService`'s own audit event (`"review.updated"`) is asserted by
+  literal string in two existing tests and was deliberately left alone rather than forcing
+  an unplanned rename/compatibility-shim decision.
+- `DiagnosticsSanitizer`'s key blocklist is exact-match, not pattern-based — a future
+  upstream field named e.g. `"internalHost"` would **not** be caught by key name alone
+  (though its *value*, if it looks like a host/URL/path, still would be, via
+  `SafeLogSanitizer.isSensitive`). This is a deliberate precision-over-recall tradeoff
+  after the `reportCount`/`port` false-positive found during development.

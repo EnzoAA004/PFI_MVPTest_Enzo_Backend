@@ -109,6 +109,56 @@ class AuditServiceSanitizationTest {
     }
 
     @Test
+    void emailAttemptedAsEntityIdIsNeverPersisted() {
+        StudyRepository repository = mock(StudyRepository.class);
+        when(repository.saveAuditEvent(org.mockito.ArgumentMatchers.any()))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+        AuditService service = new AuditService(repository);
+
+        var result = service.record("actor-1", "PROFESSIONAL_ACTIVATED", "synthetic.doctor@hospital.example", "trace-1", Map.of());
+
+        assertEquals("[redacted]", result.entityId());
+        assertFalse(result.entityId().contains("@"));
+    }
+
+    @Test
+    void pathLikeActorIsRedactedRatherThanPersistedVerbatim() {
+        StudyRepository repository = mock(StudyRepository.class);
+        when(repository.saveAuditEvent(org.mockito.ArgumentMatchers.any()))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+        AuditService service = new AuditService(repository);
+
+        var result = service.record("C:\\Users\\someone\\secret", "ACCESS_DENIED", "entity-1", "trace-1", Map.of());
+
+        assertEquals("[redacted]", result.actor());
+    }
+
+    @Test
+    void unsafeActionCharactersAreStrippedNotPersistedVerbatim() {
+        StudyRepository repository = mock(StudyRepository.class);
+        when(repository.saveAuditEvent(org.mockito.ArgumentMatchers.any()))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+        AuditService service = new AuditService(repository);
+
+        var result = service.record("actor-1", "weird action; DROP TABLE audit;--", "entity-1", "trace-1", Map.of());
+
+        assertFalse(result.action().contains(";"));
+        assertFalse(result.action().contains(" "));
+    }
+
+    @Test
+    void oversizedTraceIdIsCappedAtNinetySixCharacters() {
+        StudyRepository repository = mock(StudyRepository.class);
+        when(repository.saveAuditEvent(org.mockito.ArgumentMatchers.any()))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+        AuditService service = new AuditService(repository);
+
+        var result = service.record("actor-1", "SOME_ACTION", "entity-1", "a".repeat(200), Map.of());
+
+        assertTrue(result.traceId().length() <= 96);
+    }
+
+    @Test
     void recordSucceedsAndPersistsSanitizedMetadataWhenRepositoryWorks() {
         StudyRepository repository = mock(StudyRepository.class);
         when(repository.saveAuditEvent(org.mockito.ArgumentMatchers.any()))

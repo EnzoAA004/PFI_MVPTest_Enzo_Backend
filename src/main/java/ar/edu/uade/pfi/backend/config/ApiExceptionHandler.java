@@ -2,6 +2,7 @@ package ar.edu.uade.pfi.backend.config;
 
 import ar.edu.uade.pfi.backend.auth.AdminAccountProtectedException;
 import ar.edu.uade.pfi.backend.auth.LastAdminProtectionException;
+import ar.edu.uade.pfi.backend.config.error.ApiErrorCode;
 import ar.edu.uade.pfi.backend.config.error.ApiErrorWriter;
 import ar.edu.uade.pfi.backend.service.AiContractViolationException;
 import ar.edu.uade.pfi.backend.service.AiMultiplanarContractViolationException;
@@ -57,30 +58,47 @@ public class ApiExceptionHandler {
         this.apiErrorWriter = new ApiErrorWriter(new ObjectMapper());
     }
 
+    /**
+     * A ResponseStatusException's own reason string is backend-authored at every current
+     * call site (audited for P10-B.1 §2 — none interpolate upstream/user-controlled
+     * content), but is still run through SafeLogSanitizer as defense in depth for 4xx,
+     * and is never trusted at all for 5xx — a fixed catalog message is used there
+     * instead, matching every other 5xx handler in this class (P10-B.1 §1).
+     */
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<Map<String, Object>> handleResponseStatusException(ResponseStatusException ex, HttpServletRequest request) {
         HttpStatus status = HttpStatus.valueOf(ex.getStatusCode().value());
-        return buildError(status, codeForStatus(status), safeMessage(ex.getReason(), status), request, ex);
+        String code = codeForStatus(status);
+        String message = status.is5xxServerError()
+            ? ApiErrorCode.fromCode(code).publicMessage()
+            : safeMessage(SafeLogSanitizer.sanitizeMessage(ex.getReason()), status);
+        return buildError(status, code, message, request, ex);
     }
 
     @ExceptionHandler(AiContractViolationException.class)
     public ResponseEntity<Map<String, Object>> handleAiContractViolation(AiContractViolationException ex, HttpServletRequest request) {
-        return buildError(HttpStatus.BAD_GATEWAY, "AI_CONTRACT_VIOLATION", safeMessage(ex.getMessage(), HttpStatus.BAD_GATEWAY), request, ex);
+        return buildError(HttpStatus.BAD_GATEWAY, "AI_CONTRACT_VIOLATION", ApiErrorCode.AI_CONTRACT_VIOLATION.publicMessage(), request, ex);
     }
 
     @ExceptionHandler(AiMultiplanarContractViolationException.class)
     public ResponseEntity<Map<String, Object>> handleAiMultiplanarContractViolation(AiMultiplanarContractViolationException ex, HttpServletRequest request) {
-        return buildError(HttpStatus.BAD_GATEWAY, "AI_MULTIPLANAR_CONTRACT_VIOLATION", safeMessage(ex.getMessage(), HttpStatus.BAD_GATEWAY), request, ex);
+        return buildError(HttpStatus.BAD_GATEWAY, "AI_MULTIPLANAR_CONTRACT_VIOLATION", ApiErrorCode.AI_MULTIPLANAR_CONTRACT_VIOLATION.publicMessage(), request, ex);
     }
 
+    /**
+     * AiServiceClient already constructs this exception with a fixed catalog message
+     * (P10-B.1 §3) — this handler re-derives the message from {@code ex.code()} anyway,
+     * rather than trusting {@code ex.getMessage()} directly, so a future call site that
+     * forgets that discipline still can't leak upstream text through here.
+     */
     @ExceptionHandler(AiMultiplanarUpstreamException.class)
     public ResponseEntity<Map<String, Object>> handleAiMultiplanarUpstream(AiMultiplanarUpstreamException ex, HttpServletRequest request) {
-        return buildError(ex.status(), ex.code(), safeMessage(ex.getMessage(), ex.status()), request, ex);
+        return buildError(ex.status(), ex.code(), ApiErrorCode.fromCode(ex.code()).publicMessage(), request, ex);
     }
 
     @ExceptionHandler(DatabaseUnavailableException.class)
     public ResponseEntity<Map<String, Object>> handleDatabaseUnavailable(DatabaseUnavailableException ex, HttpServletRequest request) {
-        return buildError(HttpStatus.SERVICE_UNAVAILABLE, "DATABASE_UNAVAILABLE", safeMessage(ex.getMessage(), HttpStatus.SERVICE_UNAVAILABLE), request, ex);
+        return buildError(HttpStatus.SERVICE_UNAVAILABLE, "DATABASE_UNAVAILABLE", ApiErrorCode.DATABASE_UNAVAILABLE.publicMessage(), request, ex);
     }
 
     @ExceptionHandler(StudyNotFoundException.class)
@@ -160,7 +178,7 @@ public class ApiExceptionHandler {
      */
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<Map<String, Object>> handleRuntime(RuntimeException ex, HttpServletRequest request) {
-        return buildError(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "Error interno del backend", request, ex);
+        return buildError(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", ApiErrorCode.INTERNAL_ERROR.publicMessage(), request, ex);
     }
 
     private ResponseEntity<Map<String, Object>> buildError(
@@ -190,7 +208,7 @@ public class ApiExceptionHandler {
      */
     private void logError(HttpStatus status, String code, String traceId, HttpServletRequest request, Exception ex, boolean retryable) {
         String exceptionType = ex.getClass().getSimpleName();
-        String category = ar.edu.uade.pfi.backend.config.error.ApiErrorCode.fromCode(code).category().name();
+        String category = ApiErrorCode.fromCode(code).category().name();
         String line = "event=api_error traceId={} code={} category={} status={} method={} path={} exceptionType={} retryable={}";
         Object[] args = {traceId, code, category, status.value(), request.getMethod(), request.getRequestURI(), exceptionType, retryable};
         if (status.is5xxServerError()) {
@@ -204,6 +222,15 @@ public class ApiExceptionHandler {
         }
     }
 
+    /**
+     * P10-B.1 §13: AI_MULTIPLANAR_CONTRACT_VIOLATION is deliberately NOT counted here —
+     * AiServiceClient is the single authority for that code (it's the only place that can
+     * see the full HTTP+adapter+validator pipeline for a multiplanar run and increment
+     * exactly once), so counting it again here would double-count every such violation.
+     * AI_CONTRACT_VIOLATION (the older, single-plane/pipeline path, raised from
+     * AiBackendService rather than AiServiceClient) has no other counter, so it stays
+     * here.
+     */
     private void recordMetrics(HttpStatus status, String code) {
         if (metrics == null) return;
         if (status == HttpStatus.UNAUTHORIZED) {
@@ -212,7 +239,7 @@ public class ApiExceptionHandler {
             metrics.incrementAuthorizationDenials();
         } else if ("DATABASE_UNAVAILABLE".equals(code)) {
             metrics.incrementDatabaseUnavailable();
-        } else if ("AI_CONTRACT_VIOLATION".equals(code) || "AI_MULTIPLANAR_CONTRACT_VIOLATION".equals(code)) {
+        } else if ("AI_CONTRACT_VIOLATION".equals(code)) {
             metrics.incrementAiContractViolations();
         }
     }

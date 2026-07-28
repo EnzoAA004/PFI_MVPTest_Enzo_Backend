@@ -2,7 +2,9 @@ package ar.edu.uade.pfi.backend.client;
 
 import ar.edu.uade.pfi.backend.config.AiMultiplanarContractVersion;
 import ar.edu.uade.pfi.backend.config.AiServiceProperties;
+import ar.edu.uade.pfi.backend.config.SafeLogSanitizer;
 import ar.edu.uade.pfi.backend.config.TraceIdFilter;
+import ar.edu.uade.pfi.backend.config.error.ApiErrorCode;
 import ar.edu.uade.pfi.backend.domain.CanonicalMultiplanarRun;
 import ar.edu.uade.pfi.backend.dto.AiInputResponseDto;
 import ar.edu.uade.pfi.backend.dto.AiMultiplanarV2RequestDto;
@@ -19,16 +21,17 @@ import ar.edu.uade.pfi.backend.service.OperationalMetricsService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.util.LinkedHashMap;
-import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.MultipartBodyBuilder;
@@ -44,15 +47,22 @@ import reactor.core.publisher.Mono;
 /**
  * The only HTTP client for the AI Module. Never sends the user's JWT/refresh token,
  * email, or roles — this call is backend-to-AI-Module, not a passthrough of the
- * frontend's own credentials. Every call carries the current request's X-Trace-Id (read
- * from MDC, set by TraceIdFilter) so a support engineer can correlate a single
- * frontend→backend→AI-Module round trip by one id — see
- * docs/P10_B_ERRORS_AUDIT_OBSERVABILITY.md §9. For a background/non-HTTP-request process
- * with nothing in MDC, no header is sent rather than inventing one that would look like a
- * request-scoped id it isn't.
+ * frontend's own credentials. Every call carries an X-Trace-Id header: the current
+ * request's trace id (read from MDC, set by TraceIdFilter) when there is one, or a
+ * freshly generated {@code technical-<uuid>} — resolved once per call, never stored
+ * globally, never leaked across threads — for a background/non-HTTP-request process with
+ * nothing in MDC. See docs/P10_B_ERRORS_AUDIT_OBSERVABILITY.md §9/§14.
+ *
+ * P10-B.1: never builds a public exception message by concatenating the upstream
+ * response body, an unwrapped exception's own message, a WebClientResponseException
+ * body, or a host/URL — every public message here comes from
+ * {@link ApiErrorCode#publicMessage()}. The upstream body is only ever used to
+ * deserialize {@link AiStructuredErrorV2Dto} (the v2 structured-error contract); when it
+ * isn't structured, it is discarded entirely — not even its length is logged unsanitized.
  */
 @Component
 public class AiServiceClient implements AiServiceOperations {
+    private static final Logger log = LoggerFactory.getLogger(AiServiceClient.class);
     private static final ParameterizedTypeReference<Map<String, Object>> MAP_RESPONSE = new ParameterizedTypeReference<>() {};
 
     private final WebClient aiWebClient;
@@ -103,12 +113,26 @@ public class AiServiceClient implements AiServiceOperations {
         this.metrics = metrics;
     }
 
-    /** Every AI Module call carries the current request's trace id as a header — see class docs. */
-    private void applyTraceHeader(HttpHeaders headers) {
+    /**
+     * Current request's trace id from MDC, or a fresh {@code technical-<uuid>} — resolved
+     * once by the caller and reused for the whole logical call (header + v2 body, where
+     * applicable). Never written back to MDC — this is a per-call local value only.
+     */
+    private String resolveTraceId() {
         String traceId = MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY);
         if (traceId != null && !traceId.isBlank()) {
-            headers.set(TraceIdFilter.TRACE_ID_HEADER, traceId);
+            return traceId;
         }
+        return "technical-" + UUID.randomUUID();
+    }
+
+    /** Every AI Module call carries a trace id header — see class docs and {@link #resolveTraceId()}. */
+    private void applyTraceHeader(HttpHeaders headers) {
+        headers.set(TraceIdFilter.TRACE_ID_HEADER, resolveTraceId());
+    }
+
+    private void applyTraceHeader(HttpHeaders headers, String traceId) {
+        headers.set(TraceIdFilter.TRACE_ID_HEADER, traceId);
     }
 
     @Override
@@ -140,7 +164,7 @@ public class AiServiceClient implements AiServiceOperations {
         return execute(() -> aiWebClient.post()
             .uri(uriBuilder -> uriBuilder.path("/models/sync").queryParam("force", force).build())
             .headers(this::applyTraceHeader)
-            .exchangeToMono(response -> mapResponseOrError(response, "models/sync"))
+            .exchangeToMono(response -> mapResponseOrError(response))
             .block(timeout));
     }
 
@@ -151,12 +175,13 @@ public class AiServiceClient implements AiServiceOperations {
 
     @Override
     public Map<String, Object> runPipeline(PipelineRunRequestDto request) {
-        PipelineRunRequestDto tracedRequest = withTraceMetadata(request);
+        String traceId = resolveTraceId();
+        PipelineRunRequestDto tracedRequest = withTraceMetadata(request, traceId);
         return execute(() -> aiWebClient.post()
             .uri("/pipeline/run")
-            .headers(this::applyTraceHeader)
+            .headers(headers -> applyTraceHeader(headers, traceId))
             .bodyValue(tracedRequest)
-            .exchangeToMono(response -> mapResponseOrError(response, "pipeline/run"))
+            .exchangeToMono(response -> mapResponseOrError(response))
             .block(timeout));
     }
 
@@ -190,7 +215,7 @@ public class AiServiceClient implements AiServiceOperations {
                 if (status == 403 || status == 404) {
                     return response.releaseBody().then(Mono.error(new ResponseStatusException(response.statusCode(), "AI Module asset request failed")));
                 }
-                return response.createException().flatMap(Mono::error);
+                return response.releaseBody().then(Mono.error(upstreamUnavailable()));
             })
             .block(timeout));
     }
@@ -208,73 +233,99 @@ public class AiServiceClient implements AiServiceOperations {
             : runMultiplanarV1(request);
     }
 
+    /**
+     * A call only counts as {@code aiCallsSucceeded} once the whole logical operation —
+     * HTTP, deserialization, adapter, contract validation — has completed and produced a
+     * usable canonical result (P10-B.1 §12). An HTTP 200 with an invalid contract is a
+     * failure, not a success; recorded exactly once, whichever stage throws.
+     */
     private CanonicalMultiplanarRun runMultiplanarV1(MultiplanarRunRequestDto request) {
-        MultiplanarRunRequestDto tracedRequest = withTraceMetadata(request);
-        MultiplanarRunResponseDto response = execute(() -> aiWebClient.post()
-            .uri("/multiplanar/run")
-            .headers(this::applyTraceHeader)
-            .bodyValue(tracedRequest)
-            .exchangeToMono(clientResponse -> {
-                if (clientResponse.statusCode().is2xxSuccessful()) {
-                    return clientResponse.bodyToMono(MultiplanarRunResponseDto.class);
-                }
-                if (clientResponse.statusCode().is4xxClientError()) {
-                    return clientResponse.bodyToMono(String.class)
-                        .defaultIfEmpty("Multiplanar run rejected by AI Module")
-                        .flatMap(body -> Mono.error(new ResponseStatusException(clientResponse.statusCode(), compactMessage(body))));
-                }
-                return clientResponse.createException().flatMap(Mono::error);
-            })
-            .block(timeout));
-        v1StrictValidator.validate(tracedRequest, response);
-        return v1ResponseAdapter.toCanonical(response);
+        String traceId = resolveTraceId();
+        MultiplanarRunRequestDto tracedRequest = withTraceMetadata(request, traceId);
+        long startedAt = System.currentTimeMillis();
+        try {
+            MultiplanarRunResponseDto response = executeHttp(() -> aiWebClient.post()
+                .uri("/multiplanar/run")
+                .headers(headers -> applyTraceHeader(headers, traceId))
+                .bodyValue(tracedRequest)
+                .exchangeToMono(clientResponse -> {
+                    if (clientResponse.statusCode().is2xxSuccessful()) {
+                        return clientResponse.bodyToMono(MultiplanarRunResponseDto.class);
+                    }
+                    if (clientResponse.statusCode().is4xxClientError()) {
+                        return clientResponse.releaseBody().then(Mono.error(
+                            new ResponseStatusException(clientResponse.statusCode(), "El modulo de IA rechazo la solicitud multiplanar.")));
+                    }
+                    return clientResponse.releaseBody().then(Mono.error(upstreamUnavailable()));
+                })
+                .block(timeout));
+            v1StrictValidator.validate(tracedRequest, response);
+            CanonicalMultiplanarRun canonical = v1ResponseAdapter.toCanonical(response);
+            recordAiCall(true, startedAt);
+            return canonical;
+        } catch (RuntimeException ex) {
+            recordAiCall(false, startedAt);
+            if (ex instanceof AiMultiplanarContractViolationException) {
+                incrementContractViolations();
+            }
+            throw ex;
+        }
     }
 
     private CanonicalMultiplanarRun runMultiplanarV2(MultiplanarRunRequestDto request) {
-        String traceId = MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY);
-        AiMultiplanarV2RequestDto v2Request = v2RequestMapper.toV2Request(request, traceId);
+        String traceId = resolveTraceId();
+        long startedAt = System.currentTimeMillis();
         try {
+            AiMultiplanarV2RequestDto v2Request = v2RequestMapper.toV2Request(request, traceId);
             TraceIdConsistencyGuard.require(v2Request.traceId(), traceId);
-        } catch (AiMultiplanarContractViolationException ex) {
-            if (metrics != null) metrics.incrementAiContractViolations();
+
+            AiMultiplanarV2ResponseDto response = dispatchV2Http(() -> aiWebClient.post()
+                .uri("/v2/multiplanar/run")
+                .headers(headers -> applyTraceHeader(headers, traceId))
+                .bodyValue(v2Request)
+                .exchangeToMono(clientResponse -> {
+                    if (clientResponse.statusCode().is2xxSuccessful()) {
+                        return clientResponse.bodyToMono(AiMultiplanarV2ResponseDto.class);
+                    }
+                    return clientResponse.bodyToMono(String.class)
+                        .defaultIfEmpty("")
+                        .flatMap(body -> Mono.error(buildV2Error(body, traceId)));
+                })
+                .block(timeout), traceId);
+
+            CanonicalMultiplanarRun canonical = v2ResponseAdapter.toCanonical(response);
+            v2StrictValidator.validate(request, canonical);
+            recordAiCall(true, startedAt);
+            return canonical;
+        } catch (RuntimeException ex) {
+            recordAiCall(false, startedAt);
+            if (ex instanceof AiMultiplanarContractViolationException) {
+                incrementContractViolations();
+            }
             throw ex;
         }
-
-        AiMultiplanarV2ResponseDto response = executeV2(() -> aiWebClient.post()
-            .uri("/v2/multiplanar/run")
-            .headers(headers -> {
-                if (traceId != null && !traceId.isBlank()) {
-                    headers.set(TraceIdFilter.TRACE_ID_HEADER, traceId);
-                }
-            })
-            .bodyValue(v2Request)
-            .exchangeToMono(clientResponse -> {
-                if (clientResponse.statusCode().is2xxSuccessful()) {
-                    return clientResponse.bodyToMono(AiMultiplanarV2ResponseDto.class);
-                }
-                return clientResponse.bodyToMono(String.class)
-                    .defaultIfEmpty("")
-                    .flatMap(body -> Mono.error(buildV2Error(clientResponse.statusCode(), body, traceId)));
-            })
-            .block(timeout), traceId);
-
-        CanonicalMultiplanarRun canonical = v2ResponseAdapter.toCanonical(response);
-        v2StrictValidator.validate(request, canonical);
-        return canonical;
     }
 
-    private RuntimeException buildV2Error(HttpStatusCode originalStatus, String body, String traceId) {
+    private void incrementContractViolations() {
+        if (metrics != null) metrics.incrementAiContractViolations();
+    }
+
+    /**
+     * Only ever deserializes the upstream body into {@link AiStructuredErrorV2Dto} — the
+     * raw body/message is never copied into the public exception. Technical details
+     * (structured code, upstream trace id) are kept only as internal fields on the
+     * resulting exception; the public message always comes from
+     * {@link ApiErrorCode#publicMessage()} via {@link AiMultiplanarV2ErrorCodeMapper}.
+     */
+    private RuntimeException buildV2Error(String body, String traceId) {
         AiStructuredErrorV2Dto structured = tryParseStructuredError(body);
-        if (structured != null && structured.code() != null && !structured.code().isBlank()) {
-            AiMultiplanarV2ErrorCodeMapper.Mapped mapped = AiMultiplanarV2ErrorCodeMapper.resolve(structured.code());
-            String message = structured.message() == null || structured.message().isBlank()
-                ? "AI Module (v2) rejected the multiplanar request"
-                : compactMessage(structured.message());
-            String aiTraceId = structured.traceId() == null || structured.traceId().isBlank() ? traceId : structured.traceId();
-            return new AiMultiplanarUpstreamException(mapped.status(), mapped.backendCode(), message, aiTraceId);
-        }
-        AiMultiplanarV2ErrorCodeMapper.Mapped unknown = AiMultiplanarV2ErrorCodeMapper.UNKNOWN;
-        return new AiMultiplanarUpstreamException(unknown.status(), unknown.backendCode(), "AI Module (v2) respondio con un error no estructurado (status " + originalStatus.value() + ")", traceId);
+        AiMultiplanarV2ErrorCodeMapper.Mapped mapped = structured != null && structured.code() != null && !structured.code().isBlank()
+            ? AiMultiplanarV2ErrorCodeMapper.resolve(structured.code())
+            : AiMultiplanarV2ErrorCodeMapper.UNKNOWN;
+        String aiTraceId = structured != null && structured.traceId() != null && !structured.traceId().isBlank()
+            ? structured.traceId()
+            : traceId;
+        return new AiMultiplanarUpstreamException(mapped.status(), mapped.backendCode().name(), mapped.publicMessage(), aiTraceId);
     }
 
     private AiStructuredErrorV2Dto tryParseStructuredError(String body) {
@@ -326,37 +377,28 @@ public class AiServiceClient implements AiServiceOperations {
         return execute(() -> aiWebClient.get().uri(path).headers(this::applyTraceHeader).retrieve().bodyToMono(MAP_RESPONSE).block(timeout));
     }
 
-    private Mono<Map<String, Object>> mapResponseOrError(org.springframework.web.reactive.function.client.ClientResponse response, String operation) {
+    /** Never surfaces the upstream body — a rejection just carries a fixed, safe public message. */
+    private Mono<Map<String, Object>> mapResponseOrError(org.springframework.web.reactive.function.client.ClientResponse response) {
         if (response.statusCode().is2xxSuccessful()) {
             return response.bodyToMono(MAP_RESPONSE);
         }
         if (response.statusCode().is4xxClientError()) {
-            return response.bodyToMono(String.class)
-                .defaultIfEmpty(operation + " rejected by AI Module")
-                .flatMap(body -> Mono.error(new ResponseStatusException(response.statusCode(), compactMessage(body))));
+            return response.releaseBody().then(Mono.error(
+                new ResponseStatusException(response.statusCode(), "La solicitud enviada al modulo de IA es invalida.")));
         }
-        return response.bodyToMono(String.class)
-            .defaultIfEmpty(operation + " failed in AI Module")
-            .flatMap(body -> Mono.error(new ResponseStatusException(
-                HttpStatus.BAD_GATEWAY,
-                "AI Module responded with status " + response.statusCode().value() + ": " + compactMessage(body)
-            )));
+        return response.releaseBody().then(Mono.error(upstreamUnavailable()));
     }
 
-    private PipelineRunRequestDto withTraceMetadata(PipelineRunRequestDto request) {
-        String traceId = MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY);
-        if (traceId == null || traceId.isBlank()) {
-            return request;
-        }
+    private ResponseStatusException upstreamUnavailable() {
+        return new ResponseStatusException(HttpStatus.BAD_GATEWAY, ApiErrorCode.UPSTREAM_UNAVAILABLE.publicMessage());
+    }
+
+    private PipelineRunRequestDto withTraceMetadata(PipelineRunRequestDto request, String traceId) {
         Map<String, Object> metadata = mergedTraceMetadata(request.metadata(), traceId);
         return new PipelineRunRequestDto(request.caseId(), request.plane(), request.modelKey(), request.inputPath(), request.inputId(), metadata);
     }
 
-    private MultiplanarRunRequestDto withTraceMetadata(MultiplanarRunRequestDto request) {
-        String traceId = MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY);
-        if (traceId == null || traceId.isBlank()) {
-            return request;
-        }
+    private MultiplanarRunRequestDto withTraceMetadata(MultiplanarRunRequestDto request, String traceId) {
         Map<String, Object> metadata = mergedTraceMetadata(request.metadata(), traceId);
         return new MultiplanarRunRequestDto(
             request.caseId(),
@@ -382,6 +424,7 @@ public class AiServiceClient implements AiServiceOperations {
         return metadata;
     }
 
+    /** Simple calls (health/models/assets/...) — the HTTP call itself is the whole logical operation, so success/failure is recorded automatically around it. */
     private <T> T execute(Supplier<T> supplier) {
         long startedAt = System.currentTimeMillis();
         try {
@@ -394,27 +437,31 @@ public class AiServiceClient implements AiServiceOperations {
         }
     }
 
-    private <T> T executeV2(Supplier<T> supplier, String traceId) {
-        long startedAt = System.currentTimeMillis();
+    /** Like {@link #execute}, but without metric recording — used inside {@link #runMultiplanarV1}, which records around the full HTTP+validate+adapt pipeline instead. */
+    private <T> T executeHttp(Supplier<T> supplier) {
         try {
-            T result = supplier.get();
-            recordAiCall(true, startedAt);
-            return result;
+            return supplier.get();
         } catch (RuntimeException ex) {
-            recordAiCall(false, startedAt);
+            throw translateException(ex);
+        }
+    }
+
+    /** Like {@link #executeHttp}, for the v2 dispatch — metric recording happens once, around the full pipeline, in {@link #runMultiplanarV2}. */
+    private <T> T dispatchV2Http(Supplier<T> supplier, String traceId) {
+        try {
+            return supplier.get();
+        } catch (RuntimeException ex) {
             Throwable unwrapped = Exceptions.unwrap(ex);
             if (unwrapped instanceof AiMultiplanarUpstreamException upstream) {
                 throw upstream;
             }
             if (unwrapped instanceof AiMultiplanarContractViolationException contractViolation) {
-                if (metrics != null) metrics.incrementAiContractViolations();
                 throw contractViolation;
             }
             if (isTimeout(unwrapped)) {
-                throw new AiMultiplanarUpstreamException(HttpStatus.GATEWAY_TIMEOUT, "AI_MODULE_TIMEOUT", "AI Module (v2) no respondio a tiempo", traceId);
+                throw new AiMultiplanarUpstreamException(HttpStatus.GATEWAY_TIMEOUT, ApiErrorCode.AI_MODULE_TIMEOUT.name(), ApiErrorCode.AI_MODULE_TIMEOUT.publicMessage(), traceId);
             }
-            String message = unwrapped.getMessage() == null ? "unknown error" : compactMessage(unwrapped.getMessage());
-            throw new AiMultiplanarUpstreamException(HttpStatus.BAD_GATEWAY, "AI_MODULE_ERROR", "AI Module (v2) no esta disponible: " + message, traceId);
+            throw new AiMultiplanarUpstreamException(HttpStatus.BAD_GATEWAY, ApiErrorCode.AI_MODULE_ERROR.name(), ApiErrorCode.AI_MODULE_ERROR.publicMessage(), traceId);
         }
     }
 
@@ -424,27 +471,35 @@ public class AiServiceClient implements AiServiceOperations {
     }
 
     private boolean isTimeout(Throwable unwrapped) {
-        return unwrapped instanceof TimeoutException
-            || compactMessage(unwrapped.getMessage() == null ? "" : unwrapped.getMessage()).toLowerCase(Locale.ROOT).contains("timeout");
+        return unwrapped instanceof TimeoutException;
     }
 
+    /**
+     * Translates a transport-level failure to a {@link ResponseStatusException} carrying
+     * only a fixed public message — never the upstream response body, an unwrapped
+     * exception's own message, a host, or a URL. A sanitized, DEBUG-only technical line
+     * is logged separately for troubleshooting.
+     */
     public ResponseStatusException translateException(RuntimeException ex) {
         Throwable unwrapped = Exceptions.unwrap(ex);
         if (unwrapped instanceof ResponseStatusException responseStatusException) {
             return responseStatusException;
         }
-        if (unwrapped instanceof WebClientResponseException responseException) {
-            return new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI Module responded with status " + responseException.getStatusCode().value(), responseException);
+        logTechnicalDetail(unwrapped);
+        if (unwrapped instanceof WebClientResponseException) {
+            return upstreamUnavailable();
         }
-        if (unwrapped instanceof TimeoutException || compactMessage(unwrapped.getMessage() == null ? "" : unwrapped.getMessage()).toLowerCase().contains("timeout")) {
-            return new ResponseStatusException(HttpStatus.GATEWAY_TIMEOUT, "AI Module request timed out", unwrapped);
+        if (isTimeout(unwrapped)) {
+            return new ResponseStatusException(HttpStatus.GATEWAY_TIMEOUT, ApiErrorCode.AI_MODULE_TIMEOUT.publicMessage(), unwrapped);
         }
-        String message = unwrapped.getMessage() == null ? "unknown error" : compactMessage(unwrapped.getMessage());
-        return new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI Module is not available: " + message, unwrapped);
+        return new ResponseStatusException(HttpStatus.BAD_GATEWAY, ApiErrorCode.UPSTREAM_UNAVAILABLE.publicMessage(), unwrapped);
     }
 
-    private String compactMessage(String value) {
-        String oneLine = value.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ').trim();
-        return oneLine.length() > 180 ? oneLine.substring(0, 180) + "..." : oneLine;
+    /** DEBUG-only, sanitized — never at the default log level, never in a response body. */
+    private void logTechnicalDetail(Throwable unwrapped) {
+        if (!log.isDebugEnabled()) return;
+        log.debug("event=ai_module_call_failed exceptionType={} message={}",
+            unwrapped.getClass().getSimpleName(),
+            SafeLogSanitizer.sanitizeMessage(unwrapped.getMessage()));
     }
 }

@@ -110,4 +110,69 @@ class SafeLogSanitizerTest {
         assertFalse(SafeLogSanitizer.isSensitive(null));
         assertFalse(SafeLogSanitizer.isSensitive(""));
     }
+
+    // ---- P10-B.1 additions ----
+
+    @Test
+    void redactsAnyHttpUrl() {
+        assertTrue(SafeLogSanitizer.isSensitive("http://synthetic-ai-module.example:8000/health"));
+        assertTrue(SafeLogSanitizer.isSensitive("https://synthetic-ai-module.example/models"));
+    }
+
+    @Test
+    void redactsLocalhostVariants() {
+        assertTrue(SafeLogSanitizer.isSensitive("localhost:8000"));
+        assertTrue(SafeLogSanitizer.isSensitive("connection refused to 127.0.0.1:5432"));
+        assertTrue(SafeLogSanitizer.isSensitive("bound to 0.0.0.0:8080"));
+    }
+
+    @Test
+    void redactsDockerAndCloudflareHosts() {
+        assertTrue(SafeLogSanitizer.isSensitive("host.docker.internal:8000"));
+        assertTrue(SafeLogSanitizer.isSensitive("synthetic-tunnel-name.trycloudflare.com"));
+    }
+
+    @Test
+    void redactsInternalHosts() {
+        assertTrue(SafeLogSanitizer.isSensitive("ai-module.internal"));
+        assertTrue(SafeLogSanitizer.isSensitive("db-primary.internal:5432"));
+    }
+
+    @Test
+    void redactsPrivateIpv4Addresses() {
+        assertTrue(SafeLogSanitizer.isSensitive("10.0.4.12"));
+        assertTrue(SafeLogSanitizer.isSensitive("172.20.0.5:5432"));
+        assertTrue(SafeLogSanitizer.isSensitive("192.168.1.50"));
+    }
+
+    @Test
+    void redactsFullQueryStringsInSanitizeMessage() {
+        String message = "request failed for /api/studies?caseId=CASE-1&reviewer=synthetic-reviewer";
+        String sanitized = SafeLogSanitizer.sanitizeMessage(message);
+        assertFalse(sanitized.contains("caseId=CASE-1"));
+        assertFalse(sanitized.contains("reviewer=synthetic-reviewer"));
+    }
+
+    @Test
+    void redactsGenericLinuxInternalPaths() {
+        assertTrue(SafeLogSanitizer.isSensitive("/var/lib/synthetic-app/data.bin"));
+        assertTrue(SafeLogSanitizer.isSensitive("/opt/synthetic-app/config.yml"));
+        assertTrue(SafeLogSanitizer.isSensitive("/home/synthetic-user/case.dcm"));
+    }
+
+    @Test
+    void redactsJdbcUrlEvenWithoutExplicitCredentials() {
+        String jdbc = "jdbc:postgresql://synthetic-db-host.internal:5432/pfi_db";
+        assertTrue(SafeLogSanitizer.isSensitive(jdbc));
+        assertEquals(SafeLogSanitizer.REDACTED, SafeLogSanitizer.redactValue(jdbc));
+    }
+
+    @Test
+    void sanitizeMessageRedactsPrivateHostMentionsButKeepsSurroundingText() {
+        String message = "Upstream call to https://synthetic-ai.trycloudflare.com/v2/multiplanar/run failed after retry";
+        String sanitized = SafeLogSanitizer.sanitizeMessage(message);
+        assertFalse(sanitized.contains("synthetic-ai.trycloudflare.com"));
+        assertTrue(sanitized.contains("Upstream call"));
+        assertTrue(sanitized.contains("failed after retry"));
+    }
 }

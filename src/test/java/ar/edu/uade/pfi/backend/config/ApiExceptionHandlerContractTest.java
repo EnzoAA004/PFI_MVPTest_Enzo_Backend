@@ -74,7 +74,7 @@ class ApiExceptionHandlerContractTest {
             .andExpect(status().isInternalServerError())
             .andExpect(jsonPath("$.code").value("INTERNAL_ERROR"))
             .andExpect(jsonPath("$.category").value("INTERNAL"))
-            .andExpect(jsonPath("$.message").value("Error interno del backend"))
+            .andExpect(jsonPath("$.message").value("Error interno del backend."))
             .andExpect(result -> {
                 String body = result.getResponse().getContentAsString();
                 if (body.contains("jdbc:postgresql://synthetic_user:synthetic_pw@internal-db")) {

@@ -6,6 +6,8 @@ import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.RegisterRequest;
 import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.SettingsRequest;
 import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.TokenResponse;
 import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.UserResponse;
+import ar.edu.uade.pfi.backend.config.TraceIdFilter;
+import ar.edu.uade.pfi.backend.service.AuditAction;
 import ar.edu.uade.pfi.backend.service.AuditService;
 import java.security.SecureRandom;
 import java.time.Duration;
@@ -18,6 +20,7 @@ import java.util.UUID;
 import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 import jakarta.annotation.PostConstruct;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
@@ -261,17 +264,17 @@ public class AuthService {
         if (account.roles() != null && account.roles().contains("ADMIN")) {
             throw new AdminAccountProtectedException();
         }
-        return activated ? activate(account) : deactivate(account);
+        return activated ? activate(claims, account) : deactivate(claims, account);
     }
 
-    private ProfessionalActivationResponse activate(DoctorAccount account) {
+    private ProfessionalActivationResponse activate(TokenService.Claims claims, DoctorAccount account) {
         List<String> targetRoles = List.of("DOCTOR", "REVIEWER");
         postgresAuthStore.updateProfessionalActivation(account.email(), true, true, targetRoles);
         account.verify();
         account.approve(true);
         accountsByEmail.put(account.email(), account);
         invalidateChallengesFor(account.email());
-        auditActivation(account.email(), "PROFESSIONAL_ACTIVATED");
+        auditActivation(claims, account, AuditAction.PROFESSIONAL_ACTIVATED, true);
         return new ProfessionalActivationResponse(account.email(), "activated", true, true, targetRoles);
     }
 
@@ -282,7 +285,7 @@ public class AuthService {
      * successfully, so a failure never leaves the account looking deactivated locally
      * while Postgres still has it active (or vice versa).
      */
-    private ProfessionalActivationResponse deactivate(DoctorAccount account) {
+    private ProfessionalActivationResponse deactivate(TokenService.Claims claims, DoctorAccount account) {
         if (isLastNonDemoAdmin(account)) {
             throw new LastAdminProtectionException();
         }
@@ -292,7 +295,7 @@ public class AuthService {
         accountsByEmail.put(account.email(), account);
         refreshTokens.values().removeIf(account.email()::equals);
         invalidateChallengesFor(account.email());
-        auditActivation(account.email(), "PROFESSIONAL_DEACTIVATED");
+        auditActivation(claims, account, AuditAction.PROFESSIONAL_DEACTIVATED, false);
         return new ProfessionalActivationResponse(account.email(), "deactivated", account.verified(), false, targetRoles);
     }
 
@@ -339,18 +342,23 @@ public class AuthService {
     }
 
     /**
-     * entityId carries the normalized email (the "subject técnico" for this event, per
-     * the existing audit convention of using entityId as the resource identifier);
-     * metadata is intentionally minimal because AuditService.sanitize() drops any key
-     * containing "email" entirely, so putting it in metadata would silently lose it.
+     * P10-B.1 §9: actorId/entityId are technical UUIDs, never an email — {@code
+     * claims.subject()} is the acting ADMIN's account id (post-revalidation, since
+     * {@code claims} here always comes from an already-authenticated/authorized caller),
+     * {@code account.id()} is the target account's id. traceId comes from the current
+     * request's MDC (set by TraceIdFilter), not an empty string. AuditService.record()
+     * is itself fail-safe (never throws), so no try/catch is needed here.
      */
-    private void auditActivation(String email, String action) {
+    private void auditActivation(TokenService.Claims claims, DoctorAccount account, AuditAction action, boolean activated) {
         if (auditService == null) return;
-        try {
-            auditService.record("backend-admin", action, email, "", Map.of("result", "success"));
-        } catch (RuntimeException ignored) {
-            // Authorization/activation result must not depend on audit persistence availability.
-        }
+        String traceId = MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY);
+        auditService.record(
+            claims.subject(),
+            action.name(),
+            account.id(),
+            traceId,
+            Map.of("entityType", "professional_account", "outcome", "success", "activated", activated)
+        );
     }
 
     /**

@@ -27,14 +27,26 @@ public final class SafeLogSanitizer {
 
     private static final Pattern BEARER_TOKEN = Pattern.compile("(?i)\\bBearer\\s+[A-Za-z0-9._~+/=-]+");
     private static final Pattern JWT = Pattern.compile("\\beyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]*\\b");
-    private static final Pattern JDBC_URL_WITH_CREDENTIALS = Pattern.compile(
-        "(?i)jdbc:[a-z0-9]+://[^\\s\"'/]*[:@][^\\s\"']*"
-    );
+    /** Any jdbc: URL, credentials or not — the driver/host/port/database name themselves are infra info. */
+    private static final Pattern JDBC_URL = Pattern.compile("(?i)jdbc:[a-z0-9]+://[^\\s\"']*");
     private static final Pattern URL_WITH_USERINFO = Pattern.compile(
         "(?i)\\b[a-z][a-z0-9+.-]*://[^\\s\"'/@]+:[^\\s\"'/@]+@[^\\s\"']*"
     );
+    /** Any http(s) URL at all — public or private, the point is a URL should never reach a log/body/audit verbatim. */
+    private static final Pattern HTTP_URL = Pattern.compile("(?i)\\bhttps?://[^\\s\"']+");
+    private static final Pattern LOCAL_OR_INTERNAL_HOST = Pattern.compile(
+        "(?i)\\b(localhost|127\\.0\\.0\\.1|0\\.0\\.0\\.0|host\\.docker\\.internal|[a-z0-9.-]*\\.trycloudflare\\.com|[a-z0-9.-]+\\.internal)\\b(?::\\d+)?"
+    );
+    /** RFC 1918 private IPv4 ranges: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16. */
+    private static final Pattern PRIVATE_IPV4 = Pattern.compile(
+        "\\b(?:10(?:\\.\\d{1,3}){3}|172\\.(?:1[6-9]|2\\d|3[01])(?:\\.\\d{1,3}){2}|192\\.168(?:\\.\\d{1,3}){2})(?::\\d+)?\\b"
+    );
     private static final Pattern WINDOWS_PATH = Pattern.compile("[A-Za-z]:\\\\[^\\s\"']*");
     private static final Pattern TMP_OR_APP_PATH = Pattern.compile("(?<![\\w./])(?:/tmp|/app)(?:/[^\\s\"']*)?");
+    /** Common Linux system directories, when they look like an absolute internal path (at least one more segment). */
+    private static final Pattern LINUX_INTERNAL_PATH = Pattern.compile(
+        "(?<![\\w./])(?:/var|/opt|/home|/etc|/usr|/srv|/data|/mnt|/root)/[^\\s\"']+"
+    );
     private static final Pattern QUERY_STRING = Pattern.compile("\\?[A-Za-z0-9_.\\-]+=[^\\s\"']*(?:&[A-Za-z0-9_.\\-]+=[^\\s\"']*)*");
     private static final Pattern EMAIL = Pattern.compile("\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\b");
     private static final Pattern KEY_VALUE_SECRET = Pattern.compile(
@@ -45,8 +57,8 @@ public final class SafeLogSanitizer {
     );
 
     private static final Pattern[] WHOLE_VALUE_SENSITIVE_PATTERNS = {
-        BEARER_TOKEN, JWT, JDBC_URL_WITH_CREDENTIALS, URL_WITH_USERINFO,
-        WINDOWS_PATH, TMP_OR_APP_PATH, KEY_VALUE_SECRET, EMAIL, MEDICAL_FILENAME
+        BEARER_TOKEN, JWT, JDBC_URL, URL_WITH_USERINFO, HTTP_URL, LOCAL_OR_INTERNAL_HOST, PRIVATE_IPV4,
+        WINDOWS_PATH, TMP_OR_APP_PATH, LINUX_INTERNAL_PATH, KEY_VALUE_SECRET, EMAIL, MEDICAL_FILENAME
     };
 
     private SafeLogSanitizer() {
@@ -74,11 +86,15 @@ public final class SafeLogSanitizer {
         String result = message;
         result = BEARER_TOKEN.matcher(result).replaceAll(REDACTED);
         result = JWT.matcher(result).replaceAll(REDACTED);
-        result = JDBC_URL_WITH_CREDENTIALS.matcher(result).replaceAll(REDACTED);
+        result = JDBC_URL.matcher(result).replaceAll(REDACTED);
         result = URL_WITH_USERINFO.matcher(result).replaceAll(REDACTED);
+        result = HTTP_URL.matcher(result).replaceAll(REDACTED);
+        result = LOCAL_OR_INTERNAL_HOST.matcher(result).replaceAll(REDACTED);
+        result = PRIVATE_IPV4.matcher(result).replaceAll(REDACTED);
         result = KEY_VALUE_SECRET.matcher(result).replaceAll(REDACTED);
         result = WINDOWS_PATH.matcher(result).replaceAll(REDACTED);
         result = TMP_OR_APP_PATH.matcher(result).replaceAll(REDACTED);
+        result = LINUX_INTERNAL_PATH.matcher(result).replaceAll(REDACTED);
         result = QUERY_STRING.matcher(result).replaceAll("");
         result = EMAIL.matcher(result).replaceAll(REDACTED);
         result = MEDICAL_FILENAME.matcher(result).replaceAll(REDACTED);

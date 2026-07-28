@@ -47,7 +47,7 @@ class ApiExceptionHandlerTest {
         mockMvc.perform(get("/boom/runtime").header(TraceIdFilter.TRACE_ID_HEADER, "demo-trace-500"))
             .andExpect(status().isInternalServerError())
             .andExpect(jsonPath("$.code").value("INTERNAL_ERROR"))
-            .andExpect(jsonPath("$.message").value("Error interno del backend"))
+            .andExpect(jsonPath("$.message").value("Error interno del backend."))
             .andExpect(jsonPath("$.traceId").value("demo-trace-500"));
     }
 

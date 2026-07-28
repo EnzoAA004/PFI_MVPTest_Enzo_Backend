@@ -138,9 +138,14 @@ public class SystemDiagnosticsService {
         );
     }
 
+    private static final String AI_MODULE_UNAVAILABLE_MESSAGE = "AI Module no disponible.";
+    private static final String READINESS_UNAVAILABLE_MESSAGE = "Readiness no disponible.";
+    private static final String EVIDENCE_UNAVAILABLE_MESSAGE = "Evidencia no disponible.";
+    private static final String MODELS_UNAVAILABLE_MESSAGE = "Modelos no disponibles.";
+
     public Map<String, Object> warmup() {
         try {
-            Map<String, Object> response = aiServiceClient.warmup();
+            Map<String, Object> response = DiagnosticsSanitizer.sanitize(aiServiceClient.warmup());
             Map<String, Object> readiness = safeReadiness();
             Map<String, Object> evidence = safeEvidenceSummary();
             Map<String, Object> result = new LinkedHashMap<>();
@@ -159,9 +164,9 @@ public class SystemDiagnosticsService {
             return Map.of(
                 "status", "degraded",
                 "checkedAt", Instant.now().toString(),
-                "aiModule", Map.of("available", false, "message", compact(ex.getMessage())),
-                "readiness", readinessUnavailable(compact(ex.getMessage())),
-                "evaluationEvidence", evidenceUnavailable(compact(ex.getMessage())),
+                "aiModule", Map.of("available", false, "message", AI_MODULE_UNAVAILABLE_MESSAGE),
+                "readiness", readinessUnavailable(READINESS_UNAVAILABLE_MESSAGE),
+                "evaluationEvidence", evidenceUnavailable(EVIDENCE_UNAVAILABLE_MESSAGE),
                 "contract", Map.of("status", "unavailable"),
                 "modelArtifacts", Map.of("status", "unavailable"),
                 "message", "AI Module warmup failed"
@@ -171,7 +176,7 @@ public class SystemDiagnosticsService {
 
     private Map<String, Object> checkAiModule() {
         try {
-            Map<String, Object> response = aiServiceClient.health();
+            Map<String, Object> response = DiagnosticsSanitizer.sanitize(aiServiceClient.health());
             Map<String, Object> readiness = safeReadiness();
             Map<String, Object> evidence = safeEvidenceSummary();
             Object models = safeModels();
@@ -193,11 +198,11 @@ public class SystemDiagnosticsService {
             result.put("available", false);
             result.put("status", "degraded");
             result.put("service", "pfi-ai-module");
-            result.put("readiness", readinessUnavailable(compact(ex.getMessage())));
-            result.put("evaluationEvidence", evidenceUnavailable(compact(ex.getMessage())));
+            result.put("readiness", readinessUnavailable(READINESS_UNAVAILABLE_MESSAGE));
+            result.put("evaluationEvidence", evidenceUnavailable(EVIDENCE_UNAVAILABLE_MESSAGE));
             result.put("contract", Map.of("status", "unavailable"));
             result.put("artifactSummary", Map.of("status", "unavailable"));
-            result.put("message", compact(ex.getMessage()));
+            result.put("message", AI_MODULE_UNAVAILABLE_MESSAGE);
             result.putAll(multiplanarContractDiagnostics());
             return result;
         }
@@ -219,20 +224,20 @@ public class SystemDiagnosticsService {
 
     private Map<String, Object> safeReadiness() {
         try {
-            return aiServiceClient.readiness();
+            return DiagnosticsSanitizer.sanitize(aiServiceClient.readiness());
         } catch (RuntimeException ex) {
-            return readinessUnavailable(compact(ex.getMessage()));
+            return readinessUnavailable(READINESS_UNAVAILABLE_MESSAGE);
         }
     }
 
     private Map<String, Object> safeEvidenceSummary() {
         try {
-            Map<String, Object> evidence = new LinkedHashMap<>(aiServiceClient.getEvaluationEvidence());
+            Map<String, Object> evidence = new LinkedHashMap<>(DiagnosticsSanitizer.sanitize(aiServiceClient.getEvaluationEvidence()));
             evidence.putIfAbsent("humanReviewRequired", true);
             evidence.putIfAbsent("notClinicalDiagnosis", true);
             return evidence;
         } catch (RuntimeException ex) {
-            return localEvidenceFallback(compact(ex.getMessage()));
+            return localEvidenceFallback(EVIDENCE_UNAVAILABLE_MESSAGE);
         }
     }
 
@@ -277,17 +282,13 @@ public class SystemDiagnosticsService {
         return result;
     }
 
+    @SuppressWarnings("unchecked")
     private Object safeModels() {
         try {
-            return aiServiceClient.models();
+            Object models = aiServiceClient.models();
+            return models instanceof Map ? DiagnosticsSanitizer.sanitize((Map<String, Object>) models) : models;
         } catch (RuntimeException ex) {
-            return Map.of("status", "degraded", "message", compact(ex.getMessage()));
+            return Map.of("status", "degraded", "message", MODELS_UNAVAILABLE_MESSAGE);
         }
-    }
-
-    private String compact(String value) {
-        if (value == null || value.isBlank()) return "unavailable";
-        String oneLine = value.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ').trim();
-        return oneLine.length() > 180 ? oneLine.substring(0, 180) + "..." : oneLine;
     }
 }

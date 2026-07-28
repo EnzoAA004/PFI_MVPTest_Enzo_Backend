@@ -1,7 +1,6 @@
 package ar.edu.uade.pfi.backend.client;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
-import static com.github.tomakehurst.wiremock.client.WireMock.anyRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.exactly;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
@@ -13,10 +12,15 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 
 import ar.edu.uade.pfi.backend.config.AiServiceProperties;
 import ar.edu.uade.pfi.backend.config.TraceIdFilter;
+import ar.edu.uade.pfi.backend.domain.CanonicalMultiplanarRun;
+import ar.edu.uade.pfi.backend.dto.MultiplanarRunRequestDto;
 import ar.edu.uade.pfi.backend.service.MultiplanarRealBaselineContractValidator;
 import ar.edu.uade.pfi.backend.service.MultiplanarV2RealBaselineValidator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
@@ -24,9 +28,14 @@ import org.slf4j.MDC;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 /**
- * P10-B §9/§18-C: every AI Module call carries the current request's X-Trace-Id, and
- * never carries the frontend's Authorization header, a JWT, or an email.
+ * P10-B §9/§18-C, extended in P10-B.1 §9/§14: every AI Module call carries an
+ * X-Trace-Id — the current request's trace id from MDC, or a freshly generated
+ * {@code technical-<uuid>} when there is none — and never carries the frontend's
+ * Authorization header, a JWT, an email, or roles. For the v2 contract, the body's
+ * {@code traceId} field always matches the header, MDC-derived or technical alike.
  */
 class AiTracePropagationTest {
     @RegisterExtension
@@ -93,12 +102,81 @@ class AiTracePropagationTest {
     }
 
     @Test
-    void noHeaderIsSentWhenThereIsNoCurrentTraceId() {
+    void technicalTraceIdIsSentWhenThereIsNoCurrentTraceId() {
         wireMock.stubFor(get(urlEqualTo("/health")).willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json").withBody("{\"status\":\"ok\"}")));
 
         client().health();
 
-        wireMock.verify(exactly(0), anyRequestedFor(urlEqualTo("/health")).withHeader(TraceIdFilter.TRACE_ID_HEADER, matching(".*")));
+        wireMock.verify(getRequestedFor(urlEqualTo("/health")).withHeader(TraceIdFilter.TRACE_ID_HEADER, matching("technical-.*")));
+    }
+
+    @Test
+    void eachCallWithoutMdcGetsItsOwnFreshTechnicalTraceId() {
+        wireMock.stubFor(get(urlEqualTo("/health")).willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json").withBody("{\"status\":\"ok\"}")));
+        AiServiceClient client = client();
+
+        client.health();
+        client.health();
+
+        java.util.List<String> traceIds = wireMock.findAll(getRequestedFor(urlEqualTo("/health")))
+            .stream().map(request -> request.getHeader(TraceIdFilter.TRACE_ID_HEADER)).toList();
+        assertTrue(traceIds.size() == 2 && !traceIds.get(0).equals(traceIds.get(1)));
+    }
+
+    @Test
+    void v2CallWithoutMdcUsesTheSameTechnicalTraceIdInBodyAndHeader() throws Exception {
+        String v2Json = Files.readString(Path.of("src/test/resources/contracts/ai-module-multiplanar-v2-real-baseline.json"));
+        wireMock.stubFor(post(urlEqualTo("/v2/multiplanar/run")).willReturn(aResponse()
+            .withStatus(200).withHeader("Content-Type", "application/json").withBody(v2Json)));
+
+        CanonicalMultiplanarRun canonical = v2Client().runMultiplanar(strictSagittalOnlyRequest());
+
+        // TraceIdConsistencyGuard would have thrown AiMultiplanarContractViolationException
+        // if the v2 request body's traceId and the X-Trace-Id header ever disagreed — a
+        // successful, non-throwing call already proves they matched. Confirm the header
+        // itself is a technical id (no MDC was set for this test).
+        assertTrue(canonical != null);
+        wireMock.verify(postRequestedFor(urlEqualTo("/v2/multiplanar/run")).withHeader(TraceIdFilter.TRACE_ID_HEADER, matching("technical-.*")));
+    }
+
+    @Test
+    void aiCallsNeverCarryJwtEmailOrRolesHeaders() {
+        wireMock.stubFor(get(urlEqualTo("/health")).willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json").withBody("{\"status\":\"ok\"}")));
+        MDC.put(TraceIdFilter.TRACE_ID_MDC_KEY, "trace-no-auth-1");
+
+        client().health();
+
+        wireMock.verify(exactly(0), getRequestedFor(urlEqualTo("/health")).withHeader("Authorization", matching(".*")));
+        wireMock.verify(exactly(0), getRequestedFor(urlEqualTo("/health")).withHeader("X-User-Email", matching(".*")));
+        wireMock.verify(exactly(0), getRequestedFor(urlEqualTo("/health")).withHeader("X-User-Roles", matching(".*")));
+    }
+
+    private MultiplanarRunRequestDto strictSagittalOnlyRequest() {
+        return new MultiplanarRunRequestDto(
+            "P9A-SPIDER-101-T2",
+            "inp_2822bf9640ab40a289050a30ce2fe6fd",
+            null,
+            null,
+            null,
+            "sagittal_spider",
+            "axial_t2_alkafri",
+            false,
+            Map.of("inferenceMode", "real_baseline")
+        );
+    }
+
+    private AiServiceClient v2Client() {
+        WebClient webClient = WebClient.builder().baseUrl(wireMock.baseUrl()).build();
+        return new AiServiceClient(
+            webClient,
+            new AiServiceProperties(wireMock.baseUrl(), 10, "v2"),
+            new AiMultiplanarV2RequestMapper(),
+            new AiMultiplanarV2ResponseAdapter(objectMapper),
+            new AiMultiplanarV1ResponseAdapter(),
+            new MultiplanarRealBaselineContractValidator(),
+            new MultiplanarV2RealBaselineValidator(),
+            objectMapper
+        );
     }
 
     private AiServiceClient client() {

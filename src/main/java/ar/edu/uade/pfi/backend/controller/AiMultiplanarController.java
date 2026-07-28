@@ -167,7 +167,7 @@ public class AiMultiplanarController {
 
     private void auditStrictFailure(MultiplanarRunRequestDto request, String message) {
         if (auditService == null || !strictnessClassifier.isStrict(request)) return;
-        auditService.record("backend", "multiplanar.real_baseline.failed", request.caseId(), traceId(request), Map.of(
+        auditService.record("backend", ar.edu.uade.pfi.backend.service.AuditAction.AI_RUN_FAILED.name(), request.caseId(), traceId(request), Map.of(
             "caseId", request.caseId(),
             "traceId", traceId(request),
             "sagittalInputIdPresent", request.sagittalInputId() != null,
