@@ -203,6 +203,22 @@ public class AiServiceClient implements AiServiceOperations {
     }
 
     @Override
+    public Map<String, Object> uploadStudy(MultipartFile file, String caseId) {
+        MultipartBodyBuilder body = new MultipartBodyBuilder();
+        body.part("file", file.getResource())
+            .filename(file.getOriginalFilename() == null ? "study.zip" : file.getOriginalFilename());
+        body.part("caseId", caseId);
+        return execute(() -> aiWebClient.post()
+            .uri("/inputs/study")
+            .contentType(MediaType.MULTIPART_FORM_DATA)
+            .headers(this::applyTraceHeader)
+            .bodyValue(body.build())
+            .retrieve()
+            .bodyToMono(MAP_RESPONSE)
+            .block(timeout));
+    }
+
+    @Override
     public ResponseEntity<byte[]> getAsset(String runId, String plane, String assetName) {
         return execute(() -> aiWebClient.get()
             .uri(uriBuilder -> uriBuilder.path("/assets/{runId}/{plane}/{assetName}").build(runId, plane, assetName))
