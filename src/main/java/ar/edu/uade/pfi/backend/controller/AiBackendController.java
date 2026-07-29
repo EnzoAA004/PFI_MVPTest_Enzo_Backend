@@ -94,6 +94,14 @@ public class AiBackendController {
         return aiBackendService.uploadInput(file, caseId, plane);
     }
 
+    @PostMapping(value = "/studies", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Map<String, Object> uploadStudy(
+        @RequestParam("file") MultipartFile file,
+        @RequestParam String caseId
+    ) {
+        return aiBackendService.uploadStudy(file, caseId);
+    }
+
     @GetMapping("/assets/{runId}/{plane}/{assetName}")
     public ResponseEntity<byte[]> getAsset(
         @PathVariable String runId,

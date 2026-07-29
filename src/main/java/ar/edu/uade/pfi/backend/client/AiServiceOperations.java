@@ -31,6 +31,10 @@ public interface AiServiceOperations {
         throw new UnsupportedOperationException("input_upload_unavailable");
     }
 
+    default Map<String, Object> uploadStudy(MultipartFile file, String caseId) {
+        throw new UnsupportedOperationException("study_upload_unavailable");
+    }
+
     default ResponseEntity<byte[]> getAsset(String runId, String plane, String assetName) {
         throw new UnsupportedOperationException("asset_proxy_unavailable");
     }

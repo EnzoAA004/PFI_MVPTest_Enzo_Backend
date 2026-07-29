@@ -311,6 +311,18 @@ public class AiBackendService {
         return response;
     }
 
+    public Map<String, Object> uploadStudy(MultipartFile file, String caseId) {
+        String normalizedCaseId = trimmed(caseId);
+        validateStudyUpload(file, normalizedCaseId);
+        Map<String, Object> response = aiServiceClient.uploadStudy(file, normalizedCaseId);
+        audit("backend", "upload.study.completed", String.valueOf(response.getOrDefault("studyId", "")), "", Map.of(
+            "caseId", normalizedCaseId,
+            "hasSagittal", response.containsKey("sagittal"),
+            "hasAxial", response.containsKey("axial")
+        ));
+        return response;
+    }
+
     public ResponseEntity<byte[]> getAsset(String runId, String plane, String assetName) {
         String normalizedRunId = trimmed(runId);
         String normalizedPlane = normalized(plane);
@@ -489,6 +501,21 @@ public class AiBackendService {
         String extension = inputExtension(file.getOriginalFilename());
         if (!ALLOWED_INPUT_EXTENSIONS.contains(extension)) {
             throw badRequest("Formato de input invalido. Extensiones permitidas: .npy,.png,.jpg,.jpeg,.bmp,.tif,.tiff,.mha,.mhd,.dcm.");
+        }
+    }
+
+    private void validateStudyUpload(MultipartFile file, String caseId) {
+        if (file == null || file.isEmpty()) {
+            throw badRequest("El archivo del estudio es obligatorio y no puede estar vacio.");
+        }
+        if (caseId.isBlank()) {
+            throw badRequest("caseId es obligatorio.");
+        }
+        if (file.getSize() > MAX_INPUT_UPLOAD_BYTES) {
+            throw new MaxUploadSizeExceededException(MAX_INPUT_UPLOAD_BYTES);
+        }
+        if (!"zip".equals(inputExtension(file.getOriginalFilename()))) {
+            throw badRequest("El estudio debe subirse como archivo .zip con la serie DICOM.");
         }
     }
 
