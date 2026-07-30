@@ -14,15 +14,24 @@ import ar.edu.uade.pfi.backend.dto.ReviewStatusDto;
 import ar.edu.uade.pfi.backend.dto.ReviewUpdateRequestDto;
 import ar.edu.uade.pfi.backend.dto.RunReviewRequestDto;
 import ar.edu.uade.pfi.backend.dto.RunReviewResponseDto;
+import ar.edu.uade.pfi.backend.dto.StudyUploadInputDto;
+import ar.edu.uade.pfi.backend.dto.StudyUploadResponseDto;
+import ar.edu.uade.pfi.backend.dto.StudyUploadSeriesDto;
+import ar.edu.uade.pfi.backend.config.AiServiceProperties;
+import ar.edu.uade.pfi.backend.config.SafeLogSanitizer;
 import ar.edu.uade.pfi.backend.repository.StudyRepository;
 import ar.edu.uade.pfi.backend.util.ResponseNormalizer;
 import ar.edu.uade.pfi.backend.domain.RunArtifact;
 import ar.edu.uade.pfi.backend.domain.RunAssetContent;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Pattern;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
@@ -37,8 +46,11 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class AiBackendService {
     static final long MAX_INPUT_UPLOAD_BYTES = 200L * 1024L * 1024L;
+    static final long DEFAULT_STUDY_UPLOAD_BYTES = 200L * 1024L * 1024L;
     private static final Set<String> ALLOWED_INPUT_EXTENSIONS = Set.of("npy", "png", "jpg", "jpeg", "bmp", "tif", "tiff", "mha", "mhd", "dcm");
     private static final Set<String> ALLOWED_INPUT_PLANES = Set.of("sagittal", "axial");
+    private static final Set<String> ALLOWED_STUDY_CONTENT_TYPES = Set.of("", "application/zip", "application/x-zip-compressed", "application/octet-stream");
+    private static final Pattern CASE_ID_PATTERN = Pattern.compile("^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$");
     private static final Set<String> VALID_REVIEW_STATUSES = Set.of("pendiente", "aceptado", "observado", "descartado");
     private static final Set<String> FINAL_REVIEW_STATUSES = Set.of("aceptado", "observado", "descartado");
     private final AiServiceOperations aiServiceClient;
@@ -52,13 +64,14 @@ public class AiBackendService {
     private final RunAssetContentStorage assetContentStorage;
     private final RunAssetSnapshotService runAssetSnapshotService;
     private final RunReviewService runReviewService;
+    private final long studyUploadMaxBytes;
 
     public AiBackendService(AiServiceOperations aiServiceClient, ReviewStoreService reviewStoreService) {
-        this(aiServiceClient, reviewStoreService, null, null, null, null, null, null, (RunAssetContentStorage) null, null, null);
+        this(aiServiceClient, reviewStoreService, null, null, null, null, null, null, (RunAssetContentStorage) null, null, null, DEFAULT_STUDY_UPLOAD_BYTES);
     }
 
     public AiBackendService(AiServiceOperations aiServiceClient, ReviewStoreService reviewStoreService, AuditService auditService) {
-        this(aiServiceClient, reviewStoreService, auditService, null, null, null, null, null, (RunAssetContentStorage) null, null, null);
+        this(aiServiceClient, reviewStoreService, auditService, null, null, null, null, null, (RunAssetContentStorage) null, null, null, DEFAULT_STUDY_UPLOAD_BYTES);
     }
 
     public AiBackendService(
@@ -81,7 +94,8 @@ public class AiBackendService {
             null,
             (RunAssetContentStorage) null,
             null,
-            null
+            null,
+            DEFAULT_STUDY_UPLOAD_BYTES
         );
     }
 
@@ -97,7 +111,8 @@ public class AiBackendService {
         StudyRepository studyRepository,
         ObjectProvider<RunAssetContentStorage> assetContentStorageProvider,
         ObjectProvider<RunAssetSnapshotService> runAssetSnapshotServiceProvider,
-        ObjectProvider<RunReviewService> runReviewServiceProvider
+        ObjectProvider<RunReviewService> runReviewServiceProvider,
+        AiServiceProperties aiServiceProperties
     ) {
         this(
             aiServiceClient,
@@ -110,7 +125,8 @@ public class AiBackendService {
             studyRepository,
             assetContentStorageProvider.getIfAvailable(),
             runAssetSnapshotServiceProvider.getIfAvailable(),
-            runReviewServiceProvider.getIfAvailable()
+            runReviewServiceProvider.getIfAvailable(),
+            aiServiceProperties.resolvedStudyUploadMaxBytes()
         );
     }
 
@@ -127,6 +143,36 @@ public class AiBackendService {
         RunAssetSnapshotService runAssetSnapshotService,
         RunReviewService runReviewService
     ) {
+        this(
+            aiServiceClient,
+            reviewStoreService,
+            auditService,
+            pipelineRunRequestNormalizer,
+            sagittalContractValidator,
+            pipelineResponsePresenter,
+            modelReadinessResolver,
+            studyRepository,
+            assetContentStorage,
+            runAssetSnapshotService,
+            runReviewService,
+            DEFAULT_STUDY_UPLOAD_BYTES
+        );
+    }
+
+    public AiBackendService(
+        AiServiceOperations aiServiceClient,
+        ReviewStoreService reviewStoreService,
+        AuditService auditService,
+        PipelineRunRequestNormalizer pipelineRunRequestNormalizer,
+        SagittalRealBaselineContractValidator sagittalContractValidator,
+        AiPipelineResponsePresenter pipelineResponsePresenter,
+        AiModelReadinessResolver modelReadinessResolver,
+        StudyRepository studyRepository,
+        RunAssetContentStorage assetContentStorage,
+        RunAssetSnapshotService runAssetSnapshotService,
+        RunReviewService runReviewService,
+        long studyUploadMaxBytes
+    ) {
         this.aiServiceClient = aiServiceClient;
         this.reviewStoreService = reviewStoreService;
         this.auditService = auditService;
@@ -138,6 +184,7 @@ public class AiBackendService {
         this.assetContentStorage = assetContentStorage;
         this.runAssetSnapshotService = runAssetSnapshotService;
         this.runReviewService = runReviewService;
+        this.studyUploadMaxBytes = studyUploadMaxBytes <= 0 ? DEFAULT_STUDY_UPLOAD_BYTES : studyUploadMaxBytes;
     }
 
     public Map<String, Object> health() {
@@ -147,6 +194,8 @@ public class AiBackendService {
             response.put("backendStatus", "up");
             response.put("aiModuleAvailable", true);
             response.put("degradedMode", false);
+            response.put("studyUploadMaxBytes", studyUploadMaxBytes);
+            response.put("studyUploadAllowedContentTypes", allowedStudyContentTypes());
             return response;
         } catch (RuntimeException ex) {
             return Map.of(
@@ -154,6 +203,8 @@ public class AiBackendService {
                 "backendStatus", "up",
                 "aiModuleAvailable", false,
                 "degradedMode", true,
+                "studyUploadMaxBytes", studyUploadMaxBytes,
+                "studyUploadAllowedContentTypes", allowedStudyContentTypes(),
                 "humanReviewRequired", true,
                 "notClinicalDiagnosis", true,
                 "message", ex.getMessage()
@@ -310,16 +361,22 @@ public class AiBackendService {
         return response;
     }
 
-    public Map<String, Object> uploadStudy(MultipartFile file, String caseId) {
+    public StudyUploadResponseDto uploadStudy(MultipartFile file, String caseId) {
         String normalizedCaseId = trimmed(caseId);
         validateStudyUpload(file, normalizedCaseId);
-        Map<String, Object> response = aiServiceClient.uploadStudy(file, normalizedCaseId);
-        audit("backend", "upload.study.completed", String.valueOf(response.getOrDefault("studyId", "")), "", Map.of(
-            "caseId", normalizedCaseId,
-            "hasSagittal", response.containsKey("sagittal"),
-            "hasAxial", response.containsKey("axial")
+        Map<String, Object> response = normalizeForFrontend(aiServiceClient.uploadStudy(file, normalizedCaseId));
+        StudyUploadResponseDto publicResponse = toStudyUploadResponse(normalizedCaseId, response);
+        String traceId = text(response.get("traceId"));
+        audit("backend", "upload.study.completed", publicResponse.studyId(), traceId, Map.of(
+            "caseId", publicResponse.caseId(),
+            "studyId", publicResponse.studyId(),
+            "traceId", traceId,
+            "seriesCount", publicResponse.seriesFound().size(),
+            "planesDetected", detectedPlanes(publicResponse),
+            "hasSagittal", publicResponse.sagittal() != null,
+            "hasAxial", publicResponse.axial() != null
         ));
-        return response;
+        return publicResponse;
     }
 
     public ResponseEntity<byte[]> getAsset(String runId, String plane, String assetName) {
@@ -510,12 +567,165 @@ public class AiBackendService {
         if (caseId.isBlank()) {
             throw badRequest("caseId es obligatorio.");
         }
-        if (file.getSize() > MAX_INPUT_UPLOAD_BYTES) {
-            throw new MaxUploadSizeExceededException(MAX_INPUT_UPLOAD_BYTES);
+        if (!CASE_ID_PATTERN.matcher(caseId).matches()) {
+            throw badRequest("caseId invalido. Use solo letras, numeros, punto, guion, guion bajo o dos puntos; maximo 80 caracteres.");
+        }
+        if (file.getSize() > studyUploadMaxBytes) {
+            throw new MaxUploadSizeExceededException(studyUploadMaxBytes);
         }
         if (!"zip".equals(inputExtension(file.getOriginalFilename()))) {
             throw badRequest("El estudio debe subirse como archivo .zip con la serie DICOM.");
         }
+        String contentType = normalized(file.getContentType());
+        if (!ALLOWED_STUDY_CONTENT_TYPES.contains(contentType)) {
+            throw badRequest("Content-Type invalido para estudio ZIP. Use application/zip u application/octet-stream.");
+        }
+        if (!hasZipSignature(file)) {
+            throw badRequest("El archivo del estudio no parece un ZIP valido.");
+        }
+    }
+
+    private boolean hasZipSignature(MultipartFile file) {
+        byte[] header = new byte[4];
+        try (InputStream input = file.getInputStream()) {
+            int read = input.read(header);
+            return read == 4 && header[0] == 'P' && header[1] == 'K'
+                && (header[2] == 3 || header[2] == 5 || header[2] == 7)
+                && (header[3] == 4 || header[3] == 6 || header[3] == 8);
+        } catch (IOException ex) {
+            throw badRequest("No se pudo leer el archivo del estudio.");
+        }
+    }
+
+    private StudyUploadResponseDto toStudyUploadResponse(String fallbackCaseId, Map<String, Object> response) {
+        String caseId = firstText(response.get("caseId"), fallbackCaseId);
+        String studyId = text(response.get("studyId"));
+        StudyUploadInputDto sagittal = toStudyInput(response.get("sagittal"), "sagittal");
+        StudyUploadInputDto axial = toStudyInput(response.get("axial"), "axial");
+        List<StudyUploadSeriesDto> seriesFound = toStudySeriesList(response.get("seriesFound"));
+        if (seriesFound.isEmpty()) {
+            seriesFound = inferredSeries(sagittal, axial);
+        }
+        if (sagittal == null && axial == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "El modulo de IA no devolvio planos utilizables para el estudio.");
+        }
+        return new StudyUploadResponseDto(
+            caseId,
+            studyId,
+            List.copyOf(seriesFound),
+            sagittal,
+            axial,
+            toSafeWarnings(response.get("warnings")),
+            true,
+            true
+        );
+    }
+
+    private StudyUploadInputDto toStudyInput(Object value, String expectedPlane) {
+        Map<String, Object> map = objectMap(value);
+        if (map.isEmpty()) return null;
+        String plane = normalized(firstText(map.get("plane"), expectedPlane));
+        if (!ALLOWED_INPUT_PLANES.contains(plane)) {
+            return null;
+        }
+        String inputId = text(map.get("inputId"));
+        if (inputId.isBlank()) {
+            return null;
+        }
+        return new StudyUploadInputDto(
+            inputId,
+            plane,
+            publicText(map.get("format")),
+            numericLong(map.get("size")),
+            publicText(map.get("description")),
+            publicText(map.get("weighting")),
+            numericInteger(map.get("sliceCount"))
+        );
+    }
+
+    private List<StudyUploadSeriesDto> toStudySeriesList(Object value) {
+        if (!(value instanceof List<?> list)) return List.of();
+        List<StudyUploadSeriesDto> result = new ArrayList<>();
+        for (Object item : list) {
+            Map<String, Object> map = objectMap(item);
+            String plane = normalized(text(map.get("plane")));
+            if (!ALLOWED_INPUT_PLANES.contains(plane)) continue;
+            result.add(new StudyUploadSeriesDto(
+                plane,
+                publicText(map.get("description")),
+                publicText(map.get("weighting")),
+                numericInteger(map.get("sliceCount"))
+            ));
+        }
+        return result;
+    }
+
+    private List<StudyUploadSeriesDto> inferredSeries(StudyUploadInputDto sagittal, StudyUploadInputDto axial) {
+        List<StudyUploadSeriesDto> result = new ArrayList<>();
+        if (sagittal != null) {
+            result.add(new StudyUploadSeriesDto(sagittal.plane(), sagittal.description(), sagittal.weighting(), sagittal.sliceCount()));
+        }
+        if (axial != null) {
+            result.add(new StudyUploadSeriesDto(axial.plane(), axial.description(), axial.weighting(), axial.sliceCount()));
+        }
+        return result;
+    }
+
+    private List<String> toSafeWarnings(Object value) {
+        if (!(value instanceof List<?> list)) return List.of();
+        return list.stream()
+            .map(item -> SafeLogSanitizer.sanitizeMessage(text(item)))
+            .filter(warning -> !warning.isBlank())
+            .limit(10)
+            .toList();
+    }
+
+    private List<String> detectedPlanes(StudyUploadResponseDto response) {
+        List<String> planes = new ArrayList<>();
+        if (response.sagittal() != null) planes.add("sagittal");
+        if (response.axial() != null) planes.add("axial");
+        return planes;
+    }
+
+    private Map<String, Object> objectMap(Object value) {
+        if (!(value instanceof Map<?, ?> map)) return Map.of();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> typed = (Map<String, Object>) map;
+        return typed;
+    }
+
+    private long numericLong(Object value) {
+        if (value instanceof Number number) return number.longValue();
+        try {
+            return value == null ? 0L : Long.parseLong(value.toString());
+        } catch (NumberFormatException ex) {
+            return 0L;
+        }
+    }
+
+    private Integer numericInteger(Object value) {
+        if (value instanceof Number number) return number.intValue();
+        try {
+            return value == null ? null : Integer.parseInt(value.toString());
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private String firstText(Object value, String fallback) {
+        String text = text(value);
+        return text.isBlank() ? fallback : text;
+    }
+
+    private String publicText(Object value) {
+        String text = text(value);
+        if (text.isBlank()) return "";
+        String redacted = SafeLogSanitizer.redactValue(text);
+        return redacted == null ? "" : redacted;
+    }
+
+    private List<String> allowedStudyContentTypes() {
+        return ALLOWED_STUDY_CONTENT_TYPES.stream().filter(value -> !value.isBlank()).sorted().toList();
     }
 
     private String inputExtension(String originalFilename) {

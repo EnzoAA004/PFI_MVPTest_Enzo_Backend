@@ -16,6 +16,7 @@ import ar.edu.uade.pfi.backend.config.ApiExceptionHandler;
 import ar.edu.uade.pfi.backend.dto.AiInputResponseDto;
 import ar.edu.uade.pfi.backend.service.AiBackendService;
 import ar.edu.uade.pfi.backend.service.ReviewStoreService;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -103,6 +104,52 @@ class AiInputUploadControllerTest {
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.code").value("BAD_REQUEST"))
             .andExpect(jsonPath("$.message").value(containsString("Formato de input invalido")));
+    }
+
+    @Test
+    void uploadStudyReturnsTypedContractWithoutInternalIdentifiers() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+            "file",
+            "study.zip",
+            "application/zip",
+            new byte[] {'P', 'K', 3, 4, 1}
+        );
+        when(aiServiceClient.uploadStudy(any(), eq("CASE-001"))).thenReturn(java.util.Map.of(
+            "caseId", "CASE-001",
+            "studyId", "study-123",
+            "seriesFound", List.of(java.util.Map.of(
+                "plane", "sagittal",
+                "description", "Sag T2",
+                "weighting", "T2",
+                "sliceCount", 24,
+                "seriesInstanceUid", "1.2.840"
+            )),
+            "sagittal", java.util.Map.of(
+                "inputId", "input-sag",
+                "plane", "sagittal",
+                "format", "dcm",
+                "size", 42,
+                "description", "Sag T2",
+                "weighting", "T2",
+                "sliceCount", 24,
+                "path", "C:\\secret\\study"
+            )
+        ));
+
+        mockMvc.perform(multipart("/api/ai/studies")
+                .file(file)
+                .param("caseId", "CASE-001"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.caseId").value("CASE-001"))
+            .andExpect(jsonPath("$.studyId").value("study-123"))
+            .andExpect(jsonPath("$.sagittal.inputId").value("input-sag"))
+            .andExpect(jsonPath("$.seriesFound[0].plane").value("sagittal"))
+            .andExpect(jsonPath("$.seriesFound[0].seriesInstanceUid").doesNotExist())
+            .andExpect(jsonPath("$.sagittal.path").doesNotExist())
+            .andExpect(jsonPath("$.humanReviewRequired").value(true))
+            .andExpect(jsonPath("$.notClinicalDiagnosis").value(true))
+            .andExpect(content().string(not(containsString("C:\\"))))
+            .andExpect(content().string(not(containsString("1.2.840"))));
     }
 
     @Test

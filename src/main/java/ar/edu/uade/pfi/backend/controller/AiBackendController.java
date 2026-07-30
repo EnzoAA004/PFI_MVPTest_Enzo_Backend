@@ -11,6 +11,7 @@ import ar.edu.uade.pfi.backend.dto.ReviewExportResponseDto;
 import ar.edu.uade.pfi.backend.dto.ReviewSnapshotDto;
 import ar.edu.uade.pfi.backend.dto.ReviewStatusDto;
 import ar.edu.uade.pfi.backend.dto.ReviewUpdateRequestDto;
+import ar.edu.uade.pfi.backend.dto.StudyUploadResponseDto;
 import ar.edu.uade.pfi.backend.auth.RoleAuthorizationService;
 import ar.edu.uade.pfi.backend.service.AiBackendService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -95,7 +96,7 @@ public class AiBackendController {
     }
 
     @PostMapping(value = "/studies", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public Map<String, Object> uploadStudy(
+    public StudyUploadResponseDto uploadStudy(
         @RequestParam("file") MultipartFile file,
         @RequestParam String caseId
     ) {

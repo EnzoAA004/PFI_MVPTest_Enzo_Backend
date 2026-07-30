@@ -204,6 +204,7 @@ public class AiServiceClient implements AiServiceOperations {
 
     @Override
     public Map<String, Object> uploadStudy(MultipartFile file, String caseId) {
+        String traceId = resolveTraceId();
         MultipartBodyBuilder body = new MultipartBodyBuilder();
         body.part("file", file.getResource())
             .filename(file.getOriginalFilename() == null ? "study.zip" : file.getOriginalFilename());
@@ -211,10 +212,9 @@ public class AiServiceClient implements AiServiceOperations {
         return execute(() -> aiWebClient.post()
             .uri("/inputs/study")
             .contentType(MediaType.MULTIPART_FORM_DATA)
-            .headers(this::applyTraceHeader)
+            .headers(headers -> applyTraceHeader(headers, traceId))
             .bodyValue(body.build())
-            .retrieve()
-            .bodyToMono(MAP_RESPONSE)
+            .exchangeToMono(response -> mapStudyUploadResponseOrError(response, traceId))
             .block(timeout));
     }
 
@@ -401,6 +401,28 @@ public class AiServiceClient implements AiServiceOperations {
         if (response.statusCode().is4xxClientError()) {
             return response.releaseBody().then(Mono.error(
                 new ResponseStatusException(response.statusCode(), "La solicitud enviada al modulo de IA es invalida.")));
+        }
+        return response.releaseBody().then(Mono.error(upstreamUnavailable()));
+    }
+
+    private Mono<Map<String, Object>> mapStudyUploadResponseOrError(org.springframework.web.reactive.function.client.ClientResponse response, String fallbackTraceId) {
+        if (response.statusCode().is2xxSuccessful()) {
+            return response.toEntity(MAP_RESPONSE).map(entity -> {
+                Map<String, Object> body = new LinkedHashMap<>(entity.getBody() == null ? Map.of() : entity.getBody());
+                String upstreamTraceId = entity.getHeaders().getFirst(TraceIdFilter.TRACE_ID_HEADER);
+                body.put("traceId", upstreamTraceId == null || upstreamTraceId.isBlank() ? fallbackTraceId : upstreamTraceId);
+                return body;
+            });
+        }
+        HttpStatus status = HttpStatus.resolve(response.statusCode().value());
+        if (status == HttpStatus.BAD_REQUEST) {
+            return response.releaseBody().then(Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST, "El estudio enviado al modulo de IA es invalido.")));
+        }
+        if (status == HttpStatus.PAYLOAD_TOO_LARGE) {
+            return response.releaseBody().then(Mono.error(new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "El estudio supera el tamano maximo permitido.")));
+        }
+        if (status == HttpStatus.UNPROCESSABLE_ENTITY) {
+            return response.releaseBody().then(Mono.error(new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "El estudio no contiene planos utilizables.")));
         }
         return response.releaseBody().then(Mono.error(upstreamUnavailable()));
     }

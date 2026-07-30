@@ -27,6 +27,7 @@ services:
       PORT: 8000
       PFI_MODEL_DIR: /models/final
       PFI_OUTPUT_DIR: /app/outputs
+      PFI_MAX_UPLOAD_BYTES: ${PFI_AI_STUDY_UPLOAD_MAX_BYTES:-209715200}
     ports:
       - "${AI_MODULE_PORT:-8000}:8000"
     volumes:
@@ -51,6 +52,7 @@ services:
       DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-pfi_backend}?user=${POSTGRES_USER:-pfi}&password=${POSTGRES_PASSWORD:-change-me-local-only}
       PFI_AI_SERVICE_URL: http://ai-module:8000
       PFI_AI_TIMEOUT_SECONDS: ${PFI_AI_TIMEOUT_SECONDS:-180}
+      PFI_AI_STUDY_UPLOAD_MAX_BYTES: ${PFI_AI_STUDY_UPLOAD_MAX_BYTES:-209715200}
       PFI_AUTH_JWT_SECRET: ${PFI_AUTH_JWT_SECRET:-change-me-local-jwt-secret}
       PFI_CORS_ALLOWED_ORIGINS: ${PFI_CORS_ALLOWED_ORIGINS:-http://localhost:8088}
     ports:

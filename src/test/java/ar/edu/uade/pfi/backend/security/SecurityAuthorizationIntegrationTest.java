@@ -4,6 +4,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -22,6 +23,7 @@ import ar.edu.uade.pfi.backend.controller.StudyController;
 import ar.edu.uade.pfi.backend.controller.SystemController;
 import ar.edu.uade.pfi.backend.domain.CanonicalMultiplanarRun;
 import ar.edu.uade.pfi.backend.dto.StudyListResponseDto;
+import ar.edu.uade.pfi.backend.dto.StudyUploadResponseDto;
 import ar.edu.uade.pfi.backend.service.AiBackendService;
 import ar.edu.uade.pfi.backend.service.AuditService;
 import ar.edu.uade.pfi.backend.service.ProfessionalAccessAuditService;
@@ -41,6 +43,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -118,6 +121,14 @@ class SecurityAuthorizationIntegrationTest {
         }
 
         @Test
+        void studyUploadRequiresAuthentication() throws Exception {
+            mockMvc.perform(multipart("/api/ai/studies")
+                    .file(zipFile())
+                    .param("caseId", "CASE-1"))
+                .andExpect(status().isUnauthorized());
+        }
+
+        @Test
         void adminDiagnosticsRequiresAuthentication() throws Exception {
             mockMvc.perform(get("/api/system/diagnostics"))
                 .andExpect(status().isUnauthorized());
@@ -152,6 +163,15 @@ class SecurityAuthorizationIntegrationTest {
         }
 
         @Test
+        void studyUploadForbidden() throws Exception {
+            mockMvc.perform(multipart("/api/ai/studies")
+                    .file(zipFile())
+                    .param("caseId", "CASE-1")
+                    .header("Authorization", bearer(List.of("PENDING_APPROVAL"))))
+                .andExpect(status().isForbidden());
+        }
+
+        @Test
         void adminDiagnosticsForbidden() throws Exception {
             mockMvc.perform(get("/api/system/diagnostics").header("Authorization", bearer(List.of("PENDING_APPROVAL"))))
                 .andExpect(status().isForbidden());
@@ -176,6 +196,17 @@ class SecurityAuthorizationIntegrationTest {
                     .header("Authorization", bearer(List.of("DOCTOR")))
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("{\"caseId\":\"CASE-1\",\"sagittalInputId\":\"inp-1\"}"))
+                .andExpect(status().isOk());
+        }
+
+        @Test
+        void studyUploadAllowed() throws Exception {
+            when(aiBackendService.uploadStudy(any(), any())).thenReturn(new StudyUploadResponseDto(
+                "CASE-1", "study-1", List.of(), null, null, List.of(), true, true));
+            mockMvc.perform(multipart("/api/ai/studies")
+                    .file(zipFile())
+                    .param("caseId", "CASE-1")
+                    .header("Authorization", bearer(List.of("DOCTOR"))))
                 .andExpect(status().isOk());
         }
 
@@ -434,6 +465,10 @@ class SecurityAuthorizationIntegrationTest {
             Map.of(), Map.of(), Map.of(),
             new CanonicalMultiplanarRun.Governance(true, true, true, false)
         );
+    }
+
+    private MockMultipartFile zipFile() {
+        return new MockMultipartFile("file", "study.zip", "application/zip", new byte[] {'P', 'K', 3, 4, 1});
     }
 
     /** Builds a raw JWT with the same HS256 scheme as TokenService, for edge-case payloads TokenService itself never issues. */
