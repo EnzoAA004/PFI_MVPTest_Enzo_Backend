@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import ar.edu.uade.pfi.backend.domain.MeasurementCorrection;
 import ar.edu.uade.pfi.backend.domain.RunArtifact;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
@@ -138,6 +139,77 @@ class VolumeSliceCatalogServiceTest {
         assertEquals(List.of("slice-000.png", "slice-001.png", "slice-001-overlay.png"), assets.stream().map(asset -> asset.get("assetName")).toList());
         assertEquals(false, assets.get(0).get("generated"));
         assertEquals(true, assets.get(1).get("generated"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void validatesMeasurementAndLandmarkIdsAgainstPlaneResults() {
+        Map<String, Object> input = catalogInput(3, 1);
+        List<Map<String, Object>> slices = (List<Map<String, Object>>) input.get("slices");
+        slices.get(1).put("measurementIds", List.of("canalAreaMm2", "canalAreaMm2", "missingMeasurement"));
+        slices.get(1).put("landmarkIds", List.of("lm-canal", "lm-canal", "missingLandmark"));
+
+        Map<String, Object> normalized = service.normalizePlaneInput(
+            input,
+            "run-sag-vol",
+            "sagittal",
+            List.of(),
+            List.of(Map.of("id", "canalAreaMm2")),
+            List.of(Map.of("id", "lm-canal"))
+        );
+        List<Map<String, Object>> normalizedSlices = (List<Map<String, Object>>) normalized.get("slices");
+        Map<String, Object> selected = normalizedSlices.get(1);
+
+        assertEquals(true, selected.get("hasResults"));
+        assertEquals(List.of("canalAreaMm2"), selected.get("measurementIds"));
+        assertEquals(List.of("lm-canal"), selected.get("landmarkIds"));
+        assertEquals(List.of("canalAreaMm2"), selected.get("duplicateMeasurementIds"));
+        assertEquals(List.of("missingMeasurement"), selected.get("invalidMeasurementIds"));
+        assertEquals(List.of("lm-canal"), selected.get("duplicateLandmarkIds"));
+        assertEquals(List.of("missingLandmark"), selected.get("invalidLandmarkIds"));
+        assertEquals("degraded_inconsistent_result_references", selected.get("resultStatus"));
+        assertTrue(normalizedSlices.stream()
+            .filter(slice -> !slice.get("index").equals(1))
+            .allMatch(slice -> ((List<?>) slice.get("measurementIds")).isEmpty() && ((List<?>) slice.get("landmarkIds")).isEmpty()));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void publishesCorrectionsOnlyOnMatchingPlaneSliceAndMeasurement() {
+        Map<String, Object> input = catalogInput(3, 1);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> slices = (List<Map<String, Object>>) input.get("slices");
+        slices.get(1).put("measurementIds", List.of("canalAreaMm2"));
+        slices.get(1).put("landmarkIds", List.of("lm-canal"));
+        MeasurementCorrection correction = new MeasurementCorrection(
+            UUID.randomUUID().toString(),
+            UUID.randomUUID().toString(),
+            "canalAreaMm2",
+            "Area del canal",
+            Map.of("plane", "sagittal", "sliceIndex", 1, "aiValue", 82.4),
+            Map.of("plane", "sagittal", "sliceIndex", 1, "reviewerValue", 85.1),
+            "Ajuste profesional.",
+            Instant.parse("2026-07-30T12:30:00Z")
+        );
+
+        Map<String, Object> normalized = service.normalizePlaneInput(
+            input,
+            "run-sag-vol",
+            "sagittal",
+            List.of(),
+            List.of(Map.of("id", "canalAreaMm2")),
+            List.of(Map.of("id", "lm-canal")),
+            List.of(correction)
+        );
+        List<Map<String, Object>> normalizedSlices = (List<Map<String, Object>>) normalized.get("slices");
+        Map<String, Object> selected = normalizedSlices.get(1);
+        List<Map<String, Object>> corrections = (List<Map<String, Object>>) selected.get("corrections");
+
+        assertEquals(1, selected.get("correctionCount"));
+        assertEquals("canalAreaMm2", corrections.get(0).get("measurementId"));
+        assertEquals(85.1, ((Map<String, Object>) corrections.get(0).get("afterValue")).get("reviewerValue"));
+        assertFalse(normalizedSlices.get(0).containsKey("corrections"));
+        assertFalse(normalizedSlices.get(2).containsKey("corrections"));
     }
 
     private Map<String, Object> catalogInput(int count, int selectedIndex) {

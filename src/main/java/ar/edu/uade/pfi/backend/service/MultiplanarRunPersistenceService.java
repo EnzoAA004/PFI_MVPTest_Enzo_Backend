@@ -251,12 +251,20 @@ public class MultiplanarRunPersistenceService {
         snapshot.put("synthetic", plane.synthetic());
         putIfPresent(snapshot, "fallbackReason", plane.fallbackReason());
         snapshot.put("model", plane.model());
-        snapshot.put("input", plane.input());
+        List<Map<String, Object>> measurements = transformMeasurements(plane);
+        snapshot.put("input", volumeSliceCatalogService.normalizePlaneInput(
+            plane.input(),
+            plane.planeRunId(),
+            plane.plane(),
+            List.of(),
+            measurements,
+            plane.landmarks()
+        ));
         snapshot.put("coordinateSpace", plane.coordinateSpace());
         snapshot.put("series", plane.series());
         snapshot.put("masks", plane.masks());
         snapshot.put("landmarks", plane.landmarks());
-        snapshot.put("measurements", transformMeasurements(plane));
+        snapshot.put("measurements", measurements);
         snapshot.put("quality", plane.quality());
         snapshot.put("humanReviewRequired", governance.humanReviewRequired());
         snapshot.put("notClinicalDiagnosis", governance.notClinicalDiagnosis());

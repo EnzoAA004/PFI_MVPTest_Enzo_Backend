@@ -195,24 +195,29 @@ public class StudyWorklistService {
             true,
             DATA_ORIGIN_DATABASE
         );
-        Map<String, Object> canonicalRun = canonicalRun(study, run);
-        return new StudyRunDetailDto(summary, measurementsByPlane, artifactsByPlane, corrections, publishedMetricsSnapshot(run), canonicalRun);
+        Map<String, Object> canonicalRun = canonicalRun(study, run, corrections);
+        return new StudyRunDetailDto(summary, measurementsByPlane, artifactsByPlane, corrections, publishedMetricsSnapshot(run, corrections), canonicalRun);
     }
 
     @SuppressWarnings("unchecked")
     private Map<String, Object> publishedMetricsSnapshot(StudyRun run) {
+        return publishedMetricsSnapshot(run, repository.findCorrectionsByStudyRunId(run.id()));
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> publishedMetricsSnapshot(StudyRun run, List<MeasurementCorrection> corrections) {
         Map<String, Object> snapshot = new LinkedHashMap<>(run.metricsSnapshot());
         Object threeD = snapshot.get("threeD");
         if (threeD instanceof Map<?, ?> map) {
             snapshot.put("threeD", threeDAssetPublisher.publish(run.multiplanarRunId(), (Map<String, Object>) map));
         }
-        snapshot.put("planes", publishVolumeSlices(snapshot.getOrDefault("planes", Map.of()), run.artifacts()));
+        snapshot.put("planes", publishVolumeSlices(snapshot.getOrDefault("planes", Map.of()), run.artifacts(), corrections));
         return snapshot;
     }
 
     @SuppressWarnings("unchecked")
-    private Map<String, Object> canonicalRun(Study study, StudyRun run) {
-        Map<String, Object> snapshot = publishedMetricsSnapshot(run);
+    private Map<String, Object> canonicalRun(Study study, StudyRun run, List<MeasurementCorrection> corrections) {
+        Map<String, Object> snapshot = publishedMetricsSnapshot(run, corrections);
         Map<String, Object> canonical = new LinkedHashMap<>();
         canonical.put("schemaVersion", String.valueOf(snapshot.getOrDefault("sourceSchemaVersion", "pfi.backend-run-snapshot.v2")));
         canonical.put("runId", run.multiplanarRunId());
@@ -233,6 +238,7 @@ public class StudyWorklistService {
         review.put("reviewer", blankToNull(run.reviewer()));
         review.put("reviewedAt", run.reviewedAt() == null ? null : run.reviewedAt().toString());
         review.put("comments", blankToNull(run.comments()));
+        review.put("corrections", corrections.stream().map(this::publishedCorrection).toList());
         canonical.put("review", review);
         // No fabricated positive defaults: a legacy snapshot without a stored
         // governance map yields humanReviewRequired/notClinicalDiagnosis=null
@@ -250,7 +256,7 @@ public class StudyWorklistService {
     }
 
     @SuppressWarnings("unchecked")
-    private Object publishVolumeSlices(Object planesNode, List<RunArtifact> artifacts) {
+    private Object publishVolumeSlices(Object planesNode, List<RunArtifact> artifacts, List<MeasurementCorrection> corrections) {
         if (!(planesNode instanceof Map<?, ?> rawPlanes)) return planesNode;
         Map<String, Object> planes = new LinkedHashMap<>();
         for (Map.Entry<?, ?> entry : rawPlanes.entrySet()) {
@@ -264,16 +270,44 @@ public class StudyWorklistService {
             Object inputNode = plane.get("input");
             if (inputNode instanceof Map<?, ?> inputMap) {
                 String runId = String.valueOf(plane.getOrDefault("planeRunId", ""));
+                List<Map<String, Object>> measurements = mapList(plane.get("measurements"));
+                List<Map<String, Object>> landmarks = mapList(plane.get("landmarks"));
                 plane.put("input", volumeSliceCatalogService.normalizePlaneInput(
                     new LinkedHashMap<>((Map<String, Object>) inputMap),
                     runId,
                     planeName,
-                    artifacts
+                    artifacts,
+                    measurements,
+                    landmarks,
+                    corrections
                 ));
             }
             planes.put(planeName, plane);
         }
         return planes;
+    }
+
+    private Map<String, Object> publishedCorrection(MeasurementCorrection correction) {
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("measurementId", correction.measurementId());
+        value.put("label", correction.label());
+        value.put("beforeValue", correction.beforeValue());
+        value.put("afterValue", correction.afterValue());
+        value.put("comment", correction.comment());
+        value.put("createdAt", correction.createdAt().toString());
+        return value;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> mapList(Object value) {
+        if (!(value instanceof List<?> list)) return List.of();
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Object item : list) {
+            if (item instanceof Map<?, ?> map) {
+                result.add(new LinkedHashMap<>((Map<String, Object>) map));
+            }
+        }
+        return result;
     }
 
     private List<String> planesFor(List<InputResource> inputs, StudyRun run) {

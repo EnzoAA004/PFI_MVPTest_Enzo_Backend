@@ -1,6 +1,7 @@
 package ar.edu.uade.pfi.backend.service;
 
 import ar.edu.uade.pfi.backend.domain.RunArtifact;
+import ar.edu.uade.pfi.backend.domain.MeasurementCorrection;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -16,8 +17,31 @@ public class VolumeSliceCatalogService {
         return normalizePlaneInput(input, runId, plane, List.of());
     }
 
-    @SuppressWarnings("unchecked")
     public Map<String, Object> normalizePlaneInput(Map<String, Object> input, String runId, String plane, List<RunArtifact> artifacts) {
+        return normalizePlaneInput(input, runId, plane, artifacts, List.of(), List.of(), List.of());
+    }
+
+    public Map<String, Object> normalizePlaneInput(
+        Map<String, Object> input,
+        String runId,
+        String plane,
+        List<RunArtifact> artifacts,
+        List<Map<String, Object>> measurements,
+        List<Map<String, Object>> landmarks
+    ) {
+        return normalizePlaneInput(input, runId, plane, artifacts, measurements, landmarks, List.of());
+    }
+
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> normalizePlaneInput(
+        Map<String, Object> input,
+        String runId,
+        String plane,
+        List<RunArtifact> artifacts,
+        List<Map<String, Object>> measurements,
+        List<Map<String, Object>> landmarks,
+        List<MeasurementCorrection> corrections
+    ) {
         if (input == null || input.isEmpty()) return input == null ? Map.of() : input;
         Map<String, Object> normalized = new LinkedHashMap<>(input);
         Object rawSlices = input.get("slices");
@@ -32,6 +56,10 @@ public class VolumeSliceCatalogService {
         }
 
         Map<String, RunArtifact> artifactByName = artifactByName(artifacts, runId, plane);
+        Set<String> measurementIds = ids(measurements, List.of("id"));
+        Set<String> landmarkIds = ids(landmarks, List.of("id", "landmarkId", "name"));
+        boolean validateMeasurementIds = !measurementIds.isEmpty();
+        boolean validateLandmarkIds = !landmarkIds.isEmpty();
         List<Map<String, Object>> slices = new ArrayList<>();
         Set<Integer> seen = new HashSet<>();
         for (Object value : rawList) {
@@ -47,13 +75,26 @@ public class VolumeSliceCatalogService {
             if (preview != null) {
                 entry.put("previewAsset", preview);
             }
-            entry.put("hasResults", hasResults);
             Map<String, Object> overlay = hasResults
                 ? normalizeSliceAsset(item.get("overlayAsset"), runId, plane, "slice-overlay", artifactByName)
                 : null;
-            entry.put("overlayAsset", overlay);
-            entry.put("measurementIds", stringList(item.get("measurementIds")));
-            entry.put("landmarkIds", stringList(item.get("landmarkIds")));
+            RefValidation validMeasurements = hasResults
+                ? validateRefs(item.get("measurementIds"), measurementIds, validateMeasurementIds)
+                : RefValidation.empty();
+            RefValidation validLandmarks = hasResults
+                ? validateRefs(item.get("landmarkIds"), landmarkIds, validateLandmarkIds)
+                : RefValidation.empty();
+            boolean effectiveHasResults = hasResults && (overlay != null || !validMeasurements.values().isEmpty() || !validLandmarks.values().isEmpty());
+            entry.put("hasResults", effectiveHasResults);
+            entry.put("overlayAsset", effectiveHasResults ? overlay : null);
+            entry.put("measurementIds", effectiveHasResults ? validMeasurements.values() : List.of());
+            entry.put("landmarkIds", effectiveHasResults ? validLandmarks.values() : List.of());
+            List<Map<String, Object>> sliceCorrections = correctionsForSlice(corrections, plane, index, validMeasurements.values());
+            if (!sliceCorrections.isEmpty()) {
+                entry.put("corrections", sliceCorrections);
+                entry.put("correctionCount", sliceCorrections.size());
+            }
+            putReferenceStatus(entry, effectiveHasResults, validMeasurements, validLandmarks, overlay);
             slices.add(entry);
         }
         slices.sort(Comparator.comparingInt(item -> ((Number) item.get("index")).intValue()));
@@ -73,6 +114,97 @@ public class VolumeSliceCatalogService {
             addSliceAsset(result, item.get("overlayAsset"));
         }
         return result;
+    }
+
+    private RefValidation validateRefs(Object value, Set<String> validIds, boolean validateExistence) {
+        List<String> refs = stringList(value);
+        if (refs.isEmpty()) return RefValidation.empty();
+        List<String> values = new ArrayList<>();
+        List<String> duplicates = new ArrayList<>();
+        List<String> invalid = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (String ref : refs) {
+            if (!seen.add(ref)) {
+                duplicates.add(ref);
+                continue;
+            }
+            if (validateExistence && !validIds.contains(ref)) {
+                invalid.add(ref);
+                continue;
+            }
+            values.add(ref);
+        }
+        return new RefValidation(List.copyOf(values), List.copyOf(duplicates), List.copyOf(invalid));
+    }
+
+    private void putReferenceStatus(
+        Map<String, Object> entry,
+        boolean hasResults,
+        RefValidation measurements,
+        RefValidation landmarks,
+        Map<String, Object> overlay
+    ) {
+        if (!hasResults) {
+            entry.put("resultStatus", "no_automatic_results");
+        } else if (measurements.clean() && landmarks.clean() && overlay != null) {
+            entry.put("resultStatus", "automatic_results_available");
+        } else {
+            entry.put("resultStatus", "degraded_inconsistent_result_references");
+        }
+        if (!measurements.duplicates().isEmpty()) entry.put("duplicateMeasurementIds", measurements.duplicates());
+        if (!measurements.invalid().isEmpty()) entry.put("invalidMeasurementIds", measurements.invalid());
+        if (!landmarks.duplicates().isEmpty()) entry.put("duplicateLandmarkIds", landmarks.duplicates());
+        if (!landmarks.invalid().isEmpty()) entry.put("invalidLandmarkIds", landmarks.invalid());
+    }
+
+    private List<Map<String, Object>> correctionsForSlice(
+        List<MeasurementCorrection> corrections,
+        String plane,
+        int sliceIndex,
+        List<String> measurementIds
+    ) {
+        if (corrections == null || corrections.isEmpty() || measurementIds.isEmpty()) return List.of();
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (MeasurementCorrection correction : corrections) {
+            if (!measurementIds.contains(correction.measurementId())) continue;
+            String correctionPlane = correctionPlane(correction);
+            Integer correctionSlice = correctionSliceIndex(correction);
+            if (!plane.equals(correctionPlane) || correctionSlice == null || correctionSlice != sliceIndex) continue;
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("measurementId", correction.measurementId());
+            item.put("label", correction.label());
+            item.put("beforeValue", correction.beforeValue());
+            item.put("afterValue", correction.afterValue());
+            item.put("comment", correction.comment());
+            item.put("createdAt", correction.createdAt().toString());
+            result.add(item);
+        }
+        return result;
+    }
+
+    private String correctionPlane(MeasurementCorrection correction) {
+        String value = text(correction.afterValue().get("plane"));
+        if (!value.isBlank()) return value;
+        return text(correction.beforeValue().get("plane"));
+    }
+
+    private Integer correctionSliceIndex(MeasurementCorrection correction) {
+        Integer value = intValue(correction.afterValue().get("sliceIndex"));
+        return value == null ? intValue(correction.beforeValue().get("sliceIndex")) : value;
+    }
+
+    private Set<String> ids(List<Map<String, Object>> values, List<String> keys) {
+        Set<String> ids = new HashSet<>();
+        for (Map<String, Object> value : values == null ? List.<Map<String, Object>>of() : values) {
+            for (String key : keys) {
+                String id = text(value.get(key));
+                if (!id.isBlank()) {
+                    ids.add(id);
+                    break;
+                }
+            }
+        }
+        return ids;
     }
 
     private void addSliceAsset(List<Map<String, Object>> result, Object value) {
@@ -155,5 +287,15 @@ public class VolumeSliceCatalogService {
 
     private String text(Object value) {
         return value == null ? "" : String.valueOf(value).trim();
+    }
+
+    private record RefValidation(List<String> values, List<String> duplicates, List<String> invalid) {
+        static RefValidation empty() {
+            return new RefValidation(List.of(), List.of(), List.of());
+        }
+
+        boolean clean() {
+            return duplicates.isEmpty() && invalid.isEmpty();
+        }
     }
 }
