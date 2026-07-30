@@ -1,6 +1,7 @@
 package ar.edu.uade.pfi.backend.controller;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
@@ -26,11 +27,13 @@ import ar.edu.uade.pfi.backend.domain.Study;
 import ar.edu.uade.pfi.backend.domain.StudyRun;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunRequestDto;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunResponseDto;
+import ar.edu.uade.pfi.backend.dto.StudyDetailResponseDto;
 import ar.edu.uade.pfi.backend.dto.StudyMetadataDto;
 import ar.edu.uade.pfi.backend.repository.InMemoryStudyRepository;
 import ar.edu.uade.pfi.backend.repository.StudyRepository;
 import ar.edu.uade.pfi.backend.service.MultiplanarRunPersistenceService;
 import ar.edu.uade.pfi.backend.service.StudyRunService;
+import ar.edu.uade.pfi.backend.service.StudyWorklistService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -270,6 +273,55 @@ class AiMultiplanarRunTest {
         org.junit.jupiter.api.Assertions.assertFalse(serializedTechnicalRequest.contains("studyMetadata"));
         org.junit.jupiter.api.Assertions.assertFalse(serializedTechnicalRequest.contains("subjectRef"));
         org.junit.jupiter.api.Assertions.assertFalse(serializedTechnicalRequest.contains("SPIDER-101"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void liveRunResponseAndReopenedSnapshotShareNormalizedSliceResults() throws Exception {
+        AiServiceOperations ai = org.mockito.Mockito.mock(AiServiceOperations.class);
+        when(ai.runMultiplanar(any())).thenReturn(sliceResultFixture());
+        InMemoryStudyRepository repository = new InMemoryStudyRepository();
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(controllerWithPersistence(ai, repository))
+            .setControllerAdvice(new ApiExceptionHandler())
+            .build();
+
+        String payload = mockMvc.perform(post("/api/ai/multiplanar/run")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "caseId": "CASE-SLICES-LIVE",
+                      "sagittalInputId": "input-sag-slices",
+                      "allowContractFallback": false,
+                      "metadata": {
+                        "inferenceMode": "real_baseline"
+                      }
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.planes.sagittal.metadata.slices[1].resultStatus").value("degraded_inconsistent_result_references"))
+            .andExpect(jsonPath("$.planes.sagittal.metadata.slices[1].measurementIds[0]").value("canalAreaMm2"))
+            .andExpect(jsonPath("$.planes.sagittal.metadata.slices[1].landmarkIds[0]").value("lm-canal"))
+            .andExpect(jsonPath("$.planes.sagittal.metadata.slices[1].duplicateMeasurementIds[0]").value("canalAreaMm2"))
+            .andExpect(jsonPath("$.planes.sagittal.metadata.slices[1].invalidMeasurementIds[0]").value("missingMeasurement"))
+            .andExpect(jsonPath("$.planes.sagittal.metadata.slices[1].invalidLandmarkIds[0]").value("missingLandmark"))
+            .andExpect(jsonPath("$.planes.sagittal.metadata.slices[2].resultStatus").value("no_automatic_results"))
+            .andExpect(jsonPath("$.planes.sagittal.metadata.slices[2].measurementIds").isEmpty())
+            .andExpect(jsonPath("$.planes.sagittal.metadata.slices[2].overlayAsset").doesNotExist())
+            .andReturn().getResponse().getContentAsString();
+
+        Map<String, Object> live = objectMapper.readValue(payload, Map.class);
+        Map<String, Object> liveInput = planeMetadata(live, "sagittal");
+        List<Map<String, Object>> liveSlices = mapList(liveInput.get("slices"));
+
+        StudyDetailResponseDto reopened = new StudyWorklistService(repository, false).getStudy("CASE-SLICES-LIVE");
+        Map<String, Object> reopenedInput = reopenedPlaneInput(reopened, "sagittal");
+        List<Map<String, Object>> reopenedSlices = mapList(reopenedInput.get("slices"));
+
+        assertEquals(liveSlices.size(), reopenedSlices.size());
+        assertSameSliceResultSemantics(sliceByIndex(liveSlices, 1), sliceByIndex(reopenedSlices, 1));
+        assertSameSliceResultSemantics(sliceByIndex(liveSlices, 2), sliceByIndex(reopenedSlices, 2));
+        assertFalse(payload.contains("relativePath"));
+        assertFalse(objectMapper.writeValueAsString(reopenedInput).contains("relativePath"));
     }
 
     @Test
@@ -530,6 +582,128 @@ class AiMultiplanarRunTest {
             sagittalInputPath == null ? "null" : "\"" + sagittalInputPath + "\"",
             axialInputPath == null ? "null" : "\"" + axialInputPath + "\""
         );
+    }
+
+    private CanonicalMultiplanarRun sliceResultFixture() {
+        CanonicalPlaneRun sagittal = new CanonicalPlaneRun(
+            "run-sag-slices",
+            "sagittal",
+            "completed",
+            "real_baseline",
+            false,
+            null,
+            map("modelKey", "sagittal_spider", "artifactHash", "sha256:sag-slice"),
+            sliceCatalogInput("input-sag-slices"),
+            Map.of(),
+            List.of(Map.of("seriesId", "series-sag")),
+            List.of(Map.of("assetName", "overlay.png", "generated", true, "relativePath", "outputs/run-sag-slices/sagittal/overlay.png", "contentType", "image/png")),
+            List.of(),
+            List.of(map("id", "lm-canal", "name", "canal_center", "x", 93.3, "y", 118.8)),
+            List.of(map("id", "canalAreaMm2", "labelKey", "canal.area", "value", 82.4, "unit", "mm2", "status", "automatic")),
+            Map.of("sliceIndex", 1)
+        );
+        Map<String, CanonicalPlaneRun> planes = new LinkedHashMap<>();
+        planes.put("sagittal", sagittal);
+        return new CanonicalMultiplanarRun(
+            "multiplanar_run_ready",
+            "multiplanar-run-v2",
+            "multi-slices-001",
+            "trace-slices-001",
+            "CASE-SLICES-LIVE",
+            "dual_plane_with_3d_context",
+            "real_baseline",
+            "mixed",
+            List.of("sagittal"),
+            List.of("sagittal"),
+            false,
+            null,
+            Map.of(),
+            planes,
+            Map.of(),
+            Map.of(),
+            Map.of("status", "pending"),
+            new CanonicalMultiplanarRun.Governance(true, true, true, false)
+        );
+    }
+
+    private Map<String, Object> sliceCatalogInput(String inputId) {
+        return map(
+            "inputId", inputId,
+            "sliceCount", 3,
+            "selectedSliceIndex", 1,
+            "selectedAxis", 2,
+            "slices", List.of(
+                map("index", 0, "hasResults", false, "previewAsset", sliceAsset("slice-000.png", "slice-preview")),
+                map(
+                    "index", 1,
+                    "hasResults", true,
+                    "previewAsset", sliceAsset("slice-001.png", "slice-preview"),
+                    "overlayAsset", sliceAsset("slice-001-overlay.png", "slice-overlay"),
+                    "measurementIds", List.of("canalAreaMm2", "missingMeasurement", "canalAreaMm2"),
+                    "landmarkIds", List.of("lm-canal", "missingLandmark")
+                ),
+                map(
+                    "index", 2,
+                    "hasResults", true,
+                    "previewAsset", sliceAsset("slice-002.png", "slice-preview"),
+                    "measurementIds", List.of("ghostMeasurement"),
+                    "landmarkIds", List.of("ghostLandmark")
+                )
+            )
+        );
+    }
+
+    private Map<String, Object> sliceAsset(String assetName, String role) {
+        return map("assetName", assetName, "role", role, "contentType", "image/png", "generated", true);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> planeMetadata(Map<String, Object> response, String plane) {
+        Map<String, Object> planes = (Map<String, Object>) response.get("planes");
+        return (Map<String, Object>) ((Map<String, Object>) planes.get(plane)).get("metadata");
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> reopenedPlaneInput(StudyDetailResponseDto reopened, String plane) {
+        Map<String, Object> canonicalRun = reopened.runs().get(0).canonicalRun();
+        Map<String, Object> planes = (Map<String, Object>) canonicalRun.get("planes");
+        return (Map<String, Object>) ((Map<String, Object>) planes.get(plane)).get("input");
+    }
+
+    private void assertSameSliceResultSemantics(Map<String, Object> live, Map<String, Object> reopened) {
+        assertEquals(live.get("hasResults"), reopened.get("hasResults"));
+        assertEquals(live.get("resultStatus"), reopened.get("resultStatus"));
+        assertEquals(live.get("measurementIds"), reopened.get("measurementIds"));
+        assertEquals(live.get("landmarkIds"), reopened.get("landmarkIds"));
+        assertEquals(live.get("invalidMeasurementIds"), reopened.get("invalidMeasurementIds"));
+        assertEquals(live.get("duplicateMeasurementIds"), reopened.get("duplicateMeasurementIds"));
+        assertEquals(live.get("invalidLandmarkIds"), reopened.get("invalidLandmarkIds"));
+        assertEquals(assetName(live.get("overlayAsset")), assetName(reopened.get("overlayAsset")));
+    }
+
+    @SuppressWarnings("unchecked")
+    private String assetName(Object asset) {
+        return asset instanceof Map<?, ?> map ? String.valueOf(((Map<String, Object>) map).get("assetName")) : null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> mapList(Object value) {
+        return value instanceof List<?> list ? (List<Map<String, Object>>) list : List.of();
+    }
+
+    private Map<String, Object> sliceByIndex(List<Map<String, Object>> slices, int index) {
+        return slices.stream()
+            .filter(slice -> Integer.valueOf(index).equals(slice.get("index")))
+            .findFirst()
+            .orElseThrow();
+    }
+
+    private Map<String, Object> map(Object... entries) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        for (int i = 0; i < entries.length; i += 2) {
+            result.put(String.valueOf(entries[i]), entries[i + 1]);
+        }
+        return result;
     }
 
     private AiMultiplanarController controllerWithPersistence(AiServiceOperations ai, StudyRepository repository) {

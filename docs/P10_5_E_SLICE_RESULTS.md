@@ -61,7 +61,9 @@ La correccion persistida conserva:
 
 ## Reapertura
 
-Al consultar el detalle de estudio/run, el backend publica el snapshot con el catalogo ordenado y vuelve a asociar correcciones al slice correcto. La reapertura funciona con AI Module apagado siempre que los assets durables esten disponibles en PostgreSQL. Si un preview esta `missing` o `rejected`, el slice queda visible como degradado y no se inventa contenido.
+La respuesta viva de `POST /api/ai/multiplanar/run` y la reapertura desde PostgreSQL usan la misma normalizacion de slice results. El backend normaliza el `CanonicalMultiplanarRun` recibido del AI Module antes de presentarlo y antes de persistirlo, por lo que `hasResults`, `resultStatus`, `measurementIds`, `landmarkIds`, referencias invalidas/duplicadas y `overlayAsset` no dependen del camino por el que se lea la corrida.
+
+Al consultar el detalle de estudio/run, el backend publica el snapshot con el catalogo ordenado y vuelve a asociar correcciones al slice correcto. La reapertura funciona con AI Module apagado siempre que los assets durables esten disponibles en PostgreSQL. Si un preview esta `missing` o `rejected`, el slice queda visible como degradado y no se inventa contenido. Los metadatos durables de assets (`storageStatus`, `available`, `sha256`, `sizeBytes`) pueden aparecer solo en la reapertura, pero la semantica de resultados por slice debe coincidir con la respuesta viva.
 
 ## Seguridad
 
@@ -89,6 +91,7 @@ Cobertura agregada o extendida:
 - compatibilidad legacy sin `slices[]`;
 - preview `missing` y `rejected` cubiertos por P10.5-C;
 - autorizacion de review existente preservada.
+- simetria entre respuesta viva del run y reapertura persistida para resultados por slice.
 
 ## Limitaciones
 

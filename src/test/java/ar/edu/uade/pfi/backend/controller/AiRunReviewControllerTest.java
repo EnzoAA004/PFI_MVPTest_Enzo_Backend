@@ -251,7 +251,23 @@ class AiRunReviewControllerTest {
             "run-sag-" + multiplanarRunId,
             "run-ax-" + multiplanarRunId,
             Map.of("workspace", "workspace.json"),
-            Map.of("quality", Map.of("score", 0.92)),
+            Map.of(
+                "quality", Map.of("score", 0.92),
+                "planes", Map.of(
+                    "sagittal", Map.of(
+                        "measurements", List.of(Map.of("id", "canalAreaMm2", "value", 82.4, "unit", "mm2")),
+                        "input", Map.of(
+                            "sliceCount", 2,
+                            "selectedSliceIndex", 1,
+                            "slices", List.of(Map.of(
+                                "index", 1,
+                                "hasResults", true,
+                                "measurementIds", List.of("canalAreaMm2")
+                            ))
+                        )
+                    )
+                )
+            ),
             List.of(new RunArtifact(UUID.randomUUID().toString(), runId, "run-sag-" + multiplanarRunId, "sagittal", "overlay.png", "image/png", "overlay.png", now)),
             "completed",
             "pending",

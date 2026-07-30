@@ -8,6 +8,7 @@ import ar.edu.uade.pfi.backend.dto.MultiplanarRunRequestDto;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunResponseDto;
 import ar.edu.uade.pfi.backend.service.AuditService;
 import ar.edu.uade.pfi.backend.service.CanonicalMultiplanarRunLegacyPresenter;
+import ar.edu.uade.pfi.backend.service.CanonicalMultiplanarRunSliceNormalizer;
 import ar.edu.uade.pfi.backend.service.MultiplanarRealBaselineContractValidator;
 import ar.edu.uade.pfi.backend.service.MultiplanarRunPersistenceService;
 import ar.edu.uade.pfi.backend.service.MultiplanarRunResponsePresenter;
@@ -34,18 +35,28 @@ public class AiMultiplanarController {
     private final MultiplanarRunResponsePresenter presenter;
     private final CanonicalMultiplanarRunLegacyPresenter legacyPresenter;
     private final MultiplanarRealBaselineContractValidator strictnessClassifier;
+    private final CanonicalMultiplanarRunSliceNormalizer sliceNormalizer;
 
     public AiMultiplanarController(AiServiceOperations aiServiceClient) {
-        this(aiServiceClient, null, null, new MultiplanarRunResponsePresenter(), new CanonicalMultiplanarRunLegacyPresenter(), new MultiplanarRealBaselineContractValidator());
+        this(aiServiceClient, null, null, new MultiplanarRunResponsePresenter(), new CanonicalMultiplanarRunLegacyPresenter(), new MultiplanarRealBaselineContractValidator(), new CanonicalMultiplanarRunSliceNormalizer());
     }
 
     public AiMultiplanarController(AiServiceOperations aiServiceClient, MultiplanarRunPersistenceService persistenceService) {
-        this(aiServiceClient, persistenceService, null, new MultiplanarRunResponsePresenter(), new CanonicalMultiplanarRunLegacyPresenter(), new MultiplanarRealBaselineContractValidator());
+        this(aiServiceClient, persistenceService, null, new MultiplanarRunResponsePresenter(), new CanonicalMultiplanarRunLegacyPresenter(), new MultiplanarRealBaselineContractValidator(), new CanonicalMultiplanarRunSliceNormalizer());
+    }
+
+    public AiMultiplanarController(AiServiceOperations aiServiceClient, MultiplanarRunPersistenceService persistenceService, AuditService auditService) {
+        this(aiServiceClient, persistenceService, auditService, new MultiplanarRunResponsePresenter(), new CanonicalMultiplanarRunLegacyPresenter(), new MultiplanarRealBaselineContractValidator(), new CanonicalMultiplanarRunSliceNormalizer());
     }
 
     @Autowired
-    public AiMultiplanarController(AiServiceOperations aiServiceClient, MultiplanarRunPersistenceService persistenceService, AuditService auditService) {
-        this(aiServiceClient, persistenceService, auditService, new MultiplanarRunResponsePresenter(), new CanonicalMultiplanarRunLegacyPresenter(), new MultiplanarRealBaselineContractValidator());
+    public AiMultiplanarController(
+        AiServiceOperations aiServiceClient,
+        MultiplanarRunPersistenceService persistenceService,
+        AuditService auditService,
+        CanonicalMultiplanarRunSliceNormalizer sliceNormalizer
+    ) {
+        this(aiServiceClient, persistenceService, auditService, new MultiplanarRunResponsePresenter(), new CanonicalMultiplanarRunLegacyPresenter(), new MultiplanarRealBaselineContractValidator(), sliceNormalizer);
     }
 
     AiMultiplanarController(
@@ -54,7 +65,8 @@ public class AiMultiplanarController {
         AuditService auditService,
         MultiplanarRunResponsePresenter presenter,
         CanonicalMultiplanarRunLegacyPresenter legacyPresenter,
-        MultiplanarRealBaselineContractValidator strictnessClassifier
+        MultiplanarRealBaselineContractValidator strictnessClassifier,
+        CanonicalMultiplanarRunSliceNormalizer sliceNormalizer
     ) {
         this.aiServiceClient = aiServiceClient;
         this.persistenceService = persistenceService;
@@ -62,6 +74,7 @@ public class AiMultiplanarController {
         this.presenter = presenter;
         this.legacyPresenter = legacyPresenter;
         this.strictnessClassifier = strictnessClassifier;
+        this.sliceNormalizer = sliceNormalizer;
     }
 
     @GetMapping("/contract")
@@ -93,11 +106,12 @@ public class AiMultiplanarController {
             auditStrictFailure(normalized, ex.getMessage());
             throw ex;
         }
-        MultiplanarRunResponseDto presented = presenter.present(legacyPresenter.toLegacyResponse(canonical));
+        CanonicalMultiplanarRun normalizedCanonical = sliceNormalizer.normalize(canonical);
+        MultiplanarRunResponseDto presented = presenter.present(legacyPresenter.toLegacyResponse(normalizedCanonical));
         if (persistenceService != null) {
-            persistenceService.persistSuccessfulRun(normalized, preparedMetadata.metadata(), canonical);
+            persistenceService.persistSuccessfulRun(normalized, preparedMetadata.metadata(), normalizedCanonical);
         }
-        auditSuccess(normalized, canonical);
+        auditSuccess(normalized, normalizedCanonical);
         return presented;
     }
 

@@ -79,11 +79,11 @@ public class VolumeSliceCatalogService {
                 ? normalizeSliceAsset(item.get("overlayAsset"), runId, plane, "slice-overlay", artifactByName)
                 : null;
             RefValidation validMeasurements = hasResults
-                ? validateRefs(item.get("measurementIds"), measurementIds, validateMeasurementIds)
-                : RefValidation.empty();
+                ? withExistingDiagnostics(validateRefs(item.get("measurementIds"), measurementIds, validateMeasurementIds), item.get("duplicateMeasurementIds"), item.get("invalidMeasurementIds"))
+                : existingDiagnostics(item.get("duplicateMeasurementIds"), item.get("invalidMeasurementIds"));
             RefValidation validLandmarks = hasResults
-                ? validateRefs(item.get("landmarkIds"), landmarkIds, validateLandmarkIds)
-                : RefValidation.empty();
+                ? withExistingDiagnostics(validateRefs(item.get("landmarkIds"), landmarkIds, validateLandmarkIds), item.get("duplicateLandmarkIds"), item.get("invalidLandmarkIds"))
+                : existingDiagnostics(item.get("duplicateLandmarkIds"), item.get("invalidLandmarkIds"));
             boolean effectiveHasResults = hasResults && (overlay != null || !validMeasurements.values().isEmpty() || !validLandmarks.values().isEmpty());
             entry.put("hasResults", effectiveHasResults);
             entry.put("overlayAsset", effectiveHasResults ? overlay : null);
@@ -135,6 +135,31 @@ public class VolumeSliceCatalogService {
             values.add(ref);
         }
         return new RefValidation(List.copyOf(values), List.copyOf(duplicates), List.copyOf(invalid));
+    }
+
+    private RefValidation existingDiagnostics(Object duplicates, Object invalid) {
+        return new RefValidation(List.of(), stringList(duplicates), stringList(invalid));
+    }
+
+    private RefValidation withExistingDiagnostics(RefValidation validation, Object duplicates, Object invalid) {
+        return new RefValidation(
+            validation.values(),
+            appendDistinct(validation.duplicates(), stringList(duplicates)),
+            appendDistinct(validation.invalid(), stringList(invalid))
+        );
+    }
+
+    private List<String> appendDistinct(List<String> first, List<String> second) {
+        if (first.isEmpty() && second.isEmpty()) return List.of();
+        List<String> result = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (String value : first) {
+            if (seen.add(value)) result.add(value);
+        }
+        for (String value : second) {
+            if (seen.add(value)) result.add(value);
+        }
+        return List.copyOf(result);
     }
 
     private void putReferenceStatus(
