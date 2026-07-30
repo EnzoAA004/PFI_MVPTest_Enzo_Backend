@@ -88,6 +88,57 @@ class AiAssetDurableProxyControllerTest {
     }
 
     @Test
+    void getVolumeSlicePreviewServesPersistedPayloadWithAiModuleOff() throws Exception {
+        AiServiceOperations ai = Mockito.mock(AiServiceOperations.class);
+        InMemoryStudyRepository repository = repositoryWithArtifact("multi-slice-stored", "trace-slice-stored", "run-sag-slice-stored", "slice-008.png");
+        RunArtifact artifact = repository.findArtifactByRunPlaneAndName("run-sag-slice-stored", "sagittal", "slice-008.png").orElseThrow();
+        FakeStorage storage = new FakeStorage();
+        byte[] png = png(10);
+        storage.store(artifact, png, sha256(png));
+        repository.updateArtifactStorage(artifact.id(), "stored", "postgres_bytea", (long) png.length, sha256(png));
+
+        mockMvc(ai, repository, storage, null)
+            .perform(get("/api/ai/assets/run-sag-slice-stored/sagittal/slice-008.png"))
+            .andExpect(status().isOk())
+            .andExpect(header().string("X-PFI-Asset-Source", "postgres"))
+            .andExpect(header().string(HttpHeaders.CONTENT_TYPE, MediaType.IMAGE_PNG_VALUE))
+            .andExpect(content().bytes(png));
+
+        Mockito.verifyNoInteractions(ai);
+    }
+
+    @Test
+    void getRejectedVolumeSliceReturnsStructuredNotFoundWithoutInternalDetails() throws Exception {
+        AiServiceOperations ai = Mockito.mock(AiServiceOperations.class);
+        InMemoryStudyRepository repository = repositoryWithArtifact("multi-slice-rejected", "trace-slice-rejected", "run-sag-slice-rejected", "slice-009.png");
+        RunArtifact artifact = repository.findArtifactByRunPlaneAndName("run-sag-slice-rejected", "sagittal", "slice-009.png").orElseThrow();
+        repository.updateArtifactStorage(artifact.id(), "rejected", null, null, null);
+
+        mockMvc(ai, repository, new FakeStorage(), null)
+            .perform(get("/api/ai/assets/run-sag-slice-rejected/sagittal/slice-009.png"))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.code").value("ASSET_CONTENT_UNAVAILABLE"))
+            .andExpect(jsonPath("$.runId").value("run-sag-slice-rejected"))
+            .andExpect(jsonPath("$.assetName").value("slice-009.png"))
+            .andExpect(jsonPath("$.humanReviewRequired").value(true))
+            .andExpect(jsonPath("$.notClinicalDiagnosis").value(true));
+
+        Mockito.verifyNoInteractions(ai);
+    }
+
+    @Test
+    void getInvalidSliceAssetNameIsRejectedBeforeCallingAiModule() throws Exception {
+        AiServiceOperations ai = Mockito.mock(AiServiceOperations.class);
+
+        mockMvc(ai, new InMemoryStudyRepository(), new FakeStorage(), null)
+            .perform(get("/api/ai/assets/run-sag-slice/sagittal/slice-008-extra.png"))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+
+        Mockito.verifyNoInteractions(ai);
+    }
+
+    @Test
     void getAssetBackfillsOnceWhenMetadataExistsWithoutPayload() throws Exception {
         AiServiceOperations ai = Mockito.mock(AiServiceOperations.class);
         InMemoryStudyRepository repository = repositoryWithArtifact("multi-backfill", "trace-backfill", "run-sag-backfill", "input.png");

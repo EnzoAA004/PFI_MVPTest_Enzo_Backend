@@ -5,12 +5,10 @@ import ar.edu.uade.pfi.backend.dto.PipelineRunRequestDto;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import org.springframework.stereotype.Component;
 
 @Component
 public class SagittalRealBaselineContractValidator {
-    private static final Set<String> ALLOWED_UPSTREAM_ASSETS = Set.of("input.png", "overlay.png", "mask-preview.png", "mask.npy", "confidence.npy");
     private final SagittalRealBaselineProperties expected;
 
     public SagittalRealBaselineContractValidator(SagittalRealBaselineProperties expected) {
@@ -155,7 +153,7 @@ public class SagittalRealBaselineContractValidator {
     }
 
     private void validateAssetEntry(String assetName, Object value, String runId, String plane) {
-        if (!ALLOWED_UPSTREAM_ASSETS.contains(assetName)) {
+        if (!isAllowedUpstreamAsset(assetName)) {
             fail("asset upstream desconocido: " + assetName);
         }
         if (value instanceof Map<?, ?> map) {
@@ -171,6 +169,12 @@ public class SagittalRealBaselineContractValidator {
                 requireEquals(assetName, declaredName, "asset.assetName");
             }
         }
+    }
+
+    private boolean isAllowedUpstreamAsset(String assetName) {
+        return List.of("input.png", "overlay.png", "mask-preview.png", "mask.npy", "confidence.npy").contains(assetName)
+            || AssetNamePolicy.isSlicePreview(assetName)
+            || AssetNamePolicy.isSliceOverlay(assetName);
     }
 
     private void validateMeasurements(Map<String, Object> response) {

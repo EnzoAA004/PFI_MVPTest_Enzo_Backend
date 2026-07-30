@@ -39,7 +39,6 @@ public class AiBackendService {
     static final long MAX_INPUT_UPLOAD_BYTES = 200L * 1024L * 1024L;
     private static final Set<String> ALLOWED_INPUT_EXTENSIONS = Set.of("npy", "png", "jpg", "jpeg", "bmp", "tif", "tiff", "mha", "mhd", "dcm");
     private static final Set<String> ALLOWED_INPUT_PLANES = Set.of("sagittal", "axial");
-    private static final Set<String> ALLOWED_ASSET_NAMES = Set.of("input.png", "overlay.png", "mask-preview.png", "lumbar-3d-mesh.json");
     private static final Set<String> VALID_REVIEW_STATUSES = Set.of("pendiente", "aceptado", "observado", "descartado");
     private static final Set<String> FINAL_REVIEW_STATUSES = Set.of("aceptado", "observado", "descartado");
     private final AiServiceOperations aiServiceClient;
@@ -505,15 +504,19 @@ public class AiBackendService {
         if (!ALLOWED_INPUT_PLANES.contains(plane) && !"workspace".equals(plane)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset no encontrado.");
         }
-        if (!isSimpleBasename(assetName) || !ALLOWED_ASSET_NAMES.contains(assetName)) {
+        if (!isSimpleBasename(assetName) || !AssetNamePolicy.isAllowedPublicAsset(assetName, plane, contentTypeForAsset(assetName))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Asset no permitido.");
         }
-        if ("workspace".equals(plane) && !"lumbar-3d-mesh.json".equals(assetName)) {
+        if ("workspace".equals(plane) && !AssetNamePolicy.MESH_ASSET.equals(assetName)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Asset no permitido.");
         }
-        if (!"workspace".equals(plane) && "lumbar-3d-mesh.json".equals(assetName)) {
+        if (!"workspace".equals(plane) && AssetNamePolicy.MESH_ASSET.equals(assetName)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Asset no permitido.");
         }
+    }
+
+    private String contentTypeForAsset(String assetName) {
+        return AssetNamePolicy.MESH_ASSET.equals(assetName) ? AssetNamePolicy.JSON_CONTENT_TYPE : AssetNamePolicy.PNG_CONTENT_TYPE;
     }
 
     private boolean isSimpleBasename(String assetName) {

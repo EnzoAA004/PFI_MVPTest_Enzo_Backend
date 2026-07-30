@@ -83,6 +83,16 @@ class MultiplanarRunPersistenceServiceTest {
         assertEquals(2, studyRunService.findInputs(study).size());
         assertTrue(byRunId.artifacts().stream().anyMatch(artifact -> artifact.runId().equals("run-sag-be006") && artifact.assetName().equals("overlay.png")));
         assertTrue(byRunId.artifacts().stream().anyMatch(artifact -> artifact.runId().equals("run-ax-be006") && artifact.assetName().equals("mask-preview.png")));
+        assertEquals(17, byRunId.artifacts().stream()
+            .filter(artifact -> artifact.runId().equals("run-sag-be006") && artifact.assetName().matches("slice-\\d{3}\\.png"))
+            .count());
+        assertEquals(1, byRunId.artifacts().stream()
+            .filter(artifact -> artifact.runId().equals("run-sag-be006") && artifact.assetName().matches("slice-\\d{3}-overlay\\.png"))
+            .count());
+        assertEquals(byRunId.artifacts().size(), byRunId.artifacts().stream()
+            .map(artifact -> artifact.runId() + "|" + artifact.plane() + "|" + artifact.assetName())
+            .distinct()
+            .count());
         assertTrue(byRunId.artifacts().stream().anyMatch(artifact ->
             artifact.runId().equals("multi-be006")
                 && artifact.plane().equals("workspace")
@@ -106,6 +116,13 @@ class MultiplanarRunPersistenceServiceTest {
         Map<String, Object> planesSnapshot = (Map<String, Object>) snapshot.get("planes");
         Map<String, Object> sagittalSnapshot = (Map<String, Object>) planesSnapshot.get("sagittal");
         Map<String, Object> axialSnapshot = (Map<String, Object>) planesSnapshot.get("axial");
+        Map<String, Object> sagittalInput = (Map<String, Object>) sagittalSnapshot.get("input");
+        List<Map<String, Object>> sagittalSlices = (List<Map<String, Object>>) sagittalInput.get("slices");
+        assertEquals("available", sagittalInput.get("volumeCatalogStatus"));
+        assertEquals(17, sagittalSlices.size());
+        assertEquals(List.of(0, 1, 2), sagittalSlices.subList(0, 3).stream().map(slice -> slice.get("index")).toList());
+        assertEquals(List.of(1, 2, 3), sagittalSlices.subList(0, 3).stream().map(slice -> slice.get("displayIndex")).toList());
+        assertEquals("slice-008-overlay.png", ((Map<String, Object>) sagittalSlices.get(8).get("overlayAsset")).get("assetName"));
         Map<String, Object> sagittalModel = (Map<String, Object>) sagittalSnapshot.get("model");
         Map<String, Object> axialModel = (Map<String, Object>) axialSnapshot.get("model");
         assertEquals(true, sagittalModel.get("baselineReady"));
@@ -359,7 +376,7 @@ class MultiplanarRunPersistenceServiceTest {
                 "baselineReady", true,
                 "readiness", "real_baseline_ready"
             ),
-            Map.of("inputId", "input-sag-be006", "selectedSliceIndex", 8, "sliceCount", 17, "selectedAxis", 2, "inPlaneSpacingMm", List.of(0.7, 0.7)),
+            volumeInput("input-sag-be006", 17, 8),
             Map.of(),
             List.of(Map.of("label", "canal_lumbar")),
             List.of(asset("run-sag-be006", "sagittal", "overlay.png")),
@@ -425,6 +442,43 @@ class MultiplanarRunPersistenceServiceTest {
                 "mappingValidated", false
             ),
             "warnings", List.of("experimental_proxy_not_clinical_3d")
+        );
+    }
+
+    private Map<String, Object> volumeInput(String inputId, int count, int selectedIndex) {
+        Map<String, Object> input = new LinkedHashMap<>();
+        input.put("inputId", inputId);
+        input.put("seriesId", "series-" + inputId);
+        input.put("sourceFormat", "mha");
+        input.put("selectedSliceIndex", selectedIndex);
+        input.put("sliceCount", count);
+        input.put("selectedAxis", 2);
+        input.put("inPlaneSpacingMm", List.of(0.7, 0.7));
+        List<Map<String, Object>> slices = new java.util.ArrayList<>();
+        for (int index = 0; index < count; index++) {
+            Map<String, Object> slice = new LinkedHashMap<>();
+            slice.put("index", index);
+            slice.put("displayIndex", index + 1);
+            slice.put("previewAsset", sliceAsset("slice-%03d.png".formatted(index), "slice-preview"));
+            slice.put("hasResults", index == selectedIndex);
+            if (index == selectedIndex) {
+                slice.put("overlayAsset", sliceAsset("slice-%03d-overlay.png".formatted(index), "slice-overlay"));
+            }
+            slice.put("measurementIds", List.of("m-%03d".formatted(index)));
+            slice.put("landmarkIds", List.of("l-%03d".formatted(index)));
+            slices.add(slice);
+        }
+        input.put("slices", slices);
+        return input;
+    }
+
+    private Map<String, Object> sliceAsset(String assetName, String role) {
+        return Map.of(
+            "assetName", assetName,
+            "role", role,
+            "contentType", "image/png",
+            "generated", true,
+            "relativePath", "/assets/private/" + assetName
         );
     }
 

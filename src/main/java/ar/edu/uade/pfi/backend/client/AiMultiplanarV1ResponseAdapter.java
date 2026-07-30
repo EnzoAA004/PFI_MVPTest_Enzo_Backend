@@ -3,6 +3,7 @@ package ar.edu.uade.pfi.backend.client;
 import ar.edu.uade.pfi.backend.domain.CanonicalMultiplanarRun;
 import ar.edu.uade.pfi.backend.domain.CanonicalPlaneRun;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunResponseDto;
+import ar.edu.uade.pfi.backend.service.VolumeSliceCatalogService;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -10,6 +11,8 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class AiMultiplanarV1ResponseAdapter {
+    private final VolumeSliceCatalogService volumeSliceCatalogService = new VolumeSliceCatalogService();
+
     public CanonicalMultiplanarRun toCanonical(MultiplanarRunResponseDto response) {
         if (response == null) return null;
         MultiplanarRunResponseDto.PlaneDto sagittal = response.planes() == null ? null : response.planes().sagittal();
@@ -48,6 +51,8 @@ public class AiMultiplanarV1ResponseAdapter {
     }
 
     private CanonicalPlaneRun toPlane(MultiplanarRunResponseDto.PlaneDto plane) {
+        Map<String, Object> input = inputMap(plane);
+        input = volumeSliceCatalogService.normalizePlaneInput(input, text(plane.runId()), text(plane.plane()));
         return new CanonicalPlaneRun(
             text(plane.runId()),
             text(plane.plane()),
@@ -56,7 +61,7 @@ public class AiMultiplanarV1ResponseAdapter {
             false,
             null,
             modelMap(plane),
-            inputMap(plane),
+            input,
             Map.of(),
             plane.series(),
             assetsList(plane.assets()),
@@ -81,8 +86,21 @@ public class AiMultiplanarV1ResponseAdapter {
             plane.metadata().forEach((key, value) -> {
                 if (!isInternalMetadataKey(key)) input.put(key, value);
             });
+            copyAlias(input, "inputShapeNative", "nativeShape");
+            copyAlias(input, "inputShapeCanonical", "canonicalShape");
+            copyAlias(input, "inputOrientationTransform", "orientationTransform");
+            copyAlias(input, "selectedSlice", "selectedSliceIndex");
+            copyAlias(input, "spacingXyz", "spacingXyzMm");
+            copyAlias(input, "arrayAxisSpacingCanonical", "canonicalAxisSpacingMm");
+            copyAlias(input, "inPlaneSpacing", "inPlaneSpacingMm");
         }
         return input;
+    }
+
+    private void copyAlias(Map<String, Object> input, String source, String target) {
+        if (input.containsKey(source) && !input.containsKey(target)) {
+            input.put(target, input.get(source));
+        }
     }
 
     private boolean isInternalMetadataKey(String key) {

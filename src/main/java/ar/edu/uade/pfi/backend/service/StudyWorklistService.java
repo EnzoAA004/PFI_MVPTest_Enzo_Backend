@@ -33,6 +33,7 @@ public class StudyWorklistService {
     private final StudyRepository repository;
     private final boolean demoEnabled;
     private final PublicThreeDAssetPublisher threeDAssetPublisher;
+    private final VolumeSliceCatalogService volumeSliceCatalogService = new VolumeSliceCatalogService();
 
     public StudyWorklistService(StudyRepository repository, boolean demoEnabled) {
         this(repository, demoEnabled, new PublicThreeDAssetPublisher());
@@ -205,6 +206,7 @@ public class StudyWorklistService {
         if (threeD instanceof Map<?, ?> map) {
             snapshot.put("threeD", threeDAssetPublisher.publish(run.multiplanarRunId(), (Map<String, Object>) map));
         }
+        snapshot.put("planes", publishVolumeSlices(snapshot.getOrDefault("planes", Map.of()), run.artifacts()));
         return snapshot;
     }
 
@@ -245,6 +247,33 @@ public class StudyWorklistService {
         canonical.put("synthetic", snapshot.get("synthetic"));
         canonical.put("fallbackReason", snapshot.get("fallbackReason"));
         return canonical;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Object publishVolumeSlices(Object planesNode, List<RunArtifact> artifacts) {
+        if (!(planesNode instanceof Map<?, ?> rawPlanes)) return planesNode;
+        Map<String, Object> planes = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : rawPlanes.entrySet()) {
+            String planeName = String.valueOf(entry.getKey());
+            Object value = entry.getValue();
+            if (!(value instanceof Map<?, ?> rawPlane)) {
+                planes.put(planeName, value);
+                continue;
+            }
+            Map<String, Object> plane = new LinkedHashMap<>((Map<String, Object>) rawPlane);
+            Object inputNode = plane.get("input");
+            if (inputNode instanceof Map<?, ?> inputMap) {
+                String runId = String.valueOf(plane.getOrDefault("planeRunId", ""));
+                plane.put("input", volumeSliceCatalogService.normalizePlaneInput(
+                    new LinkedHashMap<>((Map<String, Object>) inputMap),
+                    runId,
+                    planeName,
+                    artifacts
+                ));
+            }
+            planes.put(planeName, plane);
+        }
+        return planes;
     }
 
     private List<String> planesFor(List<InputResource> inputs, StudyRun run) {

@@ -9,7 +9,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.Map;
-import java.util.Set;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,9 +20,6 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class RunAssetSnapshotService {
-    private static final Set<String> PUBLIC_ASSETS = Set.of("input.png", "overlay.png", "mask-preview.png", "lumbar-3d-mesh.json");
-    private static final String PNG_CONTENT_TYPE = "image/png";
-    private static final String JSON_CONTENT_TYPE = "application/json";
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final AiServiceOperations aiServiceClient;
@@ -132,22 +128,17 @@ public class RunAssetSnapshotService {
     }
 
     private boolean isPublicAsset(RunArtifact artifact) {
-        if (artifact == null || !PUBLIC_ASSETS.contains(artifact.assetName())) return false;
-        if (artifact.assetName().contains("/") || artifact.assetName().contains("\\") || artifact.assetName().contains("..")) return false;
-        if ("lumbar-3d-mesh.json".equals(artifact.assetName())) {
-            return "workspace".equals(artifact.plane()) && JSON_CONTENT_TYPE.equalsIgnoreCase(artifact.contentType());
-        }
-        return PNG_CONTENT_TYPE.equalsIgnoreCase(artifact.contentType());
+        return artifact != null && AssetNamePolicy.isAllowedPublicAsset(artifact.assetName(), artifact.plane(), artifact.contentType());
     }
 
     private boolean isExpectedContentType(RunArtifact artifact, String contentType) {
         String normalized = contentType.toLowerCase();
-        if ("lumbar-3d-mesh.json".equals(artifact.assetName())) return normalized.startsWith(JSON_CONTENT_TYPE);
-        return normalized.startsWith(PNG_CONTENT_TYPE);
+        if (AssetNamePolicy.MESH_ASSET.equals(artifact.assetName())) return normalized.startsWith(AssetNamePolicy.JSON_CONTENT_TYPE);
+        return normalized.startsWith(AssetNamePolicy.PNG_CONTENT_TYPE);
     }
 
     private void validatePayloadContract(RunArtifact artifact, byte[] body) {
-        if ("lumbar-3d-mesh.json".equals(artifact.assetName())) {
+        if (AssetNamePolicy.MESH_ASSET.equals(artifact.assetName())) {
             validateMeshJson(body);
             return;
         }

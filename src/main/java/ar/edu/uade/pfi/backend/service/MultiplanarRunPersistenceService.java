@@ -28,6 +28,7 @@ public class MultiplanarRunPersistenceService {
 
     private final StudyRunService studyRunService;
     private final RunAssetSnapshotService runAssetSnapshotService;
+    private final VolumeSliceCatalogService volumeSliceCatalogService = new VolumeSliceCatalogService();
     private final Clock clock;
 
     @Autowired
@@ -139,17 +140,32 @@ public class MultiplanarRunPersistenceService {
             if (!isValidAssetMetadata(asset, planeRun.planeRunId(), plane)) continue;
             String assetName = text(asset.get("assetName"));
             String contentType = blankOrDefault(text(asset.get("contentType")), "application/octet-stream");
-            artifacts.add(new RunArtifact(
-                UUID.randomUUID().toString(),
-                studyRunId,
-                planeRun.planeRunId(),
-                plane,
-                assetName,
-                contentType,
-                assetName,
-                now
-            ));
+            addArtifactIfAbsent(artifacts, studyRunId, planeRun.planeRunId(), plane, assetName, contentType, now);
         }
+        for (Map<String, Object> asset : volumeSliceCatalogService.sliceAssetsFromInput(planeRun.input())) {
+            String assetName = text(asset.get("assetName"));
+            String contentType = blankOrDefault(text(asset.get("contentType")), "application/octet-stream");
+            if (Boolean.TRUE.equals(asset.get("generated")) && AssetNamePolicy.isAllowedPublicAsset(assetName, plane, contentType)) {
+                addArtifactIfAbsent(artifacts, studyRunId, planeRun.planeRunId(), plane, assetName, contentType, now);
+            }
+        }
+    }
+
+    private void addArtifactIfAbsent(List<RunArtifact> artifacts, String studyRunId, String runId, String plane, String assetName, String contentType, Instant now) {
+        boolean exists = artifacts.stream().anyMatch(artifact ->
+            artifact.runId().equals(runId) && artifact.plane().equals(plane) && artifact.assetName().equals(assetName)
+        );
+        if (exists) return;
+        artifacts.add(new RunArtifact(
+            UUID.randomUUID().toString(),
+            studyRunId,
+            runId,
+            plane,
+            assetName,
+            contentType,
+            assetName,
+            now
+        ));
     }
 
     private void addWorkspaceArtifacts(List<RunArtifact> artifacts, String studyRunId, CanonicalMultiplanarRun response, Instant now) {
@@ -162,16 +178,7 @@ public class MultiplanarRunPersistenceService {
             if (!isValidAssetMetadata(asset, response.multiplanarRunId(), "workspace")) continue;
             String assetName = text(asset.get("assetName"));
             String contentType = blankOrDefault(text(asset.get("contentType")), "application/octet-stream");
-            artifacts.add(new RunArtifact(
-                UUID.randomUUID().toString(),
-                studyRunId,
-                response.multiplanarRunId(),
-                "workspace",
-                assetName,
-                contentType,
-                assetName,
-                now
-            ));
+            addArtifactIfAbsent(artifacts, studyRunId, response.multiplanarRunId(), "workspace", assetName, contentType, now);
         }
     }
 
@@ -185,7 +192,7 @@ public class MultiplanarRunPersistenceService {
         String assetName = text(asset.get("assetName"));
         if (blank(assetName)) return false;
         if (!Boolean.TRUE.equals(asset.get("generated"))) return false;
-        if (!isAllowedAsset(assetName, text(asset.get("contentType")))) return false;
+        if (!isAllowedAsset(assetName, plane, text(asset.get("contentType")))) return false;
         String relativePath = text(asset.get("relativePath"));
         if (blank(relativePath)) return false;
         String normalized = relativePath.toLowerCase(Locale.ROOT);
@@ -197,9 +204,8 @@ public class MultiplanarRunPersistenceService {
         return relativePath.contains("/" + plane + "/" + assetName);
     }
 
-    private boolean isAllowedAsset(String assetName, String contentType) {
-        if ("lumbar-3d-mesh.json".equals(assetName)) return "application/json".equalsIgnoreCase(contentType);
-        return List.of("input.png", "overlay.png", "mask-preview.png").contains(assetName) && "image/png".equalsIgnoreCase(contentType);
+    private boolean isAllowedAsset(String assetName, String plane, String contentType) {
+        return AssetNamePolicy.isAllowedPublicAsset(assetName, plane, contentType);
     }
 
     private Map<String, Object> objectMap(Map<?, ?> raw) {

@@ -24,6 +24,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.server.ResponseStatusException;
 
 class RunAssetSnapshotServiceTest {
 
@@ -92,6 +93,67 @@ class RunAssetSnapshotServiceTest {
         assertEquals("stored", stored.storageStatus());
         assertEquals("application/json", stored.contentType());
         assertEquals(1, storage.stored.size());
+    }
+
+    @Test
+    void snapshotsVolumeSlicePreviewAndOverlayWithSha256AndSize() {
+        InMemoryStudyRepository repository = new InMemoryStudyRepository();
+        StudyRunService studyRunService = new StudyRunService(repository);
+        Study study = studyRunService.createStudy("CASE-SLICE-SNAPSHOT", "created");
+        RunArtifact preview = artifact(study.id(), "run-sag-slices", "sagittal", "slice-008.png", "image/png");
+        RunArtifact overlay = artifact(study.id(), "run-sag-slices", "sagittal", "slice-008-overlay.png", "image/png");
+        StudyRun run = studyRunService.createRunWithId(
+            UUID.randomUUID().toString(), study, "multi-slice-snapshot", "trace-slice-snapshot",
+            "real_baseline", "real_baseline", "sagittal_spider", "", "sha256:sag", "",
+            "run-sag-slices", "", Map.of(), Map.of(), List.of(preview, overlay), "completed", "pending", "", null, ""
+        );
+
+        AiServiceOperations ai = mock(AiServiceOperations.class);
+        byte[] previewBody = png(8);
+        byte[] overlayBody = png(9);
+        when(ai.getAsset(eq("run-sag-slices"), eq("sagittal"), eq("slice-008.png"))).thenReturn(pngResponse(previewBody));
+        when(ai.getAsset(eq("run-sag-slices"), eq("sagittal"), eq("slice-008-overlay.png"))).thenReturn(pngResponse(overlayBody));
+        FakeRunAssetContentStorage storage = new FakeRunAssetContentStorage();
+
+        new RunAssetSnapshotService(ai, repository, storage, null, 5_242_880).snapshot(run);
+
+        StudyRun reloaded = repository.findRunByMultiplanarRunId("multi-slice-snapshot").orElseThrow();
+        RunArtifact storedPreview = reloaded.artifacts().stream().filter(artifact -> artifact.assetName().equals("slice-008.png")).findFirst().orElseThrow();
+        RunArtifact storedOverlay = reloaded.artifacts().stream().filter(artifact -> artifact.assetName().equals("slice-008-overlay.png")).findFirst().orElseThrow();
+        assertEquals("stored", storedPreview.storageStatus());
+        assertEquals((long) previewBody.length, storedPreview.sizeBytes());
+        assertEquals("stored", storedOverlay.storageStatus());
+        assertEquals((long) overlayBody.length, storedOverlay.sizeBytes());
+        assertEquals(2, storage.stored.size());
+    }
+
+    @Test
+    void marksMissingSlicePreviewWithoutRejectingTheRun() {
+        InMemoryStudyRepository repository = new InMemoryStudyRepository();
+        StudyRunService studyRunService = new StudyRunService(repository);
+        Study study = studyRunService.createStudy("CASE-SLICE-MISSING", "created");
+        RunArtifact preview = artifact(study.id(), "run-sag-missing-slice", "sagittal", "slice-009.png", "image/png");
+        StudyRun run = studyRunService.createRunWithId(
+            UUID.randomUUID().toString(), study, "multi-slice-missing", "trace-slice-missing",
+            "real_baseline", "real_baseline", "sagittal_spider", "", "sha256:sag", "",
+            "run-sag-missing-slice", "", Map.of(), Map.of(), List.of(preview), "completed", "pending", "", null, ""
+        );
+
+        AiServiceOperations ai = mock(AiServiceOperations.class);
+        when(ai.getAsset(eq("run-sag-missing-slice"), eq("sagittal"), eq("slice-009.png")))
+            .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "not found"));
+
+        new RunAssetSnapshotService(ai, repository, new FakeRunAssetContentStorage(), null, 5_242_880).snapshot(run);
+
+        RunArtifact reloaded = repository.findRunByMultiplanarRunId("multi-slice-missing").orElseThrow().artifacts().get(0);
+        assertEquals("missing", reloaded.storageStatus());
+    }
+
+    @Test
+    void rejectsSlicePreviewWhenContentTypeEmptyPayloadOrSizeAreInvalid() {
+        assertRejectedSliceSnapshot("CASE-SLICE-JSON", "multi-slice-json", jsonResponse(png(1)), 5_242_880);
+        assertRejectedSliceSnapshot("CASE-SLICE-EMPTY", "multi-slice-empty", pngResponse(new byte[0]), 5_242_880);
+        assertRejectedSliceSnapshot("CASE-SLICE-TOO-LARGE", "multi-slice-too-large", pngResponse(png(2)), 3);
     }
 
     @Test
@@ -172,6 +234,25 @@ class RunAssetSnapshotServiceTest {
               "units": "normalized"
             }
             """.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    private void assertRejectedSliceSnapshot(String caseId, String multiplanarRunId, ResponseEntity<byte[]> response, long maxBytes) {
+        InMemoryStudyRepository repository = new InMemoryStudyRepository();
+        StudyRunService studyRunService = new StudyRunService(repository);
+        Study study = studyRunService.createStudy(caseId, "created");
+        RunArtifact preview = artifact(study.id(), "run-" + multiplanarRunId, "sagittal", "slice-010.png", "image/png");
+        StudyRun run = studyRunService.createRunWithId(
+            UUID.randomUUID().toString(), study, multiplanarRunId, "trace-" + multiplanarRunId,
+            "real_baseline", "real_baseline", "sagittal_spider", "", "sha256:sag", "",
+            preview.runId(), "", Map.of(), Map.of(), List.of(preview), "completed", "pending", "", null, ""
+        );
+        AiServiceOperations ai = mock(AiServiceOperations.class);
+        when(ai.getAsset(eq(preview.runId()), eq("sagittal"), eq("slice-010.png"))).thenReturn(response);
+
+        new RunAssetSnapshotService(ai, repository, new FakeRunAssetContentStorage(), null, maxBytes).snapshot(run);
+
+        RunArtifact reloaded = repository.findRunByMultiplanarRunId(multiplanarRunId).orElseThrow().artifacts().get(0);
+        assertEquals("rejected", reloaded.storageStatus());
     }
 
     private static final class FakeRunAssetContentStorage implements RunAssetContentStorage {

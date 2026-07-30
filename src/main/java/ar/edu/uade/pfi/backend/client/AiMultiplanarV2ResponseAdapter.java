@@ -5,6 +5,7 @@ import ar.edu.uade.pfi.backend.domain.CanonicalPlaneRun;
 import ar.edu.uade.pfi.backend.dto.AiGovernanceV2Dto;
 import ar.edu.uade.pfi.backend.dto.AiMultiplanarV2ResponseDto;
 import ar.edu.uade.pfi.backend.dto.AiPlaneRunV2Dto;
+import ar.edu.uade.pfi.backend.service.VolumeSliceCatalogService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class AiMultiplanarV2ResponseAdapter {
     private final ObjectMapper objectMapper;
+    private final VolumeSliceCatalogService volumeSliceCatalogService = new VolumeSliceCatalogService();
 
     public AiMultiplanarV2ResponseAdapter(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
@@ -63,6 +65,7 @@ public class AiMultiplanarV2ResponseAdapter {
 
     private CanonicalPlaneRun toPlane(AiPlaneRunV2Dto plane) {
         List<Map<String, Object>> assets = plane.assets() == null ? List.of() : asMapList(plane.assets());
+        Map<String, Object> input = volumeSliceCatalogService.normalizePlaneInput(asMap(plane.input()), text(plane.runId()), text(plane.plane()));
         return new CanonicalPlaneRun(
             text(plane.runId()),
             text(plane.plane()),
@@ -71,7 +74,7 @@ public class AiMultiplanarV2ResponseAdapter {
             Boolean.TRUE.equals(plane.synthetic()),
             plane.fallbackReason(),
             asMap(plane.model()),
-            asMap(plane.input()),
+            input,
             asMap(plane.coordinateSpace()),
             asMapList(plane.series()),
             assets,
