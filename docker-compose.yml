@@ -51,6 +51,11 @@ services:
       DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-pfi_backend}?user=${POSTGRES_USER:-pfi}&password=${POSTGRES_PASSWORD:-change-me-local-only}
       PFI_AI_SERVICE_URL: http://ai-module:8000
       PFI_AI_TIMEOUT_SECONDS: ${PFI_AI_TIMEOUT_SECONDS:-180}
+      # El contrato v1 no transporta la metadata volumetrica del .mha
+      # (canonicalShape, sliceCount, selectedAxis, orientationTransform), asi que
+      # una corrida sagital real queda marcada como no evaluable en el frontend.
+      # v2 es el valor de rollout documentado en el handoff.
+      PFI_AI_SERVICE_MULTIPLANAR_CONTRACT_VERSION: ${PFI_AI_SERVICE_MULTIPLANAR_CONTRACT_VERSION:-v2}
       PFI_AUTH_JWT_SECRET: ${PFI_AUTH_JWT_SECRET:-change-me-local-jwt-secret}
       PFI_CORS_ALLOWED_ORIGINS: ${PFI_CORS_ALLOWED_ORIGINS:-http://localhost:8088}
     ports:
