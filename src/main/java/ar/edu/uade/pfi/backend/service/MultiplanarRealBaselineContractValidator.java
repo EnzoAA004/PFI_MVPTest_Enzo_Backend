@@ -120,7 +120,10 @@ public class MultiplanarRealBaselineContractValidator {
             for (Object item : list) {
                 requireTrue(doubleValue(item) > 0, "inPlaneSpacing sagittal debe ser positivo");
             }
-            requireEquals("mm", text(metadata.get("inPlaneSpacingUnit")), "inPlaneSpacingUnit sagittal");
+            String inPlaneSpacingUnit = text(metadata.get("inPlaneSpacingUnit"));
+            if (!inPlaneSpacingUnit.isBlank()) {
+                requireEquals("mm", inPlaneSpacingUnit, "inPlaneSpacingUnit sagittal");
+            }
         }
     }
 

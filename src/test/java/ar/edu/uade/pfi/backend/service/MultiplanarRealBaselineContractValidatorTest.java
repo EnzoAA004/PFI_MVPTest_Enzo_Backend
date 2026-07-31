@@ -61,6 +61,11 @@ class MultiplanarRealBaselineContractValidatorTest {
         assertFails(mutateSagittalMetadata("selectedAxis", 0));
         assertFails(mutateSagittalMetadata("selectedSlice", 17));
         assertFails(mutateSagittalMetadata("inPlaneSpacing", List.of(0.7, 0)));
+
+        Map<String, Object> withoutUnit = fixtureMap();
+        metadata(sagittal(withoutUnit)).remove("inPlaneSpacingUnit");
+        assertDoesNotThrow(() -> validator.validate(strictRequest(), presenter.present(read(withoutUnit))));
+        assertFails(mutateSagittalMetadata("inPlaneSpacingUnit", "pixels"));
     }
 
     @Test

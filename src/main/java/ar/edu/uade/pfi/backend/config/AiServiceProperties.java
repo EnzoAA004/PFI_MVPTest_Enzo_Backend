@@ -2,9 +2,14 @@ package ar.edu.uade.pfi.backend.config;
 
 import jakarta.annotation.PostConstruct;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.bind.ConstructorBinding;
 
 @ConfigurationProperties(prefix = "pfi.ai-service")
 public record AiServiceProperties(String baseUrl, Integer timeoutSeconds, String multiplanarContractVersion, Long studyUploadMaxBytes) {
+    @ConstructorBinding
+    public AiServiceProperties {
+    }
+
     public AiServiceProperties(String baseUrl, Integer timeoutSeconds, String multiplanarContractVersion) {
         this(baseUrl, timeoutSeconds, multiplanarContractVersion, null);
     }
