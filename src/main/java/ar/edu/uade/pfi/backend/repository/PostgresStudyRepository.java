@@ -4,6 +4,7 @@ import ar.edu.uade.pfi.backend.domain.DomainAuditEvent;
 import ar.edu.uade.pfi.backend.domain.InputResource;
 import ar.edu.uade.pfi.backend.domain.MeasurementCorrection;
 import ar.edu.uade.pfi.backend.domain.RunArtifact;
+import ar.edu.uade.pfi.backend.domain.ReviewerAnnotation;
 import ar.edu.uade.pfi.backend.domain.RunReview;
 import ar.edu.uade.pfi.backend.domain.Study;
 import ar.edu.uade.pfi.backend.domain.StudyRun;
@@ -34,6 +35,7 @@ import org.springframework.stereotype.Repository;
 @ConditionalOnProperty(name = "pfi.persistence.mode", havingValue = "postgres")
 public class PostgresStudyRepository implements StudyRepository {
     private static final TypeReference<Map<String, Object>> JSON_MAP = new TypeReference<>() {};
+    private static final TypeReference<List<Map<String, Object>>> JSON_MAP_LIST = new TypeReference<>() {};
 
     private final String jdbcUrl;
     private final ObjectMapper objectMapper;
@@ -337,6 +339,124 @@ public class PostgresStudyRepository implements StudyRepository {
         } catch (Exception ex) {
             throw new IllegalStateException("Could not find measurement corrections", ex);
         }
+    }
+
+    @Override
+    public List<ReviewerAnnotation> replaceAnnotations(String multiplanarRunId, List<ReviewerAnnotation> annotations) {
+        try (Connection connection = connection()) {
+            connection.setAutoCommit(false);
+            try {
+                String studyRunId = studyRunIdFor(connection, multiplanarRunId);
+                try (PreparedStatement delete = connection.prepareStatement(
+                    "DELETE FROM domain_reviewer_annotations WHERE study_run_id = ?::uuid")) {
+                    delete.setString(1, studyRunId);
+                    delete.executeUpdate();
+                }
+                for (ReviewerAnnotation annotation : annotations) {
+                    insertAnnotation(connection, studyRunId, annotation);
+                }
+                connection.commit();
+            } catch (Exception ex) {
+                connection.rollback();
+                throw ex;
+            } finally {
+                connection.setAutoCommit(true);
+            }
+            return List.copyOf(annotations);
+        } catch (Exception ex) {
+            throw new IllegalStateException("Could not replace reviewer annotations", ex);
+        }
+    }
+
+    @Override
+    public List<ReviewerAnnotation> findAnnotationsByRunId(String multiplanarRunId) {
+        try (Connection connection = connection()) {
+            String studyRunId = studyRunIdFor(connection, multiplanarRunId);
+            try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT id, study_run_id, scope, kind, plane, series_id, slice_index, level,
+                       points, value, unit, text, author, created_at
+                FROM domain_reviewer_annotations
+                WHERE study_run_id = ?::uuid
+                ORDER BY created_at, id
+                """)) {
+                statement.setString(1, studyRunId);
+                try (ResultSet rs = statement.executeQuery()) {
+                    List<ReviewerAnnotation> annotations = new ArrayList<>();
+                    while (rs.next()) {
+                        annotations.add(readAnnotation(rs));
+                    }
+                    return annotations;
+                }
+            }
+        } catch (Exception ex) {
+            throw new IllegalStateException("Could not find reviewer annotations", ex);
+        }
+    }
+
+    private String studyRunIdFor(Connection connection, String multiplanarRunId) throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement(
+            "SELECT id FROM domain_study_runs WHERE multiplanar_run_id = ?")) {
+            statement.setString(1, multiplanarRunId);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (!rs.next()) throw new IllegalArgumentException("Corrida no encontrada: " + multiplanarRunId);
+                return rs.getObject("id", UUID.class).toString();
+            }
+        }
+    }
+
+    private void insertAnnotation(Connection connection, String studyRunId, ReviewerAnnotation annotation) throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement("""
+            INSERT INTO domain_reviewer_annotations(
+                id, study_run_id, scope, kind, plane, series_id, slice_index, level,
+                points, value, unit, text, author, created_at)
+            VALUES (?::uuid, ?::uuid, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?, ?, ?)
+            """)) {
+            statement.setString(1, annotation.id());
+            statement.setString(2, studyRunId);
+            statement.setString(3, annotation.scope());
+            statement.setString(4, annotation.kind());
+            statement.setString(5, annotation.plane());
+            statement.setString(6, annotation.seriesId());
+            if (annotation.sliceIndex() == null) statement.setNull(7, java.sql.Types.INTEGER);
+            else statement.setInt(7, annotation.sliceIndex());
+            statement.setString(8, annotation.level());
+            statement.setString(9, objectMapper.writeValueAsString(annotation.points()));
+            if (annotation.value() == null) statement.setNull(10, java.sql.Types.DOUBLE);
+            else statement.setDouble(10, annotation.value());
+            statement.setString(11, annotation.unit());
+            statement.setString(12, annotation.text());
+            statement.setString(13, annotation.author());
+            statement.setTimestamp(14, Timestamp.from(annotation.createdAt()));
+            statement.executeUpdate();
+        }
+    }
+
+    private ReviewerAnnotation readAnnotation(ResultSet rs) throws Exception {
+        int sliceIndex = rs.getInt("slice_index");
+        boolean sliceIndexNull = rs.wasNull();
+        double value = rs.getDouble("value");
+        boolean valueNull = rs.wasNull();
+        return new ReviewerAnnotation(
+            rs.getObject("id", UUID.class).toString(),
+            rs.getObject("study_run_id", UUID.class).toString(),
+            rs.getString("scope"),
+            rs.getString("kind"),
+            rs.getString("plane"),
+            rs.getString("series_id"),
+            sliceIndexNull ? null : sliceIndex,
+            rs.getString("level"),
+            readJsonMapList(rs.getString("points")),
+            valueNull ? null : value,
+            rs.getString("unit"),
+            rs.getString("text"),
+            rs.getString("author"),
+            rs.getTimestamp("created_at").toInstant()
+        );
+    }
+
+    private List<Map<String, Object>> readJsonMapList(String json) throws Exception {
+        if (json == null || json.isBlank()) return List.of();
+        return objectMapper.readValue(json, JSON_MAP_LIST);
     }
 
     @Override

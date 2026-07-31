@@ -13,6 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -287,13 +288,31 @@ public class MultiplanarRunPersistenceService {
             transformed.put("source", "AI");
             transformed.put("status", measurement.get("status"));
             transformed.put("plane", plane.plane());
-            transformed.put("level", null);
+            transformed.put("level", lumbarLevel(measurement.get("level")));
+            transformed.put("sliceIndex", measurement.get("sliceIndex"));
             transformed.put("measurementBasis", measurement.get("measurementBasis"));
             transformed.put("linkedLandmarkIds", measurement.getOrDefault("linkedLandmarkIds", List.of()));
             result.add(transformed);
         }
         return result;
     }
+
+    /**
+     * Accepts a measurement's level only when it names a lumbar disc space.
+     *
+     * Older AI Module runs put the plane ("sagittal") in this field, which is not a
+     * vertebral level at all; letting that through would file every measurement
+     * under a level that does not exist. Anything outside L1-L2 … L5-S1 is dropped
+     * so the reviewer sees it as unassigned instead of misfiled.
+     */
+    private String lumbarLevel(Object value) {
+        if (!(value instanceof String text)) return null;
+        String normalized = text.trim().toUpperCase(Locale.ROOT);
+        return LUMBAR_LEVELS.contains(normalized) ? normalized : null;
+    }
+
+    private static final Set<String> LUMBAR_LEVELS =
+            Set.of("L1-L2", "L2-L3", "L3-L4", "L4-L5", "L5-S1");
 
     private String artifactHash(CanonicalPlaneRun plane) {
         return plane == null ? "" : text(plane.model().get("artifactHash"));

@@ -14,6 +14,8 @@ public record AiPlaneMeasurementV2Dto(
     String status,
     String plane,
     String level,
+    /** Slice the measurement was taken on; without it a value cannot be located in the series. */
+    Integer sliceIndex,
     String measurementBasis,
     List<String> linkedLandmarkIds
 ) {}

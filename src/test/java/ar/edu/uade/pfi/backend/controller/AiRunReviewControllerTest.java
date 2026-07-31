@@ -16,6 +16,7 @@ import ar.edu.uade.pfi.backend.config.ApiExceptionHandler;
 import ar.edu.uade.pfi.backend.domain.RunArtifact;
 import ar.edu.uade.pfi.backend.domain.Study;
 import ar.edu.uade.pfi.backend.repository.PostgresStudyRepository;
+import ar.edu.uade.pfi.backend.service.ReviewerAnnotationService;
 import ar.edu.uade.pfi.backend.service.AuditService;
 import ar.edu.uade.pfi.backend.service.RunReviewService;
 import ar.edu.uade.pfi.backend.service.StudyRunService;
@@ -57,7 +58,7 @@ class AiRunReviewControllerTest {
         RunReviewService reviewService = new RunReviewService(repository);
         AuditService auditService = new AuditService(repository);
         RoleAuthorizationService authorizationService = new RoleAuthorizationService(auditService);
-        mockMvc = MockMvcBuilders.standaloneSetup(new AiRunReviewController(reviewService, auditService, authorizationService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new AiRunReviewController(reviewService, auditService, authorizationService, new ReviewerAnnotationService(repository)))
             .setControllerAdvice(new ApiExceptionHandler(auditService))
             .build();
     }
@@ -65,7 +66,7 @@ class AiRunReviewControllerTest {
     @Test
     void cannotBeConstructedWithoutAuthorizationService() {
         assertThrows(NullPointerException.class, () ->
-            new AiRunReviewController(mock(RunReviewService.class), mock(AuditService.class), null)
+            new AiRunReviewController(mock(RunReviewService.class), mock(AuditService.class), null, mock(ReviewerAnnotationService.class))
         );
     }
 

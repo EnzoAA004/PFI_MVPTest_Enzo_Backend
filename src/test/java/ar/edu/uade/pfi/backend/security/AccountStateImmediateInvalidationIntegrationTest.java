@@ -28,6 +28,7 @@ import ar.edu.uade.pfi.backend.domain.CanonicalMultiplanarRun;
 import ar.edu.uade.pfi.backend.dto.RunReviewResponseDto;
 import ar.edu.uade.pfi.backend.dto.StudyListResponseDto;
 import ar.edu.uade.pfi.backend.repository.InMemoryStudyRepository;
+import ar.edu.uade.pfi.backend.service.ReviewerAnnotationService;
 import ar.edu.uade.pfi.backend.service.AiBackendService;
 import ar.edu.uade.pfi.backend.service.AuditService;
 import ar.edu.uade.pfi.backend.service.ProfessionalAccessAuditService;
@@ -107,7 +108,7 @@ class AccountStateImmediateInvalidationIntegrationTest {
         );
         AiMultiplanarController multiplanarController = new AiMultiplanarController(aiServiceClient);
         AiBackendController backendController = new AiBackendController(aiBackendService, authorizationService);
-        AiRunReviewController runReviewController = new AiRunReviewController(runReviewService, auditService, authorizationService);
+        AiRunReviewController runReviewController = new AiRunReviewController(runReviewService, auditService, authorizationService, mock(ReviewerAnnotationService.class));
         SystemController systemController = new SystemController(mock(SystemDiagnosticsService.class), authorizationService);
 
         mockMvc = MockMvcBuilders

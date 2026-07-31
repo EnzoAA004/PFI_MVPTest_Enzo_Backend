@@ -532,7 +532,7 @@ public class AiBackendService {
         if (!ALLOWED_INPUT_PLANES.contains(plane) && !"workspace".equals(plane)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset no encontrado.");
         }
-        if (!isSimpleBasename(assetName) || !ALLOWED_ASSET_NAMES.contains(assetName)) {
+        if (!isSimpleBasename(assetName) || !(ALLOWED_ASSET_NAMES.contains(assetName) || isSlicePreviewName(assetName))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Asset no permitido.");
         }
         if ("workspace".equals(plane) && !"lumbar-3d-mesh.json".equals(assetName)) {
@@ -542,6 +542,21 @@ public class AiBackendService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Asset no permitido.");
         }
     }
+
+    /**
+     * Per-slice preview of a series ({@code slice-007.png}). It is the only asset
+     * name that cannot live in a fixed list, because how many slices a study has
+     * depends on the study. The pattern is as strict as the list — digits only, no
+     * path separators, fixed extension — so it does not widen the traversal surface
+     * the list already closed. The workspace plane is still restricted to the mesh
+     * by the checks right below this one.
+     */
+    private boolean isSlicePreviewName(String assetName) {
+        return SLICE_PREVIEW_NAME.matcher(assetName).matches();
+    }
+
+    private static final java.util.regex.Pattern SLICE_PREVIEW_NAME =
+            java.util.regex.Pattern.compile("^slice-\\d{3,5}\\.png$");
 
     private boolean isSimpleBasename(String assetName) {
         if (assetName.isBlank() || assetName.contains("/") || assetName.contains("\\") || assetName.contains("..")) {

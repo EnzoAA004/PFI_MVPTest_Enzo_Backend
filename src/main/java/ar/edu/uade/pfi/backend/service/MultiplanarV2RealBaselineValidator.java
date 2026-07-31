@@ -28,6 +28,7 @@ public class MultiplanarV2RealBaselineValidator {
     private static final int FROZEN_MASK_COUNT = 3;
     private static final int FROZEN_LANDMARK_COUNT = 3;
     private static final int FROZEN_MEASUREMENT_COUNT = 9;
+    private static final int MAGNITUDES_PER_STRUCTURE = 3;
 
     public boolean isStrict(MultiplanarRunRequestDto request) {
         if (request == null || request.metadata() == null) {
@@ -142,9 +143,17 @@ public class MultiplanarV2RealBaselineValidator {
 
     /**
      * Frozen-artifact regression check: the sagittal_spider/sagittal-spider-final-v1
-     * release is pinned to exactly 3 masks, 3 landmarks and 9 measurements. This is a
-     * point-in-time assertion about THIS specific model release, not a universal rule
-     * — it must not fire for any other modelKey/modelVersion combination.
+     * release is pinned to exactly 3 masks and 3 landmarks. This is a point-in-time
+     * assertion about THIS specific model release, not a universal rule — it must not
+     * fire for any other modelKey/modelVersion combination.
+     *
+     * <p>The measurement count used to be pinned at 9 (area/width/height for each of
+     * the 3 classes). It is now a floor: the AI Module splits the {@code disc_group}
+     * class into its connected components so each disc space carries its own
+     * measurements and its own lumbar level, and the number of discs depends on the
+     * study's field of view. The invariant that still holds — and that would catch the
+     * drift the fixed count was there to catch — is that every structure contributes
+     * exactly its three magnitudes on top of the two unchanged group classes.
      */
     private void validateFrozenSagittalSpiderArtifactCounts(Map<String, Object> model, CanonicalPlaneRun plane) {
         boolean isFrozenRelease = SAGITTAL_MODEL_KEY.equals(text(model.get("key")))
@@ -152,7 +161,9 @@ public class MultiplanarV2RealBaselineValidator {
         if (!isFrozenRelease) return;
         requireTrue(plane.masks().size() == FROZEN_MASK_COUNT, "sagittal_spider/sagittal-spider-final-v1 debe tener exactamente 3 masks");
         requireTrue(plane.landmarks().size() == FROZEN_LANDMARK_COUNT, "sagittal_spider/sagittal-spider-final-v1 debe tener exactamente 3 landmarks");
-        requireTrue(plane.measurements().size() == FROZEN_MEASUREMENT_COUNT, "sagittal_spider/sagittal-spider-final-v1 debe tener exactamente 9 measurements");
+        int measurementCount = plane.measurements().size();
+        requireTrue(measurementCount >= FROZEN_MEASUREMENT_COUNT, "sagittal_spider/sagittal-spider-final-v1 debe tener al menos 9 measurements");
+        requireTrue(measurementCount % MAGNITUDES_PER_STRUCTURE == 0, "sagittal_spider/sagittal-spider-final-v1 debe tener area/width/height por estructura");
     }
 
     private void validateQualityConsistency(CanonicalPlaneRun plane) {

@@ -4,6 +4,7 @@ import ar.edu.uade.pfi.backend.domain.DomainAuditEvent;
 import ar.edu.uade.pfi.backend.domain.InputResource;
 import ar.edu.uade.pfi.backend.domain.MeasurementCorrection;
 import ar.edu.uade.pfi.backend.domain.RunArtifact;
+import ar.edu.uade.pfi.backend.domain.ReviewerAnnotation;
 import ar.edu.uade.pfi.backend.domain.RunReview;
 import ar.edu.uade.pfi.backend.domain.Study;
 import ar.edu.uade.pfi.backend.domain.StudyRun;
@@ -28,6 +29,7 @@ public class InMemoryStudyRepository implements StudyRepository {
     private final ConcurrentMap<String, String> runIdsByMultiplanarRunId = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, String> runIdsByTraceId = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, List<MeasurementCorrection>> correctionsByRunId = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, List<ReviewerAnnotation>> annotationsByRunId = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, DomainAuditEvent> auditEventsById = new ConcurrentHashMap<>();
 
     @Override
@@ -271,6 +273,21 @@ public class InMemoryStudyRepository implements StudyRepository {
     @Override
     public List<MeasurementCorrection> findCorrectionsByStudyRunId(String studyRunId) {
         return correctionsByRunId.getOrDefault(studyRunId, List.of());
+    }
+
+    @Override
+    public List<ReviewerAnnotation> replaceAnnotations(String multiplanarRunId, List<ReviewerAnnotation> annotations) {
+        StudyRun run = findRunByMultiplanarRunId(multiplanarRunId).orElseThrow();
+        List<ReviewerAnnotation> stored = List.copyOf(annotations);
+        annotationsByRunId.put(run.id(), stored);
+        return stored;
+    }
+
+    @Override
+    public List<ReviewerAnnotation> findAnnotationsByRunId(String multiplanarRunId) {
+        return findRunByMultiplanarRunId(multiplanarRunId)
+            .map(run -> annotationsByRunId.getOrDefault(run.id(), List.<ReviewerAnnotation>of()))
+            .orElse(List.of());
     }
 
     @Override

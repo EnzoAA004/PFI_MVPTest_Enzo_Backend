@@ -11,6 +11,7 @@ import ar.edu.uade.pfi.backend.domain.DomainAuditEvent;
 import ar.edu.uade.pfi.backend.domain.InputResource;
 import ar.edu.uade.pfi.backend.domain.MeasurementCorrection;
 import ar.edu.uade.pfi.backend.domain.RunArtifact;
+import ar.edu.uade.pfi.backend.domain.ReviewerAnnotation;
 import ar.edu.uade.pfi.backend.domain.RunReview;
 import ar.edu.uade.pfi.backend.domain.Study;
 import ar.edu.uade.pfi.backend.domain.StudyRun;
@@ -347,6 +348,8 @@ class StudyWorklistServicePostgresTest {
         @Override public RunReview saveReview(String multiplanarRunId, String reviewStatus, String reviewer, Instant reviewedAt, String comments, List<MeasurementCorrection> corrections, DomainAuditEvent auditEvent) { throw new UnsupportedOperationException(); }
         @Override public Optional<RunReview> findReviewByMultiplanarRunId(String multiplanarRunId) { throw new UnsupportedOperationException(); }
         @Override public List<MeasurementCorrection> findCorrectionsByStudyRunId(String studyRunId) { throw new UnsupportedOperationException(); }
+        @Override public List<ReviewerAnnotation> replaceAnnotations(String multiplanarRunId, List<ReviewerAnnotation> annotations) { throw new UnsupportedOperationException(); }
+        @Override public List<ReviewerAnnotation> findAnnotationsByRunId(String multiplanarRunId) { throw new UnsupportedOperationException(); }
         @Override public DomainAuditEvent saveAuditEvent(DomainAuditEvent event) { throw new UnsupportedOperationException(); }
         @Override public List<DomainAuditEvent> findAuditEventsByTraceId(String traceId) { throw new UnsupportedOperationException(); }
         @Override public List<DomainAuditEvent> findAuditEventsByEntityId(String entityId) { throw new UnsupportedOperationException(); }

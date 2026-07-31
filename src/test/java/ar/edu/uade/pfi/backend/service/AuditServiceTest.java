@@ -108,7 +108,8 @@ class AuditServiceTest {
             .standaloneSetup(new AiRunReviewController(
                 new RunReviewService(repository),
                 auditService,
-                new ar.edu.uade.pfi.backend.auth.RoleAuthorizationService(auditService)
+                new ar.edu.uade.pfi.backend.auth.RoleAuthorizationService(auditService),
+                new ar.edu.uade.pfi.backend.service.ReviewerAnnotationService(repository)
             ))
             .setControllerAdvice(new ApiExceptionHandler(auditService))
             .build();
