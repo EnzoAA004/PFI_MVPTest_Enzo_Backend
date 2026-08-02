@@ -17,6 +17,12 @@ public record AiPlaneRunV2Dto(
     List<AiPlaneMaskV2Dto> masks,
     List<AiPlaneLandmarkV2Dto> landmarks,
     List<AiPlaneMeasurementV2Dto> measurements,
+    /**
+     * Instance label map for the inferred slice (RLE). Carried through as opaque
+     * JSON: the backend neither renders nor interprets it — colour is a viewer
+     * decision, which is the whole point of shipping the map instead of a PNG.
+     */
+    java.util.Map<String, Object> segmentation,
     AiPlaneQualityV2Dto quality,
     Boolean synthetic,
     String fallbackReason

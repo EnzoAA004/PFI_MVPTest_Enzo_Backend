@@ -198,9 +198,20 @@ public class MultiplanarRunPersistenceService {
         return relativePath.contains("/" + plane + "/" + assetName);
     }
 
+    /**
+     * Per-class segmentation mask ({@code mask-vertebra_group.png}). Cannot live in a
+     * fixed list because the classes depend on the model. The pattern only accepts the
+     * shape of a class name — lowercase, digits and underscore — so it admits no path
+     * separators and no arbitrary extension.
+     */
+    private static final java.util.regex.Pattern CLASS_MASK_NAME =
+            java.util.regex.Pattern.compile("^mask-[a-z][a-z0-9_]{0,31}\\.png$");
+
     private boolean isAllowedAsset(String assetName, String contentType) {
         if ("lumbar-3d-mesh.json".equals(assetName)) return "application/json".equalsIgnoreCase(contentType);
-        return List.of("input.png", "overlay.png", "mask-preview.png").contains(assetName) && "image/png".equalsIgnoreCase(contentType);
+        boolean known = List.of("input.png", "overlay.png", "mask-preview.png").contains(assetName)
+                || CLASS_MASK_NAME.matcher(assetName).matches();
+        return known && "image/png".equalsIgnoreCase(contentType);
     }
 
     private Map<String, Object> objectMap(Map<?, ?> raw) {
@@ -252,6 +263,7 @@ public class MultiplanarRunPersistenceService {
         snapshot.put("masks", plane.masks());
         snapshot.put("landmarks", plane.landmarks());
         snapshot.put("measurements", transformMeasurements(plane));
+        snapshot.put("segmentation", plane.segmentation());
         snapshot.put("quality", plane.quality());
         snapshot.put("humanReviewRequired", governance.humanReviewRequired());
         snapshot.put("notClinicalDiagnosis", governance.notClinicalDiagnosis());

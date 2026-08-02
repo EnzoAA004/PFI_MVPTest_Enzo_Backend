@@ -37,7 +37,16 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class AiBackendService {
     static final long MAX_INPUT_UPLOAD_BYTES = 200L * 1024L * 1024L;
-    private static final Set<String> ALLOWED_INPUT_EXTENSIONS = Set.of("npy", "png", "jpg", "jpeg", "bmp", "tif", "tiff", "mha", "mhd", "dcm");
+    /**
+     * Upload formats the backend forwards to the AI Module.
+     *
+     * <p>It must not be narrower than the AI Module's own allowlist, or the backend
+     * rejects a file the module could have read — which is what happened with whole
+     * series: {@code .zip} is how a multi-slice study travels, and {@code .ima} is
+     * what a Siemens scanner writes, and neither reached the module.
+     */
+    private static final Set<String> ALLOWED_INPUT_EXTENSIONS =
+            Set.of("npy", "png", "jpg", "jpeg", "bmp", "tif", "tiff", "mha", "mhd", "dcm", "ima", "zip");
     private static final Set<String> ALLOWED_INPUT_PLANES = Set.of("sagittal", "axial");
     private static final Set<String> ALLOWED_ASSET_NAMES = Set.of("input.png", "overlay.png", "mask-preview.png", "lumbar-3d-mesh.json");
     private static final Set<String> VALID_REVIEW_STATUSES = Set.of("pendiente", "aceptado", "observado", "descartado");
@@ -500,7 +509,11 @@ public class AiBackendService {
         }
         String extension = inputExtension(file.getOriginalFilename());
         if (!ALLOWED_INPUT_EXTENSIONS.contains(extension)) {
-            throw badRequest("Formato de input invalido. Extensiones permitidas: .npy,.png,.jpg,.jpeg,.bmp,.tif,.tiff,.mha,.mhd,.dcm.");
+            // La lista se deriva de ALLOWED_INPUT_EXTENSIONS en vez de repetirse: escrita
+            // a mano quedaba desactualizada y el mensaje le mentia al medico sobre lo
+            // que el sistema acepta.
+            throw badRequest("Formato de input invalido. Extensiones permitidas: "
+                    + ALLOWED_INPUT_EXTENSIONS.stream().sorted().map(value -> "." + value).collect(java.util.stream.Collectors.joining(",")) + ".");
         }
     }
 
@@ -532,7 +545,7 @@ public class AiBackendService {
         if (!ALLOWED_INPUT_PLANES.contains(plane) && !"workspace".equals(plane)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset no encontrado.");
         }
-        if (!isSimpleBasename(assetName) || !(ALLOWED_ASSET_NAMES.contains(assetName) || isSlicePreviewName(assetName))) {
+        if (!isSimpleBasename(assetName) || !(ALLOWED_ASSET_NAMES.contains(assetName) || isSlicePreviewName(assetName) || isClassMaskName(assetName))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Asset no permitido.");
         }
         if ("workspace".equals(plane) && !"lumbar-3d-mesh.json".equals(assetName)) {
@@ -544,7 +557,8 @@ public class AiBackendService {
     }
 
     /**
-     * Per-slice preview of a series ({@code slice-007.png}). It is the only asset
+     * Per-slice asset of a series: the preview ({@code slice-007.png}) or its raw
+     * 16-bit pixels ({@code slice-007.raw}). It is the only asset
      * name that cannot live in a fixed list, because how many slices a study has
      * depends on the study. The pattern is as strict as the list — digits only, no
      * path separators, fixed extension — so it does not widen the traversal surface
@@ -555,8 +569,20 @@ public class AiBackendService {
         return SLICE_PREVIEW_NAME.matcher(assetName).matches();
     }
 
+    /**
+     * Per-class segmentation mask ({@code mask-vertebra_group.png}). Same reasoning as
+     * the slice preview: the set depends on the model, so it cannot be a fixed list,
+     * and the pattern stays as strict as the list it complements.
+     */
+    private boolean isClassMaskName(String assetName) {
+        return CLASS_MASK_NAME.matcher(assetName).matches();
+    }
+
+    private static final java.util.regex.Pattern CLASS_MASK_NAME =
+            java.util.regex.Pattern.compile("^mask-[a-z][a-z0-9_]{0,31}\\.png$");
+
     private static final java.util.regex.Pattern SLICE_PREVIEW_NAME =
-            java.util.regex.Pattern.compile("^slice-\\d{3,5}\\.png$");
+            java.util.regex.Pattern.compile("^slice-\\d{3,5}\\.(png|raw)$");
 
     private boolean isSimpleBasename(String assetName) {
         if (assetName.isBlank() || assetName.contains("/") || assetName.contains("\\") || assetName.contains("..")) {

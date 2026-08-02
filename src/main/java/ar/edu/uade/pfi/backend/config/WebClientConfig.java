@@ -22,6 +22,14 @@ public class WebClientConfig {
             .responseTimeout(Duration.ofSeconds(timeoutSeconds));
 
         return WebClient.builder()
+            /*
+             * Spring's default codec limit is 256 KB, and a raw slice is larger than
+             * that: 384x384 int16 is 294 KB. The limit turned every raw-slice request
+             * into a 502 while the smaller PNG previews went through, which read like
+             * an AI Module outage rather than a buffer ceiling. 16 MB covers a slice
+             * with room to spare and still bounds a runaway response.
+             */
+            .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(16 * 1024 * 1024))
             .baseUrl(properties.resolvedBaseUrl())
             .clientConnector(new ReactorClientHttpConnector(httpClient))
             .filter(traceIdPropagationFilter())

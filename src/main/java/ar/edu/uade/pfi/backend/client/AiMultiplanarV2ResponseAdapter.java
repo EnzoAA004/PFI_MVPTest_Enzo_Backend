@@ -78,6 +78,7 @@ public class AiMultiplanarV2ResponseAdapter {
             asMapList(plane.masks()),
             asMapList(plane.landmarks()),
             asMapList(plane.measurements()),
+            plane.segmentation(),
             asMap(plane.quality())
         );
     }

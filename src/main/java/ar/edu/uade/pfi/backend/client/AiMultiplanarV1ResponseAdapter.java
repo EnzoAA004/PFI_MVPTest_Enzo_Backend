@@ -63,6 +63,10 @@ public class AiMultiplanarV1ResponseAdapter {
             plane.masks(),
             plane.landmarks(),
             measurementsList(plane.measurements()),
+            // El contrato v1 no transporta el mapa de instancias. Se deja vacio en vez
+            // de derivarlo: el visor cae al overlay compuesto, que es lo que esa
+            // corrida realmente produjo.
+            null,
             safe(plane.quality())
         );
     }

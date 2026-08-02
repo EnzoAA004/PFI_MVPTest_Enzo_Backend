@@ -18,5 +18,11 @@ public record AiPlaneQualityV2Dto(
      * promising a frame that was never written.
      */
     Integer slicePreviewCount,
+    /**
+     * Raw per-slice pixel metadata: count, width, height, dtype, byteOrder, min, max.
+     * Carried opaquely — it is what lets the viewer window real intensities instead
+     * of filtering brightness over an already-windowed 8-bit PNG.
+     */
+    java.util.Map<String, Object> slicePixels,
     List<String> warnings
 ) {}
