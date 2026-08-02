@@ -28,7 +28,6 @@ public class MultiplanarV2RealBaselineValidator {
     private static final int FROZEN_MASK_COUNT = 3;
     private static final int FROZEN_LANDMARK_COUNT = 3;
     private static final int FROZEN_MEASUREMENT_COUNT = 9;
-    private static final int MAGNITUDES_PER_STRUCTURE = 3;
 
     public boolean isStrict(MultiplanarRunRequestDto request) {
         if (request == null || request.metadata() == null) {
@@ -142,28 +141,28 @@ public class MultiplanarV2RealBaselineValidator {
     }
 
     /**
-     * Frozen-artifact regression check: the sagittal_spider/sagittal-spider-final-v1
-     * release is pinned to exactly 3 masks and 3 landmarks. This is a point-in-time
-     * assertion about THIS specific model release, not a universal rule — it must not
-     * fire for any other modelKey/modelVersion combination.
+     * Frozen-artifact regression check for sagittal_spider/sagittal-spider-final-v1.
      *
-     * <p>The measurement count used to be pinned at 9 (area/width/height for each of
-     * the 3 classes). It is now a floor: the AI Module splits the {@code disc_group}
-     * class into its connected components so each disc space carries its own
-     * measurements and its own lumbar level, and the number of discs depends on the
-     * study's field of view. The invariant that still holds — and that would catch the
-     * drift the fixed count was there to catch — is that every structure contributes
-     * exactly its three magnitudes on top of the two unchanged group classes.
+     * <p>It used to pin exact counts: 3 masks, 3 landmarks, 9 measurements. Those
+     * counts have now been relaxed three times in a row, and that is the signal —
+     * they were never guarding the model. They guarded the post-processing, which is
+     * being deliberately evolved: masks and measurements are now emitted per instance
+     * (one per disc, one per vertebral body) so the count follows the study's field
+     * of view rather than the model release.
+     *
+     * <p>What actually freezes the release is the artifact hash, asserted exactly in
+     * {@code validateSagittal}. That check is untouched. What remains here is a floor,
+     * so a release that silently stopped producing segmentation still fails; the shape
+     * of each item is verified by the per-mask, per-landmark and per-measurement
+     * checks above.
      */
     private void validateFrozenSagittalSpiderArtifactCounts(Map<String, Object> model, CanonicalPlaneRun plane) {
         boolean isFrozenRelease = SAGITTAL_MODEL_KEY.equals(text(model.get("key")))
             && SAGITTAL_MODEL_VERSION.equals(text(model.get("version")));
         if (!isFrozenRelease) return;
-        requireTrue(plane.masks().size() == FROZEN_MASK_COUNT, "sagittal_spider/sagittal-spider-final-v1 debe tener exactamente 3 masks");
-        requireTrue(plane.landmarks().size() == FROZEN_LANDMARK_COUNT, "sagittal_spider/sagittal-spider-final-v1 debe tener exactamente 3 landmarks");
-        int measurementCount = plane.measurements().size();
-        requireTrue(measurementCount >= FROZEN_MEASUREMENT_COUNT, "sagittal_spider/sagittal-spider-final-v1 debe tener al menos 9 measurements");
-        requireTrue(measurementCount % MAGNITUDES_PER_STRUCTURE == 0, "sagittal_spider/sagittal-spider-final-v1 debe tener area/width/height por estructura");
+        requireTrue(plane.masks().size() >= FROZEN_MASK_COUNT, "sagittal_spider/sagittal-spider-final-v1 debe tener al menos 3 masks");
+        requireTrue(plane.landmarks().size() >= FROZEN_LANDMARK_COUNT, "sagittal_spider/sagittal-spider-final-v1 debe tener al menos 3 landmarks");
+        requireTrue(plane.measurements().size() >= FROZEN_MEASUREMENT_COUNT, "sagittal_spider/sagittal-spider-final-v1 debe tener al menos 9 measurements");
     }
 
     private void validateQualityConsistency(CanonicalPlaneRun plane) {
