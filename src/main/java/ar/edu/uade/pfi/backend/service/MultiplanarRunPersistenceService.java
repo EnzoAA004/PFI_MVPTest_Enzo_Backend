@@ -302,6 +302,7 @@ public class MultiplanarRunPersistenceService {
             transformed.put("plane", plane.plane());
             transformed.put("level", vertebralLevel(measurement.get("level")));
             transformed.put("levelScope", "study".equals(measurement.get("levelScope")) ? "study" : "level");
+            transformed.put("points", measurement.getOrDefault("points", List.of()));
             transformed.put("sliceIndex", measurement.get("sliceIndex"));
             transformed.put("measurementBasis", measurement.get("measurementBasis"));
             transformed.put("linkedLandmarkIds", measurement.getOrDefault("linkedLandmarkIds", List.of()));

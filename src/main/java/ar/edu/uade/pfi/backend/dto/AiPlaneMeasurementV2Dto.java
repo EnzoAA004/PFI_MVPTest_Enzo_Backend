@@ -23,6 +23,15 @@ public record AiPlaneMeasurementV2Dto(
      * the canal area has no level because the mask runs the length of the spine.
      */
     String levelScope,
+    /**
+     * The two endpoints the measurement was taken between, in the plane's
+     * coordinateSpace.
+     *
+     * <p>It is what gives the number a place. Without it a reviewer sees "37.37 mm"
+     * and has no way to know from where to where, so they can neither verify the
+     * measurement nor correct it. Empty when the magnitude is not a distance.
+     */
+    List<java.util.Map<String, Object>> points,
     /** Slice the measurement was taken on; without it a value cannot be located in the series. */
     Integer sliceIndex,
     String measurementBasis,
