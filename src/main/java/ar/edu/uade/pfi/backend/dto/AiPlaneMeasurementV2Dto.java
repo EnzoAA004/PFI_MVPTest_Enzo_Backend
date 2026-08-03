@@ -32,6 +32,17 @@ public record AiPlaneMeasurementV2Dto(
      * measurement nor correct it. Empty when the magnitude is not a distance.
      */
     List<java.util.Map<String, Object>> points,
+    /**
+     * Derived from other structures' geometry rather than from a mask of its own.
+     *
+     * <p>Segmental angle and listhesis come from the axes of two neighbouring vertebral
+     * bodies. They are the two measurements a spine report carries that the model was
+     * not trained to produce, so they travel flagged: the viewer shows them on their own
+     * layer and the decision to use them stays with the reader.
+     */
+    Boolean experimental,
+    /** Second magnitude when the measurement has one, such as the Meyerding grade. */
+    String detail,
     /** Slice the measurement was taken on; without it a value cannot be located in the series. */
     Integer sliceIndex,
     String measurementBasis,
