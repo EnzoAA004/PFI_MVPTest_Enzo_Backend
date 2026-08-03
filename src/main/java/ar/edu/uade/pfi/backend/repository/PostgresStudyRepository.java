@@ -373,7 +373,7 @@ public class PostgresStudyRepository implements StudyRepository {
         try (Connection connection = connection()) {
             String studyRunId = studyRunIdFor(connection, multiplanarRunId);
             try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT id, study_run_id, scope, kind, plane, series_id, slice_index, level,
+                SELECT id, study_run_id, scope, kind, measurement_kind, plane, series_id, slice_index, level,
                        points, value, unit, text, author, created_at
                 FROM domain_reviewer_annotations
                 WHERE study_run_id = ?::uuid
@@ -407,26 +407,27 @@ public class PostgresStudyRepository implements StudyRepository {
     private void insertAnnotation(Connection connection, String studyRunId, ReviewerAnnotation annotation) throws Exception {
         try (PreparedStatement statement = connection.prepareStatement("""
             INSERT INTO domain_reviewer_annotations(
-                id, study_run_id, scope, kind, plane, series_id, slice_index, level,
+                id, study_run_id, scope, kind, measurement_kind, plane, series_id, slice_index, level,
                 points, value, unit, text, author, created_at)
-            VALUES (?::uuid, ?::uuid, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?, ?, ?)
+            VALUES (?::uuid, ?::uuid, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?, ?, ?)
             """)) {
             statement.setString(1, annotation.id());
             statement.setString(2, studyRunId);
             statement.setString(3, annotation.scope());
             statement.setString(4, annotation.kind());
-            statement.setString(5, annotation.plane());
-            statement.setString(6, annotation.seriesId());
-            if (annotation.sliceIndex() == null) statement.setNull(7, java.sql.Types.INTEGER);
-            else statement.setInt(7, annotation.sliceIndex());
-            statement.setString(8, annotation.level());
-            statement.setString(9, objectMapper.writeValueAsString(annotation.points()));
-            if (annotation.value() == null) statement.setNull(10, java.sql.Types.DOUBLE);
-            else statement.setDouble(10, annotation.value());
-            statement.setString(11, annotation.unit());
-            statement.setString(12, annotation.text());
-            statement.setString(13, annotation.author());
-            statement.setTimestamp(14, Timestamp.from(annotation.createdAt()));
+            statement.setString(5, annotation.measurementKind());
+            statement.setString(6, annotation.plane());
+            statement.setString(7, annotation.seriesId());
+            if (annotation.sliceIndex() == null) statement.setNull(8, java.sql.Types.INTEGER);
+            else statement.setInt(8, annotation.sliceIndex());
+            statement.setString(9, annotation.level());
+            statement.setString(10, objectMapper.writeValueAsString(annotation.points()));
+            if (annotation.value() == null) statement.setNull(11, java.sql.Types.DOUBLE);
+            else statement.setDouble(11, annotation.value());
+            statement.setString(12, annotation.unit());
+            statement.setString(13, annotation.text());
+            statement.setString(14, annotation.author());
+            statement.setTimestamp(15, Timestamp.from(annotation.createdAt()));
             statement.executeUpdate();
         }
     }
@@ -441,6 +442,7 @@ public class PostgresStudyRepository implements StudyRepository {
             rs.getObject("study_run_id", UUID.class).toString(),
             rs.getString("scope"),
             rs.getString("kind"),
+            rs.getString("measurement_kind"),
             rs.getString("plane"),
             rs.getString("series_id"),
             sliceIndexNull ? null : sliceIndex,

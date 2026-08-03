@@ -29,6 +29,16 @@ public record ReviewerAnnotation(
     String studyRunId,
     String scope,
     String kind,
+    /**
+     * Which tool took the measurement, when {@code kind} is "measurement".
+     *
+     * <p>Separate from {@code kind} because they answer different questions: kind
+     * says whether this is a measurement at all, this says how it was measured.
+     * Without it the figure is lost on reload — an angle is four points and a
+     * listhesis is three, so a viewer that does not know the type redraws them as a
+     * distance between the first two, which is a measurement nobody took.
+     */
+    String measurementKind,
     String plane,
     String seriesId,
     Integer sliceIndex,
@@ -44,6 +54,7 @@ public record ReviewerAnnotation(
     private static final List<String> KINDS = List.of("measurement", "marker", "note");
     private static final List<String> PLANES = List.of("sagittal", "axial");
     private static final List<String> UNITS = List.of("mm", "px");
+    private static final List<String> MEASUREMENT_KINDS = List.of("distance", "angle", "listhesis", "roi", "probe");
 
     public ReviewerAnnotation {
         Objects.requireNonNull(id, "id");
@@ -52,6 +63,7 @@ public record ReviewerAnnotation(
         Objects.requireNonNull(kind, "kind");
         Objects.requireNonNull(createdAt, "createdAt");
         require(SCOPES.contains(scope), "scope invalido: " + scope);
+        require(measurementKind == null || MEASUREMENT_KINDS.contains(measurementKind), "measurementKind invalido: " + measurementKind);
         require(KINDS.contains(kind), "kind invalido: " + kind);
         require(plane == null || PLANES.contains(plane), "plane invalido: " + plane);
         require(unit == null || UNITS.contains(unit), "unit invalida: " + unit);

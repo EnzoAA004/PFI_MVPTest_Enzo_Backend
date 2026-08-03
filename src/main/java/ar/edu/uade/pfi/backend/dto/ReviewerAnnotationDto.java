@@ -17,6 +17,8 @@ public record ReviewerAnnotationDto(
     String id,
     String scope,
     String kind,
+    /** Which tool took it, when kind is "measurement". Without it the figure is lost. */
+    String measurementKind,
     String plane,
     String seriesId,
     Integer sliceIndex,
