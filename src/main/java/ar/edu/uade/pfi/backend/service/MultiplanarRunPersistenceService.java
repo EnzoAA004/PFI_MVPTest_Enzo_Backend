@@ -300,7 +300,7 @@ public class MultiplanarRunPersistenceService {
             transformed.put("source", "AI");
             transformed.put("status", measurement.get("status"));
             transformed.put("plane", plane.plane());
-            transformed.put("level", lumbarLevel(measurement.get("level")));
+            transformed.put("level", vertebralLevel(measurement.get("level")));
             transformed.put("sliceIndex", measurement.get("sliceIndex"));
             transformed.put("measurementBasis", measurement.get("measurementBasis"));
             transformed.put("linkedLandmarkIds", measurement.getOrDefault("linkedLandmarkIds", List.of()));
@@ -310,21 +310,28 @@ public class MultiplanarRunPersistenceService {
     }
 
     /**
-     * Accepts a measurement's level only when it names a lumbar disc space.
+     * Accepts a measurement's level only when it names a vertebral level.
      *
      * Older AI Module runs put the plane ("sagittal") in this field, which is not a
-     * vertebral level at all; letting that through would file every measurement
-     * under a level that does not exist. Anything outside L1-L2 … L5-S1 is dropped
-     * so the reviewer sees it as unassigned instead of misfiled.
+     * vertebral level at all; letting that through would file every measurement under
+     * a level that does not exist.
+     *
+     * <p>The check is on shape and not on a fixed list of five disc spaces. That list
+     * was silently destroying data the AI Module had got right: a disc the model
+     * identified as T12-L1 and a vertebral body it named L4 both arrived here and
+     * left as null, so the reviewer saw "unassigned" — which reads as "the AI could
+     * not tell" — for a level it had in fact determined. The shape still rejects
+     * "sagittal", which is what this filter exists for.
      */
-    private String lumbarLevel(Object value) {
+    private String vertebralLevel(Object value) {
         if (!(value instanceof String text)) return null;
         String normalized = text.trim().toUpperCase(Locale.ROOT);
-        return LUMBAR_LEVELS.contains(normalized) ? normalized : null;
+        return VERTEBRAL_LEVEL.matcher(normalized).matches() ? normalized : null;
     }
 
-    private static final Set<String> LUMBAR_LEVELS =
-            Set.of("L1-L2", "L2-L3", "L3-L4", "L4-L5", "L5-S1");
+    /** A vertebral body ({@code L4}, {@code T12}, {@code S1}) or a space between two. */
+    private static final java.util.regex.Pattern VERTEBRAL_LEVEL =
+            java.util.regex.Pattern.compile("^[CTLS]\\d{1,2}(-[CTLS]\\d{1,2})?$");
 
     private String artifactHash(CanonicalPlaneRun plane) {
         return plane == null ? "" : text(plane.model().get("artifactHash"));
