@@ -45,6 +45,7 @@ docker run --rm -p 8080:8080 --env PFI_AI_SERVICE_URL=http://host.docker.interna
 - `GET /api/ai/health`: consulta el health del AI Module.
 - `GET /api/ai/models`: lista modelos disponibles en el AI Module.
 - `POST /api/ai/inputs`: sube un archivo al AI Module y devuelve un `inputId` opaco, sin paths internos.
+- `POST /api/ai/studies`: sube un ZIP de estudio DICOM completo y devuelve solo `studyId`, series públicas e `inputId` opacos por plano.
 - `POST /api/ai/pipeline/run`: ejecuta el pipeline remoto y marca revision humana requerida.
 - `POST /api/ai/multiplanar/run`: ejecuta corrida dual sagital/axial usando `inputId` por plano.
 - `POST /api/ai/models/sync`: endpoint administrativo que valida el release sagital real antes de marcarlo listo.

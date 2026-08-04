@@ -9,6 +9,8 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import ar.edu.uade.pfi.backend.config.AiServiceProperties;
 import ar.edu.uade.pfi.backend.config.TraceIdFilter;
@@ -26,6 +28,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.slf4j.MDC;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -99,6 +102,35 @@ class AiTracePropagationTest {
 
         wireMock.verify(postRequestedFor(urlEqualTo("/inputs")).withHeader(TraceIdFilter.TRACE_ID_HEADER, matching("trace-upload-1")));
         wireMock.verify(exactly(0), postRequestedFor(urlEqualTo("/inputs")).withHeader("Authorization", matching(".*")));
+    }
+
+    @Test
+    void uploadStudyCarriesTraceIdAndNeverAnAuthorizationHeader() {
+        wireMock.stubFor(post(urlEqualTo("/inputs/study")).willReturn(aResponse().withStatus(200)
+            .withHeader("Content-Type", "application/json")
+            .withHeader(TraceIdFilter.TRACE_ID_HEADER, "trace-study-ai-1")
+            .withBody("{\"caseId\":\"CASE-1\",\"studyId\":\"study-1\",\"sagittal\":{\"inputId\":\"input-sag\",\"plane\":\"sagittal\",\"format\":\"dcm\",\"size\":3}}")));
+        MDC.put(TraceIdFilter.TRACE_ID_MDC_KEY, "trace-study-1");
+        MockMultipartFile file = new MockMultipartFile("file", "study.zip", "application/zip", new byte[] {'P', 'K', 3, 4});
+
+        Map<String, Object> response = client().uploadStudy(file, "CASE-1");
+
+        assertEquals("trace-study-ai-1", response.get("traceId"));
+        wireMock.verify(postRequestedFor(urlEqualTo("/inputs/study")).withHeader(TraceIdFilter.TRACE_ID_HEADER, matching("trace-study-1")));
+        wireMock.verify(exactly(0), postRequestedFor(urlEqualTo("/inputs/study")).withHeader("Authorization", matching(".*")));
+    }
+
+    @Test
+    void uploadStudyMapsKnownUpstreamRejectionsWithoutLeakingResponseBody() {
+        wireMock.stubFor(post(urlEqualTo("/inputs/study")).willReturn(aResponse().withStatus(422)
+            .withHeader("Content-Type", "application/json")
+            .withBody("{\"detail\":\"/tmp/private/series token secret\"}")));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+            () -> client().uploadStudy(new MockMultipartFile("file", "study.zip", "application/zip", new byte[] {'P', 'K', 3, 4}), "CASE-1"));
+
+        assertEquals(422, ex.getStatusCode().value());
+        assertEquals("El estudio no contiene planos utilizables.", ex.getReason());
     }
 
     @Test
