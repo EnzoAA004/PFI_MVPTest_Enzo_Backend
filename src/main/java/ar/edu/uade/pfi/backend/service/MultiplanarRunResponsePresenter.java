@@ -44,6 +44,7 @@ public class MultiplanarRunResponsePresenter {
             safeMap(response.assets()),
             threeDAssetPublisher.publish(response.runId(), threeD),
             safeMap(response.quality()),
+            safeMap(response.degenerativeFindings()),
             safeMap(response.review()),
             safeMap(response.metadata()),
             response.humanReviewRequired(),

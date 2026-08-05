@@ -23,6 +23,7 @@ public record CanonicalMultiplanarRun(
     Map<String, CanonicalPlaneRun> planes,
     Map<String, Object> threeD,
     Map<String, Object> quality,
+    Map<String, Object> degenerativeFindings,
     Map<String, Object> review,
     Governance governance
 ) {
@@ -36,7 +37,51 @@ public record CanonicalMultiplanarRun(
         planes = immutableMap(planes);
         threeD = immutableMap(threeD);
         quality = immutableMap(quality);
+        degenerativeFindings = immutableMap(degenerativeFindings);
         review = immutableMap(review);
+    }
+
+    public CanonicalMultiplanarRun(
+        String status,
+        String schemaVersion,
+        String multiplanarRunId,
+        String traceId,
+        String caseId,
+        String workspaceMode,
+        String requestedInferenceMode,
+        String effectiveInferenceMode,
+        List<String> requestedPlanes,
+        List<String> completedPlanes,
+        boolean synthetic,
+        String fallbackReason,
+        Map<String, Object> readiness,
+        Map<String, CanonicalPlaneRun> planes,
+        Map<String, Object> threeD,
+        Map<String, Object> quality,
+        Map<String, Object> review,
+        Governance governance
+    ) {
+        this(
+            status,
+            schemaVersion,
+            multiplanarRunId,
+            traceId,
+            caseId,
+            workspaceMode,
+            requestedInferenceMode,
+            effectiveInferenceMode,
+            requestedPlanes,
+            completedPlanes,
+            synthetic,
+            fallbackReason,
+            readiness,
+            planes,
+            threeD,
+            quality,
+            Map.of(),
+            review,
+            governance
+        );
     }
 
     public CanonicalPlaneRun sagittal() {

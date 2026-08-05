@@ -239,6 +239,9 @@ public class MultiplanarRunPersistenceService {
         snapshot.put("governance", governanceMap(response.governance()));
         snapshot.put("threeD", response.threeD());
         snapshot.put("quality", response.quality());
+        if (!response.degenerativeFindings().isEmpty()) {
+            snapshot.put("degenerativeFindings", response.degenerativeFindings());
+        }
         snapshot.put("review", response.review());
         Map<String, Object> planes = new LinkedHashMap<>();
         planes.put("sagittal", planeSnapshot(response.sagittal(), response.governance()));

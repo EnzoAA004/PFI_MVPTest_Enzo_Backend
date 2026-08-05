@@ -20,6 +20,7 @@ public record AiMultiplanarV2ResponseDto(
     AiMultiplanarV2PlanesDto planes,
     AiThreeDV2Dto threeD,
     AiWorkspaceQualityV2Dto quality,
+    DegenerativeFindingsV1Dto degenerativeFindings,
     AiReviewPolicyV2Dto review,
     AiGovernanceV2Dto governance,
     AiReadinessV2Dto readiness

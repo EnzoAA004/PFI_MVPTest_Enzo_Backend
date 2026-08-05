@@ -5,20 +5,29 @@ import ar.edu.uade.pfi.backend.domain.CanonicalPlaneRun;
 import ar.edu.uade.pfi.backend.dto.AiGovernanceV2Dto;
 import ar.edu.uade.pfi.backend.dto.AiMultiplanarV2ResponseDto;
 import ar.edu.uade.pfi.backend.dto.AiPlaneRunV2Dto;
+import ar.edu.uade.pfi.backend.service.DegenerativeFindingsV1Validator;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
 public class AiMultiplanarV2ResponseAdapter {
     private final ObjectMapper objectMapper;
+    private final DegenerativeFindingsV1Validator degenerativeFindingsValidator;
 
-    public AiMultiplanarV2ResponseAdapter(ObjectMapper objectMapper) {
+    AiMultiplanarV2ResponseAdapter(ObjectMapper objectMapper) {
+        this(objectMapper, new DegenerativeFindingsV1Validator());
+    }
+
+    @Autowired
+    public AiMultiplanarV2ResponseAdapter(ObjectMapper objectMapper, DegenerativeFindingsV1Validator degenerativeFindingsValidator) {
         this.objectMapper = objectMapper;
+        this.degenerativeFindingsValidator = degenerativeFindingsValidator;
     }
 
     public CanonicalMultiplanarRun toCanonical(AiMultiplanarV2ResponseDto response) {
@@ -34,6 +43,7 @@ public class AiMultiplanarV2ResponseAdapter {
         List<String> completed = response.completedPlanes() != null ? response.completedPlanes() : List.copyOf(planes.keySet());
 
         AiGovernanceV2Dto governanceDto = response.governance();
+        degenerativeFindingsValidator.validate(response.degenerativeFindings());
         return new CanonicalMultiplanarRun(
             text(response.status()),
             text(response.schemaVersion()),
@@ -51,6 +61,7 @@ public class AiMultiplanarV2ResponseAdapter {
             planes,
             asMap(response.threeD()),
             asMap(response.quality()),
+            asMap(response.degenerativeFindings()),
             asMap(response.review()),
             new CanonicalMultiplanarRun.Governance(
                 governanceDto != null && Boolean.TRUE.equals(governanceDto.humanReviewRequired()),
