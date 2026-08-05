@@ -48,6 +48,7 @@ public class CanonicalMultiplanarRunLegacyPresenter {
             Map.of(),
             threeDAssetPublisher.publish(canonical.multiplanarRunId(), canonical.threeD()),
             canonical.quality(),
+            canonical.degenerativeFindings(),
             canonical.review(),
             Map.of(),
             canonical.governance().humanReviewRequired(),

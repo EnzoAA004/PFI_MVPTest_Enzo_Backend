@@ -21,6 +21,7 @@ public record MultiplanarRunResponseDto(
     Map<String, Object> assets,
     Map<String, Object> threeD,
     Map<String, Object> quality,
+    Map<String, Object> degenerativeFindings,
     Map<String, Object> review,
     Map<String, Object> metadata,
     Boolean humanReviewRequired,
@@ -35,7 +36,48 @@ public record MultiplanarRunResponseDto(
         Map<String, Object> assets,
         Map<String, Object> review
     ) {
-        this(null, null, runId, traceId, null, null, null, effectiveInferenceMode, planes, assets, null, null, review, null, true, true, false);
+        this(null, null, runId, traceId, null, null, null, effectiveInferenceMode, planes, assets, null, null, null, review, null, true, true, false);
+    }
+
+    public MultiplanarRunResponseDto(
+        String status,
+        String schemaVersion,
+        String runId,
+        String traceId,
+        String caseId,
+        String workspaceMode,
+        String requestedInferenceMode,
+        String effectiveInferenceMode,
+        PlanesDto planes,
+        Map<String, Object> assets,
+        Map<String, Object> threeD,
+        Map<String, Object> quality,
+        Map<String, Object> review,
+        Map<String, Object> metadata,
+        Boolean humanReviewRequired,
+        Boolean notClinicalDiagnosis,
+        Boolean degradedMode
+    ) {
+        this(
+            status,
+            schemaVersion,
+            runId,
+            traceId,
+            caseId,
+            workspaceMode,
+            requestedInferenceMode,
+            effectiveInferenceMode,
+            planes,
+            assets,
+            threeD,
+            quality,
+            null,
+            review,
+            metadata,
+            humanReviewRequired,
+            notClinicalDiagnosis,
+            degradedMode
+        );
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
