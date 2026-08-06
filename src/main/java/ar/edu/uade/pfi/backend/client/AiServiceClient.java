@@ -69,6 +69,8 @@ public class AiServiceClient implements AiServiceOperations {
 
     private final WebClient aiWebClient;
     private final Duration timeout;
+    /** Techo corto para las consultas que solo preguntan estado. Ver getDiagnosticMap. */
+    private final Duration diagnosticTimeout;
     private final AiMultiplanarContractVersion multiplanarContractVersion;
     private final AiMultiplanarV2RequestMapper v2RequestMapper;
     private final AiMultiplanarV2ResponseAdapter v2ResponseAdapter;
@@ -105,6 +107,7 @@ public class AiServiceClient implements AiServiceOperations {
     ) {
         this.aiWebClient = aiWebClient;
         this.timeout = Duration.ofSeconds(properties.resolvedTimeoutSeconds());
+        this.diagnosticTimeout = Duration.ofSeconds(properties.resolvedDiagnosticTimeoutSeconds());
         this.multiplanarContractVersion = properties.resolvedMultiplanarContractVersion();
         this.v2RequestMapper = v2RequestMapper;
         this.v2ResponseAdapter = v2ResponseAdapter;
@@ -139,12 +142,12 @@ public class AiServiceClient implements AiServiceOperations {
 
     @Override
     public Map<String, Object> health() {
-        return getMap("/health");
+        return getDiagnosticMap("/health");
     }
 
     @Override
     public Map<String, Object> readiness() {
-        return getMap("/readiness");
+        return getDiagnosticMap("/readiness");
     }
 
     @Override
@@ -154,11 +157,11 @@ public class AiServiceClient implements AiServiceOperations {
 
     @Override
     public Map<String, Object> verifyModels() {
-        return getMap("/models/verify");
+        return getDiagnosticMap("/models/verify");
     }
 
     public Map<String, Object> getModelRuntime() {
-        return getMap("/models/runtime");
+        return getDiagnosticMap("/models/runtime");
     }
 
     @Override
@@ -465,11 +468,36 @@ public class AiServiceClient implements AiServiceOperations {
 
     @Override
     public Map<String, Object> getMultiplanarContract() {
-        return getMap("/multiplanar/contract");
+        return getDiagnosticMap("/multiplanar/contract");
     }
 
     private Map<String, Object> getMap(String path) {
-        return execute(() -> aiWebClient.get().uri(path).headers(this::applyTraceHeader).retrieve().bodyToMono(MAP_RESPONSE).block(timeout));
+        return getMap(path, timeout);
+    }
+
+    /**
+     * Consulta de diagnostico: responde rapido o no responde.
+     *
+     * <p>Se acota el {@code block} y tambien el {@code responseTimeout} de la conexion,
+     * porque cortar solo del lado del que espera deja el socket abierto consumiendo un
+     * descriptor hasta que venza el techo largo.
+     */
+    private Map<String, Object> getDiagnosticMap(String path) {
+        return getMap(path, diagnosticTimeout);
+    }
+
+    private Map<String, Object> getMap(String path, Duration limit) {
+        return execute(() -> aiWebClient.get()
+            .uri(path)
+            .headers(this::applyTraceHeader)
+            .httpRequest(request -> {
+                if (request.getNativeRequest() instanceof reactor.netty.http.client.HttpClientRequest nativeRequest) {
+                    nativeRequest.responseTimeout(limit);
+                }
+            })
+            .retrieve()
+            .bodyToMono(MAP_RESPONSE)
+            .block(limit));
     }
 
     /** Never surfaces the upstream body — a rejection just carries a fixed, safe public message. */

@@ -34,6 +34,23 @@ public record AiServiceProperties(String baseUrl, Integer timeoutSeconds, String
         return timeoutSeconds == null ? 180 : Math.max(timeoutSeconds, 30);
     }
 
+    /**
+     * Techo para las consultas de diagnostico: salud, readiness, inventario de modelos,
+     * contrato.
+     *
+     * <p>No comparten techo con la inferencia. Un {@code /health} esperaba lo mismo que
+     * una corrida multiplanar —tres minutos— asi que un modulo de IA colgado retenia un
+     * hilo del pool por request de un endpoint cuyo unico proposito es responder rapido o
+     * no responder. Preguntar si esta vivo y pedirle que segmente un volumen son dos
+     * cosas distintas y merecen dos paciencias distintas.
+     *
+     * <p>Nunca supera el techo general: si alguien configura un timeout total menor, el
+     * de diagnostico lo acompana.
+     */
+    public int resolvedDiagnosticTimeoutSeconds() {
+        return Math.min(10, resolvedTimeoutSeconds());
+    }
+
     public AiMultiplanarContractVersion resolvedMultiplanarContractVersion() {
         return AiMultiplanarContractVersion.fromConfigValue(multiplanarContractVersion);
     }

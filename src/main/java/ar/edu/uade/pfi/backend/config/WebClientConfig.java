@@ -14,11 +14,24 @@ import reactor.netty.http.client.HttpClient;
 
 @Configuration
 public class WebClientConfig {
+    /**
+     * Techo para abrir la conexion TCP, independiente del techo de respuesta.
+     *
+     * <p>Antes se usaba el mismo valor para las dos cosas: 180 segundos esperando el
+     * apreton de manos. Un connect que tarda mas de unos segundos no va a completarse —el
+     * servicio no esta, o la red no llega—, y estirarlo solo retiene un hilo del pool sin
+     * cambiar el desenlace. Cuanto tarda la inferencia no tiene nada que ver con cuanto
+     * tarda en abrirse un socket.
+     */
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
+
     @Bean
     public WebClient aiWebClient(AiServiceProperties properties) {
+        // El techo de respuesta queda en el mas largo de todos —una corrida multiplanar—,
+        // y cada llamada lo acota hacia abajo segun lo que pide. Ver AiServiceClient.
         int timeoutSeconds = properties.resolvedTimeoutSeconds();
         HttpClient httpClient = HttpClient.create()
-            .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, timeoutSeconds * 1000)
+            .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, (int) CONNECT_TIMEOUT.toMillis())
             .responseTimeout(Duration.ofSeconds(timeoutSeconds));
 
         return WebClient.builder()

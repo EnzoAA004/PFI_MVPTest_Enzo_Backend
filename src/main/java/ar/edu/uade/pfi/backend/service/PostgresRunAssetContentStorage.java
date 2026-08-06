@@ -46,7 +46,7 @@ public class PostgresRunAssetContentStorage implements RunAssetContentStorage {
         this.maxBytes = maxBytes;
         if (applyMigrations) {
             try (Connection connection = connection()) {
-                new SqlMigrationRunner(Path.of("docs", "migrations")).apply(connection);
+                new SqlMigrationRunner(SqlMigrationRunner.DEFAULT_MIGRATIONS_DIRECTORY).apply(connection);
             } catch (Exception ex) {
                 throw new IllegalStateException("Could not initialize PostgreSQL run asset content storage", ex);
             }

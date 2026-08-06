@@ -53,7 +53,7 @@ public class PostgresStudyRepository implements StudyRepository {
         this.jdbcUrl = toJdbcUrl(databaseUrl == null ? "" : databaseUrl.trim());
         if (applyMigrations) {
             try (Connection connection = connection()) {
-                new SqlMigrationRunner(Path.of("docs", "migrations")).apply(connection);
+                new SqlMigrationRunner(SqlMigrationRunner.DEFAULT_MIGRATIONS_DIRECTORY).apply(connection);
             } catch (Exception ex) {
                 throw new IllegalStateException("Could not initialize PostgreSQL study repository", ex);
             }
