@@ -45,5 +45,17 @@ public record AiPlaneQualityV2Dto(
      * assigned".
      */
     List<java.util.Map<String, Object>> discLevels,
+    /**
+     * Nivel discal de cada corte axial que cae en un espacio discal: {@code [{index, level}]}.
+     *
+     * <p>Contraparte de {@code discLevels}: solo el plano axial lo publica, y solo cuando la
+     * corrida tuvo tambien sagital. Los cortes que no atraviesan ningun disco no aparecen.
+     *
+     * <p>Es por corte y no uno solo para la serie porque una serie axial lumbar se adquiere
+     * en bloques angulados, uno por disco. El visor lo necesita para nombrar el corte que el
+     * medico esta mirando y para no pedir una clasificacion subarticular bajo un nivel que
+     * no es. Viaja opaco: el backend no lo interpreta.
+     */
+    List<java.util.Map<String, Object>> sliceLevels,
     List<String> warnings
 ) {}

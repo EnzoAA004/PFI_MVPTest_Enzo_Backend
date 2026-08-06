@@ -1,0 +1,31 @@
+{
+  "degenerativeFindings": {
+    "schemaVersion": "pfi.degenerative-findings.v1",
+    "findings": [
+      {
+        "findingId": "subarticular-L4-L5-right-12",
+        "findingType": "subarticular_stenosis",
+        "anatomy": { "level": "L4-L5", "side": "right" },
+        "classification": {
+          "label": "moderate",
+          "probabilities": { "normal_mild": 0.30, "moderate": 0.62, "severe": 0.08 }
+        },
+        "evaluation": { "status": "evaluated", "reasonCode": null },
+        "sourceSeries": { "role": "axial_t2", "position": 12 },
+        "localization": { "source": "external_coordinate", "researchOnly": true },
+        "model": { "modelId": "subarticular-frozen-v1", "modelSha256": "d41262d5e84a" },
+        "review": { "required": true, "status": "pending" },
+        "notClinicalDiagnosis": true
+      }
+    ]
+  },
+  "model": {
+    "modelId": "subarticular-frozen-v1",
+    "checkpointSha256": "d41262d5e84a",
+    "device": "cpu"
+  },
+  "humanReviewRequired": true,
+  "notClinicalDiagnosis": true,
+  "autonomousDiagnosis": false,
+  "warnings": []
+}

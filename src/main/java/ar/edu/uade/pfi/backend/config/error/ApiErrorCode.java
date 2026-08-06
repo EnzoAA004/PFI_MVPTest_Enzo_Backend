@@ -80,6 +80,22 @@ public enum ApiErrorCode {
     AI_REAL_INFERENCE_FAILED(ApiErrorCategory.AI_UPSTREAM, false, "La inferencia real del modulo de IA fallo."),
     AI_INVALID_RESPONSE(ApiErrorCategory.AI_CONTRACT, false, "La respuesta del modulo de IA es invalida."),
     AI_UNSUPPORTED_INFERENCE_MODE(ApiErrorCategory.VALIDATION, false, "El modo de inferencia solicitado no esta soportado."),
+    // ---- Clasificador subarticular (AiSubarticularErrorCodeMapper) ----
+    /**
+     * El checkpoint congelado no esta configurado o el artefacto no esta en el entorno.
+     * Es transitorio en el sentido operativo —se resuelve montando el .pt— y por eso el
+     * modulo de IA responde 503 y no 500.
+     */
+    AI_SUBARTICULAR_UNAVAILABLE(ApiErrorCategory.AI_UPSTREAM, true, "El clasificador de hallazgos degenerativos no esta disponible."),
+    AI_SUBARTICULAR_INVALID_INPUT(ApiErrorCategory.VALIDATION, false, "La coordenada solicitada al clasificador es invalida."),
+    /**
+     * El artefacto esta pero no es el que el codigo espera: hash distinto del declarado, o
+     * state_dict incompatible. Es una falla de contrato entre el release del modelo y el
+     * del codigo, no un problema de disponibilidad, y reintentarlo no cambia nada.
+     */
+    AI_SUBARTICULAR_CHECKPOINT_INVALID(ApiErrorCategory.AI_CONTRACT, false, "El modelo de hallazgos degenerativos no es el esperado."),
+    AI_SUBARTICULAR_RUNTIME_ERROR(ApiErrorCategory.AI_UPSTREAM, false, "El clasificador de hallazgos degenerativos fallo."),
+
     /** Transient by nature, but retryable is still forced false on a non-idempotent inference POST — see ApiErrorWriter. */
     AI_MODULE_ERROR(ApiErrorCategory.AI_UPSTREAM, true, "El modulo de IA respondio con un error."),
     AI_MODULE_TIMEOUT(ApiErrorCategory.AI_UPSTREAM, true, "El modulo de IA no respondio a tiempo."),

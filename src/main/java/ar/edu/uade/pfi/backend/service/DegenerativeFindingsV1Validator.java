@@ -13,7 +13,12 @@ import org.springframework.stereotype.Component;
 public class DegenerativeFindingsV1Validator {
     public static final String SCHEMA_VERSION = "pfi.degenerative-findings.v1";
     private static final double SUM_TOLERANCE = 0.000001d;
-    private static final Set<String> VALID_LEVELS = Set.of("L1-L2", "L2-L3", "L3-L4", "L4-L5", "L5-S1");
+    /**
+     * Publico porque es el mismo catalogo que tiene que aplicar quien construye un pedido
+     * de clasificacion, no solo quien valida la respuesta. Tenerlo en dos lugares es como
+     * se llega a que un nivel se acepte al pedir y se rechace al volver.
+     */
+    public static final Set<String> VALID_LEVELS = Set.of("L1-L2", "L2-L3", "L3-L4", "L4-L5", "L5-S1");
 
     public void validate(DegenerativeFindingsV1Dto root) {
         if (root == null) return;

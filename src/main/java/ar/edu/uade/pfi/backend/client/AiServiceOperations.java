@@ -2,8 +2,10 @@ package ar.edu.uade.pfi.backend.client;
 
 import ar.edu.uade.pfi.backend.domain.CanonicalMultiplanarRun;
 import ar.edu.uade.pfi.backend.dto.AiInputResponseDto;
+import ar.edu.uade.pfi.backend.dto.AiSubarticularPredictRequestDto;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunRequestDto;
 import ar.edu.uade.pfi.backend.dto.PipelineRunRequestDto;
+import ar.edu.uade.pfi.backend.dto.SubarticularPredictionResponseDto;
 import java.util.Map;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MultipartFile;
@@ -46,6 +48,14 @@ public interface AiServiceOperations {
 
     default CanonicalMultiplanarRun runMultiplanar(MultiplanarRunRequestDto request) {
         throw new UnsupportedOperationException("multiplanar_run_unavailable");
+    }
+
+    /**
+     * Clasificacion subarticular sobre una coordenada marcada a mano. Es puntual: no
+     * forma parte de una corrida y no persiste nada.
+     */
+    default SubarticularPredictionResponseDto predictSubarticular(AiSubarticularPredictRequestDto request) {
+        throw new UnsupportedOperationException("subarticular_prediction_unavailable");
     }
 
     Map<String, Object> getAgentReport(String runId);

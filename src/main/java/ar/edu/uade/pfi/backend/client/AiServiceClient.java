@@ -10,9 +10,11 @@ import ar.edu.uade.pfi.backend.dto.AiInputResponseDto;
 import ar.edu.uade.pfi.backend.dto.AiMultiplanarV2RequestDto;
 import ar.edu.uade.pfi.backend.dto.AiMultiplanarV2ResponseDto;
 import ar.edu.uade.pfi.backend.dto.AiStructuredErrorV2Dto;
+import ar.edu.uade.pfi.backend.dto.AiSubarticularPredictRequestDto;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunRequestDto;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunResponseDto;
 import ar.edu.uade.pfi.backend.dto.PipelineRunRequestDto;
+import ar.edu.uade.pfi.backend.dto.SubarticularPredictionResponseDto;
 import ar.edu.uade.pfi.backend.service.AiMultiplanarContractViolationException;
 import ar.edu.uade.pfi.backend.service.AiMultiplanarUpstreamException;
 import ar.edu.uade.pfi.backend.service.MultiplanarRealBaselineContractValidator;
@@ -344,6 +346,59 @@ public class AiServiceClient implements AiServiceOperations {
             }
             throw ex;
         }
+    }
+
+    /**
+     * Clasificacion subarticular sobre una coordenada marcada a mano.
+     *
+     * <p>Sigue el mismo camino que {@link #runMultiplanarV2}: trace id propagado por
+     * header, error estructurado traducido por tabla fija, y metrica de exito o fallo.
+     * La unica diferencia es la tabla de codigos, que es la del contrato subarticular.
+     *
+     * <p>No valida la respuesta acá. La validacion del contrato clinico vive en
+     * {@code DegenerativeFindingsV1Validator} y la aplica el controller, que es quien
+     * decide que hacer con un hallazgo mal formado.
+     */
+    @Override
+    public SubarticularPredictionResponseDto predictSubarticular(AiSubarticularPredictRequestDto request) {
+        String traceId = resolveTraceId();
+        long startedAt = System.currentTimeMillis();
+        try {
+            SubarticularPredictionResponseDto response = dispatchV2Http(() -> aiWebClient.post()
+                .uri("/degenerative-findings/subarticular/predict")
+                .headers(headers -> applyTraceHeader(headers, traceId))
+                .bodyValue(request)
+                .exchangeToMono(clientResponse -> {
+                    if (clientResponse.statusCode().is2xxSuccessful()) {
+                        return clientResponse.bodyToMono(SubarticularPredictionResponseDto.class);
+                    }
+                    return clientResponse.bodyToMono(String.class)
+                        .defaultIfEmpty("")
+                        .flatMap(body -> Mono.error(buildSubarticularError(body, traceId)));
+                })
+                .block(timeout), traceId);
+
+            recordAiCall(true, startedAt);
+            return response;
+        } catch (RuntimeException ex) {
+            recordAiCall(false, startedAt);
+            throw ex;
+        }
+    }
+
+    /**
+     * Igual que {@link #buildV2Error}, pero resolviendo contra la tabla del contrato
+     * subarticular. El body crudo nunca se copia a la excepcion publica.
+     */
+    private RuntimeException buildSubarticularError(String body, String traceId) {
+        AiStructuredErrorV2Dto structured = tryParseStructuredError(body);
+        AiMultiplanarV2ErrorCodeMapper.Mapped mapped = structured != null && structured.code() != null && !structured.code().isBlank()
+            ? AiSubarticularErrorCodeMapper.resolve(structured.code())
+            : AiMultiplanarV2ErrorCodeMapper.UNKNOWN;
+        String aiTraceId = structured != null && structured.traceId() != null && !structured.traceId().isBlank()
+            ? structured.traceId()
+            : traceId;
+        return new AiMultiplanarUpstreamException(mapped.status(), mapped.backendCode().name(), mapped.publicMessage(), aiTraceId);
     }
 
     private void incrementContractViolations() {

@@ -27,12 +27,28 @@ services:
       PORT: 8000
       PFI_MODEL_DIR: /models/final
       PFI_OUTPUT_DIR: /app/outputs
+      # Las series subidas viven acá. Sin volumen quedaban en la capa efímera del
+      # contenedor: al recrearlo, el visor seguía mostrando cortes —las previsualizaciones
+      # sí están en outputs— pero cualquier inputId devolvía 404 porque el archivo ya no
+      # existía. Verificado el 2026-08-06 sobre una corrida real.
+      PFI_UPLOAD_DIR: /app/uploads/inputs
       PFI_MAX_UPLOAD_BYTES: ${PFI_AI_STUDY_UPLOAD_MAX_BYTES:-209715200}
+      # Clasificador subarticular de P10.6. El .pt no esta en Git —pesa y es un artefacto
+      # de release— asi que se monta desde afuera. Si el archivo no existe, el modulo de
+      # IA arranca igual y solo ese endpoint responde 503 con
+      # SUBARTICULAR_CHECKPOINT_UNAVAILABLE: el resto del sistema no se entera.
+      # Estado real del checkpoint: GET /health -> subarticular.status
+      PFI_SUBARTICULAR_CHECKPOINT_PATH: /models/subarticular/frozen_subarticular_checkpoint.pt
     ports:
       - "${AI_MODULE_PORT:-8000}:8000"
     volumes:
       - ${AI_MODEL_DIR:-../PFI_MVPTest_Enzo_AImodule/models/final}:/models/final:ro
+      # Se monta el directorio y no el archivo: con bind de archivo, si el .pt no existe en
+      # el host, Docker crea un directorio vacio en su lugar y el error que se ve despues
+      # no menciona el checkpoint.
+      - ${PFI_SUBARTICULAR_CHECKPOINT_DIR:-../PFI_MVPTest_Enzo_AImodule/models/subarticular}:/models/subarticular:ro
       - ai-outputs:/app/outputs
+      - ai-uploads:/app/uploads
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/health >/dev/null || exit 1"]
       interval: 15s
@@ -111,3 +127,4 @@ networks:
 volumes:
   postgres-data:
   ai-outputs:
+  ai-uploads:
