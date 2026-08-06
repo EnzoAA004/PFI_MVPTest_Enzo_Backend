@@ -21,7 +21,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * never leaves a partial state behind, with no JDBC URL or credentials leaked into any
  * exception message.
  */
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 class PostgresAuthStoreServiceFailureTest {
     @Container
     static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")

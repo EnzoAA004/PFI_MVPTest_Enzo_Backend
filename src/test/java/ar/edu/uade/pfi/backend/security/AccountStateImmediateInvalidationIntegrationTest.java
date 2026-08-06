@@ -58,7 +58,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * instead of trusting the JWT's own role claims — this can only be demonstrated
  * meaningfully against a real Postgres-backed, production-profile stack.
  */
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 class AccountStateImmediateInvalidationIntegrationTest {
     @Container
     static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")

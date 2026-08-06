@@ -24,7 +24,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * reloads the account from the database after each operation instead of trusting the
  * returned DTO.
  */
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 class AccountRolePreservationPostgresIntegrationTest {
     @Container
     static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")

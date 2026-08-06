@@ -15,7 +15,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /** Real-Postgres coverage for the idempotency and persistence claims that a mocked store can't verify. */
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 class AdminBootstrapPostgresIntegrationTest {
     @Container
     static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")

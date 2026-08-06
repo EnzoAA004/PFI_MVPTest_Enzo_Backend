@@ -1,9 +1,8 @@
 name: Backend CI
 
+# Sin filtro de rama en push: una rama de feature tiene que ver el CI antes del merge.
 on:
   push:
-    branches:
-      - main
   pull_request:
 
 jobs:
