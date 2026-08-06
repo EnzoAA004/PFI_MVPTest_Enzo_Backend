@@ -36,6 +36,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -57,6 +58,15 @@ public class AiBackendService {
     private static final Set<String> ALLOWED_INPUT_EXTENSIONS =
             Set.of("npy", "png", "jpg", "jpeg", "bmp", "tif", "tiff", "mha", "mhd", "dcm", "ima", "zip");
     private static final Set<String> ALLOWED_INPUT_PLANES = Set.of("sagittal", "axial");
+    /**
+     * Planes a series can be listed and displayed under.
+     *
+     * <p>Wider than {@link #ALLOWED_INPUT_PLANES} on purpose: that one guards what a
+     * model may run on, this one guards what the reader may look at. {@code unknown}
+     * is the series whose header carries no orientation, and a localizer, which has no
+     * single plane to report.
+     */
+    private static final Set<String> VIEWABLE_PLANES = Set.of("sagittal", "axial", "coronal", "unknown");
     private static final Set<String> ALLOWED_ASSET_NAMES = Set.of("input.png", "overlay.png", "mask-preview.png", "lumbar-3d-mesh.json");
     static final long DEFAULT_STUDY_UPLOAD_BYTES = 200L * 1024L * 1024L;
     /**
@@ -426,6 +436,35 @@ public class AiBackendService {
         return new ResponseEntity<>(upstream.getBody(), headers, upstream.getStatusCode());
     }
 
+    /**
+     * Identifier of a stored series: exactly what the AI module mints in
+     * {@code register_series_files}. Anchored, so nothing that could climb a path or
+     * name another endpoint reaches the upstream URL.
+     */
+    private static final Pattern INPUT_ID_PATTERN = Pattern.compile("^inp_[0-9a-f]{32}$");
+
+    /** Mismo techo que el catalogo de previsualizaciones del modulo de IA. */
+    private static final int MAX_SERIES_SLICE_INDEX = 511;
+
+    public ResponseEntity<byte[]> getSeriesSlice(String inputId, int index) {
+        String normalizedInputId = trimmed(inputId);
+        if (!INPUT_ID_PATTERN.matcher(normalizedInputId).matches()) {
+            throw badRequest("inputId invalido.");
+        }
+        if (index < 0 || index > MAX_SERIES_SLICE_INDEX) {
+            throw badRequest("Indice de corte fuera de rango.");
+        }
+        ResponseEntity<byte[]> upstream = aiServiceClient.getSeriesSlice(normalizedInputId, index);
+        HttpHeaders headers = new HttpHeaders();
+        String contentType = upstream.getHeaders().getFirst(HttpHeaders.CONTENT_TYPE);
+        headers.add(HttpHeaders.CONTENT_TYPE, contentType == null || contentType.isBlank() ? MediaType.IMAGE_PNG_VALUE : contentType);
+        // El corte de una serie no cambia nunca: el mismo inputId y el mismo indice
+        // devuelven el mismo PNG. Sin cache el visor lo vuelve a pedir en cada paso
+        // del cine, que a 200 ms por cuadro es la red haciendo de disco.
+        headers.add(HttpHeaders.CACHE_CONTROL, "private, max-age=86400");
+        return new ResponseEntity<>(upstream.getBody(), headers, upstream.getStatusCode());
+    }
+
     private ResponseEntity<byte[]> durableAsset(RunAssetContent content, RunArtifact artifact, String source) {
         HttpHeaders headers = new HttpHeaders();
         headers.add(HttpHeaders.CONTENT_TYPE, artifact.contentType());
@@ -688,13 +727,27 @@ public class AiBackendService {
         List<StudyUploadSeriesDto> result = new ArrayList<>();
         for (Object item : list) {
             Map<String, Object> map = objectMap(item);
+            /*
+             * The listing keeps every plane, including the ones no model runs on.
+             *
+             * ALLOWED_INPUT_PLANES is the set a run can be launched against, and using
+             * it to filter this listing conflated two different questions: a coronal
+             * series and a localizer were dropped from the study's contents because
+             * nothing could be inferred from them. The doctor still has to see that
+             * the study carried them — a missing series they expected to find is
+             * itself a finding, and silence here reads as "the study did not have it".
+             */
             String plane = normalized(text(map.get("plane")));
-            if (!ALLOWED_INPUT_PLANES.contains(plane)) continue;
+            if (!VIEWABLE_PLANES.contains(plane)) continue;
             result.add(new StudyUploadSeriesDto(
+                publicText(map.get("inputId")),
                 plane,
                 publicText(map.get("description")),
                 publicText(map.get("weighting")),
-                numericInteger(map.get("sliceCount"))
+                numericInteger(map.get("sliceCount")),
+                booleanValue(map.get("multiplanar")),
+                booleanValue(map.get("derived")),
+                booleanValue(map.get("analyzable"))
             ));
         }
         return result;
@@ -702,11 +755,18 @@ public class AiBackendService {
 
     private List<StudyUploadSeriesDto> inferredSeries(StudyUploadInputDto sagittal, StudyUploadInputDto axial) {
         List<StudyUploadSeriesDto> result = new ArrayList<>();
+        // Reconstruido desde los planos elegidos: si se llega aca es porque el modulo
+        // no publico la lista, asi que las dos series que si conocemos son analizables
+        // por definicion -son las que se van a inferir- y no hay ninguna multiplano.
         if (sagittal != null) {
-            result.add(new StudyUploadSeriesDto(sagittal.plane(), sagittal.description(), sagittal.weighting(), sagittal.sliceCount()));
+            result.add(new StudyUploadSeriesDto(
+                sagittal.inputId(), sagittal.plane(), sagittal.description(),
+                sagittal.weighting(), sagittal.sliceCount(), false, false, true));
         }
         if (axial != null) {
-            result.add(new StudyUploadSeriesDto(axial.plane(), axial.description(), axial.weighting(), axial.sliceCount()));
+            result.add(new StudyUploadSeriesDto(
+                axial.inputId(), axial.plane(), axial.description(),
+                axial.weighting(), axial.sliceCount(), false, false, true));
         }
         return result;
     }
@@ -750,6 +810,11 @@ public class AiBackendService {
         } catch (NumberFormatException ex) {
             return null;
         }
+    }
+
+    private boolean booleanValue(Object value) {
+        if (value instanceof Boolean flag) return flag;
+        return value != null && Boolean.parseBoolean(value.toString());
     }
 
     private String firstText(Object value, String fallback) {

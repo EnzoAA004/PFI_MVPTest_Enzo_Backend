@@ -39,6 +39,11 @@ public interface AiServiceOperations {
         throw new UnsupportedOperationException("asset_proxy_unavailable");
     }
 
+    /** A slice of a stored series, for the series of the study no model ran on. */
+    default ResponseEntity<byte[]> getSeriesSlice(String inputId, int index) {
+        throw new UnsupportedOperationException("series_slice_proxy_unavailable");
+    }
+
     default CanonicalMultiplanarRun runMultiplanar(MultiplanarRunRequestDto request) {
         throw new UnsupportedOperationException("multiplanar_run_unavailable");
     }

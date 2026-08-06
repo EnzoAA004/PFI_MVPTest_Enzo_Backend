@@ -112,6 +112,14 @@ public class AiBackendController {
         return aiBackendService.getAsset(runId, plane, assetName);
     }
 
+    @GetMapping("/series/{inputId}/slices/{index}")
+    public ResponseEntity<byte[]> getSeriesSlice(
+        @PathVariable String inputId,
+        @PathVariable int index
+    ) {
+        return aiBackendService.getSeriesSlice(inputId, index);
+    }
+
     @GetMapping("/agent/reports")
     public Map<String, Object> getRecentAgentReports(@RequestParam(defaultValue = "20") int limit) {
         return aiBackendService.getRecentAgentReports(limit);

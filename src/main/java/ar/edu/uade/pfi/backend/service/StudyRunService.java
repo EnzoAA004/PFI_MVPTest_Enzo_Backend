@@ -132,6 +132,30 @@ public class StudyRunService {
     }
 
     public InputResource createInput(Study study, String plane, String inputId, String format, long size) {
+        return createInput(study, plane, inputId, format, size, "", "", 0, false, false, true);
+    }
+
+    /**
+     * Registers one series of the study, analysed or not.
+     *
+     * <p>The catalogue holds every series the archive carried, because that is what the
+     * doctor reads. {@code analyzable} is what separates the two the models run on from
+     * the rest; it is not derivable from the plane, since a sagittal T1 has a plane the
+     * registry accepts and still is not what was inferred.
+     */
+    public InputResource createInput(
+        Study study,
+        String plane,
+        String inputId,
+        String format,
+        long size,
+        String description,
+        String weighting,
+        int sliceCount,
+        boolean multiplanar,
+        boolean derived,
+        boolean analyzable
+    ) {
         return repository.saveInput(new InputResource(
             UUID.randomUUID().toString(),
             study.id(),
@@ -139,6 +163,12 @@ public class StudyRunService {
             inputId,
             format,
             size,
+            description,
+            weighting,
+            sliceCount,
+            multiplanar,
+            derived,
+            analyzable,
             clock.instant()
         ));
     }

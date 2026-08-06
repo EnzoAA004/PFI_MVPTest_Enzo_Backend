@@ -130,6 +130,7 @@ public class AiMultiplanarController {
             sagittalModel,
             axialModel,
             strict ? Boolean.FALSE : request.allowContractFallback(),
+            request.studySeries(),
             metadata
         );
     }

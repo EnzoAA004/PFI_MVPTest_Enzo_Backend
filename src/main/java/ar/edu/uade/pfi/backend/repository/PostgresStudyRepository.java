@@ -96,11 +96,19 @@ public class PostgresStudyRepository implements StudyRepository {
     @Override
     public InputResource saveInput(InputResource input) {
         try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
-            INSERT INTO domain_input_resources(id, study_id, plane, input_id, format, size_bytes, created_at)
-            VALUES (?::uuid, ?::uuid, ?, ?, ?, ?, ?)
+            INSERT INTO domain_input_resources(
+                id, study_id, plane, input_id, format, size_bytes,
+                description, weighting, slice_count, multiplanar, derived, analyzable, created_at)
+            VALUES (?::uuid, ?::uuid, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (input_id) DO UPDATE SET
               format = EXCLUDED.format,
-              size_bytes = EXCLUDED.size_bytes
+              size_bytes = EXCLUDED.size_bytes,
+              description = EXCLUDED.description,
+              weighting = EXCLUDED.weighting,
+              slice_count = EXCLUDED.slice_count,
+              multiplanar = EXCLUDED.multiplanar,
+              derived = EXCLUDED.derived,
+              analyzable = EXCLUDED.analyzable
             """)) {
             statement.setString(1, input.id());
             statement.setString(2, input.studyId());
@@ -108,7 +116,13 @@ public class PostgresStudyRepository implements StudyRepository {
             statement.setString(4, input.inputId());
             statement.setString(5, input.format());
             statement.setLong(6, input.size());
-            statement.setTimestamp(7, Timestamp.from(input.createdAt()));
+            statement.setString(7, input.description());
+            statement.setString(8, input.weighting());
+            statement.setInt(9, input.sliceCount());
+            statement.setBoolean(10, input.multiplanar());
+            statement.setBoolean(11, input.derived());
+            statement.setBoolean(12, input.analyzable());
+            statement.setTimestamp(13, Timestamp.from(input.createdAt()));
             statement.executeUpdate();
             return input;
         } catch (Exception ex) {
@@ -486,7 +500,8 @@ public class PostgresStudyRepository implements StudyRepository {
     @Override
     public List<InputResource> findInputsByStudyId(String studyId) {
         try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
-            SELECT id, study_id, plane, input_id, format, size_bytes, created_at
+            SELECT id, study_id, plane, input_id, format, size_bytes,
+                   description, weighting, slice_count, multiplanar, derived, analyzable, created_at
             FROM domain_input_resources WHERE study_id = ?::uuid ORDER BY created_at
             """)) {
             statement.setString(1, studyId);
@@ -840,6 +855,12 @@ public class PostgresStudyRepository implements StudyRepository {
             rs.getString("input_id"),
             rs.getString("format"),
             rs.getLong("size_bytes"),
+            rs.getString("description"),
+            rs.getString("weighting"),
+            rs.getInt("slice_count"),
+            rs.getBoolean("multiplanar"),
+            rs.getBoolean("derived"),
+            rs.getBoolean("analyzable"),
             rs.getTimestamp("created_at").toInstant()
         );
     }

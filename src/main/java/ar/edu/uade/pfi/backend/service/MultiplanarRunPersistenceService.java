@@ -6,6 +6,7 @@ import ar.edu.uade.pfi.backend.domain.RunArtifact;
 import ar.edu.uade.pfi.backend.domain.Study;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunRequestDto;
 import ar.edu.uade.pfi.backend.dto.StudyMetadataDto;
+import ar.edu.uade.pfi.backend.dto.StudyUploadSeriesDto;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -64,6 +65,7 @@ public class MultiplanarRunPersistenceService {
 
         registerInput(study, "sagittal", request.sagittalInputId());
         registerInput(study, "axial", request.axialInputId());
+        registerStudySeries(study, request);
 
         CanonicalPlaneRun sagittal = response.sagittal();
         CanonicalPlaneRun axial = response.axial();
@@ -119,6 +121,36 @@ public class MultiplanarRunPersistenceService {
         Map<String, Object> updatedSnapshot = new LinkedHashMap<>(persistedRun.metricsSnapshot());
         updatedSnapshot.put("threeD", blockedThreeD);
         studyRunService.updateRunMetricsSnapshot(persistedRun.multiplanarRunId(), updatedSnapshot);
+    }
+
+    /**
+     * Records the rest of the study's series: the ones no model runs on.
+     *
+     * <p>Runs after the two analysed planes on purpose. Both write to the same table
+     * keyed by {@code input_id}, so a series that is also an analysed plane arrives
+     * here second and its upsert fills in the description, weighting and slice count
+     * that {@link #registerInput} does not know — instead of the plane row winning and
+     * leaving the catalogue entry blank.
+     */
+    private void registerStudySeries(Study study, MultiplanarRunRequestDto request) {
+        List<StudyUploadSeriesDto> series = request.studySeries();
+        if (series == null || series.isEmpty()) return;
+        for (StudyUploadSeriesDto item : series) {
+            if (item == null || blank(item.inputId())) continue;
+            studyRunService.createInput(
+                study,
+                blank(item.plane()) ? "unknown" : item.plane(),
+                item.inputId(),
+                "ai-module-input",
+                0,
+                item.description() == null ? "" : item.description(),
+                item.weighting() == null ? "" : item.weighting(),
+                item.sliceCount() == null ? 0 : item.sliceCount(),
+                item.multiplanar(),
+                item.derived(),
+                item.analyzable()
+            );
+        }
     }
 
     private void registerInput(Study study, String plane, String inputId) {

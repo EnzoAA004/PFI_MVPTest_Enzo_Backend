@@ -237,6 +237,30 @@ public class AiServiceClient implements AiServiceOperations {
     }
 
     /**
+     * One slice of a stored series, whether or not a model ever ran on it.
+     *
+     * <p>Addressed by input and not by run because these series have no run: they are
+     * the ones the study carried and the AI does not analyse — the T1s, the axial T1
+     * with no model, the localizer — and the reader needs them all the same.
+     */
+    public ResponseEntity<byte[]> getSeriesSlice(String inputId, int index) {
+        return execute(() -> aiWebClient.get()
+            .uri(uriBuilder -> uriBuilder.path("/inputs/{inputId}/slices/{index}").build(inputId, index))
+            .headers(this::applyTraceHeader)
+            .exchangeToMono(response -> {
+                if (response.statusCode().is2xxSuccessful()) {
+                    return response.toEntity(byte[].class);
+                }
+                int status = response.statusCode().value();
+                if (status == 403 || status == 404) {
+                    return response.releaseBody().then(Mono.error(new ResponseStatusException(response.statusCode(), "AI Module series slice request failed")));
+                }
+                return response.releaseBody().then(Mono.error(upstreamUnavailable()));
+            })
+            .block(timeout));
+    }
+
+    /**
      * A-F: resolves the configured contract version, builds the appropriate request,
      * calls exactly one endpoint, deserializes to the matching DTO, adapts to
      * CanonicalMultiplanarRun and returns it. There is no fallback between contracts
@@ -447,6 +471,7 @@ public class AiServiceClient implements AiServiceOperations {
             request.sagittalModelKey(),
             request.axialModelKey(),
             request.allowContractFallback(),
+            request.studySeries(),
             metadata
         );
     }
