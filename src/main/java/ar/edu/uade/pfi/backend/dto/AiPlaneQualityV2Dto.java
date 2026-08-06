@@ -34,5 +34,16 @@ public record AiPlaneQualityV2Dto(
      * of filtering brightness over an already-windowed 8-bit PNG.
      */
     java.util.Map<String, Object> slicePixels,
+    /**
+     * Craniocaudal extent of each disc space: {@code [{level, worldTop, worldBottom}]}.
+     *
+     * <p>Carried opaquely, and only the sagittal plane publishes it — that is the plane
+     * where the disc spaces are seen whole and can be counted up from the lumbosacral
+     * junction. The AI module uses it to name the level of the axial slice, which the
+     * axial run cannot do on its own: its model segments nothing countable, so every
+     * axial measurement used to arrive with no level and land under "could not be
+     * assigned".
+     */
+    List<java.util.Map<String, Object>> discLevels,
     List<String> warnings
 ) {}
