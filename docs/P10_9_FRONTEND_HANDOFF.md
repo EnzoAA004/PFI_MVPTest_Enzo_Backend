@@ -123,6 +123,17 @@ Read `finding.evidence.deploymentStatus` per finding and gate the UI on it: show
 `supported_internal` normally, visibly flag `experimental`, and either hide or clearly
 badge `not_product_supported` findings — do not present all 8 as equally reliable.
 
+**`finding.classification.label` is the result Frontend can present for review.**
+Frontend does **not** receive, and must not represent, `classification.probabilities`,
+probability bars, per-finding confidence percentages, logits, or any raw model output for
+P10.7 findings — Backend strips `classification.probabilities` before the response leaves
+`POST /api/ai/v2/product/disc-degenerative-findings`, and the same stripping applies to
+the persisted representation read back through `GET /api/studies/{caseId}/runs`. The
+probabilities exist internally (upstream contract validation, traceability, persistence,
+audit) but are not part of the presentation contract. If a future version of this contract
+needs a confidence indicator for the UI, that is a deliberate new decision, not something
+to reconstruct from a field that used to leak through.
+
 **P10.6** (subarticular): `automaticRoiAvailable = false` today. `POST
 /api/ai/degenerative-findings/subarticular` exists but requires a professional to supply
 `inputId, instanceNumber, x, y, side, level` manually — there is no automatic ROI, and its

@@ -18,6 +18,7 @@ import ar.edu.uade.pfi.backend.domain.StudyRun;
 import ar.edu.uade.pfi.backend.dto.StudyDetailResponseDto;
 import ar.edu.uade.pfi.backend.dto.StudyListResponseDto;
 import ar.edu.uade.pfi.backend.dto.StudyRunDetailDto;
+import ar.edu.uade.pfi.backend.dto.StudyRunsResponseDto;
 import ar.edu.uade.pfi.backend.repository.PostgresStudyRepository;
 import ar.edu.uade.pfi.backend.repository.StudyRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -220,6 +221,67 @@ class StudyWorklistServicePostgresTest {
         assertNull(canonicalRun.get("notClinicalDiagnosis"));
         Map<String, Object> governance = (Map<String, Object>) canonicalRun.get("governance");
         assertTrue(governance.isEmpty());
+    }
+
+    /**
+     * P10.9 hardening: {@code discDegenerativeFindings.findings[].classification.probabilities}
+     * is real, persisted data (validated and stored by
+     * DiscDegenerativeFindingsPersistenceService), but GET /api/studies/{caseId}/runs
+     * must never republish it -- same public contract as the live POST response.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void studyRunsResponsePublishesDiscDegenerativeFindingsWithoutProbabilities() throws Exception {
+        Instant createdAt = Instant.parse("2026-08-01T10:00:00Z");
+        Study study = repository.saveStudy(new Study(
+            UUID.randomUUID().toString(), "CASE-P10-9-DISC", "ready", null,
+            null, "MRI", null, "medium", createdAt, createdAt
+        ));
+        Map<String, Object> discDegenerativeFindings = Map.of(
+            "schemaVersion", "pfi.disc-degenerative-findings.v1",
+            "findings", List.of(Map.of(
+                "findingId", "finding-1",
+                "findingType", "disc_bulging",
+                "anatomy", Map.of("level", "L4-L5"),
+                "classification", Map.of(
+                    "kind", "binary",
+                    "label", "present",
+                    "probabilities", Map.of("absent", 0.2, "present", 0.8)
+                ),
+                "evidence", Map.of("deploymentStatus", "supported_internal"),
+                "review", Map.of("required", true, "status", "pending"),
+                "notClinicalDiagnosis", true
+            ))
+        );
+        Map<String, Object> snapshot = Map.of(
+            "schemaVersion", "pfi.backend-run-snapshot.v2",
+            "discDegenerativeFindings", discDegenerativeFindings
+        );
+        repository.saveRun(new StudyRun(
+            UUID.randomUUID().toString(), study.id(), "multi-p10-9-disc", "trace-p10-9-disc",
+            "real_baseline", "real_baseline", "sagittal_spider", "", "sha256:sag", "",
+            "run-sag-p10-9-disc", "", Map.of(), snapshot,
+            List.of(), "completed", "pending", "", null, "", createdAt, createdAt
+        ));
+
+        StudyRunsResponseDto runsResponse = service.getStudyRuns("CASE-P10-9-DISC");
+        Map<String, Object> publishedSnapshot = runsResponse.runs().get(0).metricsSnapshot();
+        Map<String, Object> publishedDisc = (Map<String, Object>) publishedSnapshot.get("discDegenerativeFindings");
+        Map<String, Object> publishedFinding = ((List<Map<String, Object>>) publishedDisc.get("findings")).get(0);
+        Map<String, Object> publishedClassification = (Map<String, Object>) publishedFinding.get("classification");
+
+        assertFalse(publishedClassification.containsKey("probabilities"), "persisted GET must not republish probabilities");
+        assertEquals("present", publishedClassification.get("label"));
+        Map<String, Object> publishedReview = (Map<String, Object>) publishedFinding.get("review");
+        assertEquals(true, publishedReview.get("required"));
+        assertEquals("pending", publishedReview.get("status"));
+
+        // The stored row itself keeps probabilities -- only the response is projected.
+        StudyRun stored = repository.findRunByMultiplanarRunId("multi-p10-9-disc").orElseThrow();
+        Map<String, Object> storedDisc = (Map<String, Object>) stored.metricsSnapshot().get("discDegenerativeFindings");
+        Map<String, Object> storedFinding = ((List<Map<String, Object>>) storedDisc.get("findings")).get(0);
+        Map<String, Object> storedClassification = (Map<String, Object>) storedFinding.get("classification");
+        assertTrue(storedClassification.containsKey("probabilities"), "the persisted row must still keep probabilities internally");
     }
 
     @Test

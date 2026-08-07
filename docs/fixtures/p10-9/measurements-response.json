@@ -1,7 +1,7 @@
 {
   "schemaVersion": "pfi.p10-9.measurements-sample.v1",
   "source": "planes.sagittal.measurements / planes.axial.measurements on POST /api/ai/multiplanar/run",
-  "note": "lumbarSample are the levels P10.7 findings and professional review corrections key off; nonLumbarSample shows the sagittal FOV can legitimately include non-lumbar levels too, still real AI output.",
+  "note": "lumbarSample are the levels P10.7 findings and professional review corrections key off; nonLumbarSample shows the sagittal FOV can legitimately include non-lumbar levels too, still real AI output. Measurement confidence (scalar, not a probability distribution) is out of scope for the P10.9 probabilities hardening -- untouched.",
   "lumbarSample": [
     {
       "id": "sagittal-disc-l1-l2-area",

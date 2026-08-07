@@ -1,15 +1,15 @@
 {
   "status": "completed",
   "schemaVersion": "pfi.multiplanar-run.v2",
-  "runId": "multi-7372dd2ca0d194b3d65f",
-  "traceId": "trace-d39b2dea-fd8f-4a3d-a512-8bcb7397dc92",
+  "runId": "multi-f49aa72f044a0388ef80",
+  "traceId": "trace-d5646a6f-9436-471d-999c-38d0d2c769a1",
   "caseId": "P10-9-REAL-STUDY",
   "workspaceMode": "dual_plane",
   "requestedInferenceMode": "real_baseline",
   "effectiveInferenceMode": "real_baseline",
   "planes": {
     "sagittal": {
-      "runId": "8d2872f08ffbb94d",
+      "runId": "7c6f627e3708a237",
       "caseId": "P10-9-REAL-STUDY",
       "plane": "sagittal",
       "modelKey": "sagittal_spider",
@@ -20,7 +20,7 @@
       "requestedInferenceMode": "real_baseline",
       "effectiveInferenceMode": "real_baseline",
       "allowContractFallback": false,
-      "inputId": "inp_c70061b6214446d9b00b2f8c085b18d5",
+      "inputId": "inp_16c80af4153d49fa936ddf48503e4027",
       "modelArtifact": {
         "key": "sagittal_spider",
         "version": "sagittal-spider-final-v1",
@@ -2063,7 +2063,7 @@
             512
           ],
           "inputOrientationTransform": "move_axis_0_to_last",
-          "frameOfReferenceUid": "1.2.826.0.1.3680043.8.498.2136145107034529039024470654579324023",
+          "frameOfReferenceUid": "1.2.826.0.1.3680043.8.498.36935370258670974743694989456993781745",
           "sliceAxis": 2,
           "sliceCount": 17,
           "sliceSpacingUniform": true,
@@ -2752,12 +2752,12 @@
         "warnings": []
       },
       "assets": {
-        "input.png": "/api/ai/assets/8d2872f08ffbb94d/sagittal/input.png",
-        "overlay.png": "/api/ai/assets/8d2872f08ffbb94d/sagittal/overlay.png",
-        "mask-preview.png": "/api/ai/assets/8d2872f08ffbb94d/sagittal/mask-preview.png"
+        "input.png": "/api/ai/assets/7c6f627e3708a237/sagittal/input.png",
+        "overlay.png": "/api/ai/assets/7c6f627e3708a237/sagittal/overlay.png",
+        "mask-preview.png": "/api/ai/assets/7c6f627e3708a237/sagittal/mask-preview.png"
       },
       "metadata": {
-        "inputId": "inp_c70061b6214446d9b00b2f8c085b18d5",
+        "inputId": "inp_16c80af4153d49fa936ddf48503e4027",
         "format": "dcm",
         "sizeBytes": 5068540,
         "nativeShape": [
@@ -2815,7 +2815,7 @@
       "degradedMode": false
     },
     "axial": {
-      "runId": "e699f063f9c9fe0b",
+      "runId": "de905d2e904bd4e6",
       "caseId": "P10-9-REAL-STUDY",
       "plane": "axial",
       "modelKey": "axial_t2_alkafri",
@@ -2826,7 +2826,7 @@
       "requestedInferenceMode": "real_baseline",
       "effectiveInferenceMode": "real_baseline",
       "allowContractFallback": false,
-      "inputId": "inp_ce86c79e93ad437591e421faf838176f",
+      "inputId": "inp_6d9e3d594f874a4288abf4c2ad562f7a",
       "modelArtifact": {
         "key": "axial_t2_alkafri",
         "version": "axial-final-v2",
@@ -3367,7 +3367,7 @@
             512
           ],
           "inputOrientationTransform": "none",
-          "frameOfReferenceUid": "1.2.826.0.1.3680043.8.498.82824222107797921219431067842497904722",
+          "frameOfReferenceUid": "1.2.826.0.1.3680043.8.498.39468603638876645969846724479353522099",
           "sliceAxis": 0,
           "sliceCount": 21,
           "sliceSpacingUniform": false,
@@ -3727,12 +3727,12 @@
         "warnings": []
       },
       "assets": {
-        "input.png": "/api/ai/assets/e699f063f9c9fe0b/axial/input.png",
-        "overlay.png": "/api/ai/assets/e699f063f9c9fe0b/axial/overlay.png",
-        "mask-preview.png": "/api/ai/assets/e699f063f9c9fe0b/axial/mask-preview.png"
+        "input.png": "/api/ai/assets/de905d2e904bd4e6/axial/input.png",
+        "overlay.png": "/api/ai/assets/de905d2e904bd4e6/axial/overlay.png",
+        "mask-preview.png": "/api/ai/assets/de905d2e904bd4e6/axial/mask-preview.png"
       },
       "metadata": {
-        "inputId": "inp_ce86c79e93ad437591e421faf838176f",
+        "inputId": "inp_6d9e3d594f874a4288abf4c2ad562f7a",
         "format": "dcm",
         "sizeBytes": 6312316,
         "nativeShape": [
@@ -3790,7 +3790,7 @@
       "degradedMode": false
     },
     "sagital": {
-      "runId": "8d2872f08ffbb94d",
+      "runId": "7c6f627e3708a237",
       "caseId": "P10-9-REAL-STUDY",
       "plane": "sagittal",
       "modelKey": "sagittal_spider",
@@ -3801,7 +3801,7 @@
       "requestedInferenceMode": "real_baseline",
       "effectiveInferenceMode": "real_baseline",
       "allowContractFallback": false,
-      "inputId": "inp_c70061b6214446d9b00b2f8c085b18d5",
+      "inputId": "inp_16c80af4153d49fa936ddf48503e4027",
       "modelArtifact": {
         "key": "sagittal_spider",
         "version": "sagittal-spider-final-v1",
@@ -5844,7 +5844,7 @@
             512
           ],
           "inputOrientationTransform": "move_axis_0_to_last",
-          "frameOfReferenceUid": "1.2.826.0.1.3680043.8.498.2136145107034529039024470654579324023",
+          "frameOfReferenceUid": "1.2.826.0.1.3680043.8.498.36935370258670974743694989456993781745",
           "sliceAxis": 2,
           "sliceCount": 17,
           "sliceSpacingUniform": true,
@@ -6533,12 +6533,12 @@
         "warnings": []
       },
       "assets": {
-        "input.png": "/api/ai/assets/8d2872f08ffbb94d/sagittal/input.png",
-        "overlay.png": "/api/ai/assets/8d2872f08ffbb94d/sagittal/overlay.png",
-        "mask-preview.png": "/api/ai/assets/8d2872f08ffbb94d/sagittal/mask-preview.png"
+        "input.png": "/api/ai/assets/7c6f627e3708a237/sagittal/input.png",
+        "overlay.png": "/api/ai/assets/7c6f627e3708a237/sagittal/overlay.png",
+        "mask-preview.png": "/api/ai/assets/7c6f627e3708a237/sagittal/mask-preview.png"
       },
       "metadata": {
-        "inputId": "inp_c70061b6214446d9b00b2f8c085b18d5",
+        "inputId": "inp_16c80af4153d49fa936ddf48503e4027",
         "format": "dcm",
         "sizeBytes": 5068540,
         "nativeShape": [
@@ -6601,8 +6601,8 @@
     "enabled": false,
     "status": "experimental_blocked_missing_anatomical_mapping",
     "sourcePlaneRunIds": {
-      "sagittal": "8d2872f08ffbb94d",
-      "axial": "e699f063f9c9fe0b"
+      "sagittal": "7c6f627e3708a237",
+      "axial": "de905d2e904bd4e6"
     },
     "requiredInputs": [
       "sagittal_masks",
@@ -6674,7 +6674,7 @@
             512
           ],
           "inputOrientationTransform": "move_axis_0_to_last",
-          "frameOfReferenceUid": "1.2.826.0.1.3680043.8.498.2136145107034529039024470654579324023",
+          "frameOfReferenceUid": "1.2.826.0.1.3680043.8.498.36935370258670974743694989456993781745",
           "sliceAxis": 2,
           "sliceCount": 17,
           "sliceSpacingUniform": true,
@@ -7404,7 +7404,7 @@
             512
           ],
           "inputOrientationTransform": "none",
-          "frameOfReferenceUid": "1.2.826.0.1.3680043.8.498.82824222107797921219431067842497904722",
+          "frameOfReferenceUid": "1.2.826.0.1.3680043.8.498.39468603638876645969846724479353522099",
           "sliceAxis": 0,
           "sliceCount": 21,
           "sliceSpacingUniform": false,

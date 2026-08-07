@@ -1,9 +1,9 @@
 {
   "schemaVersion": "pfi.full-series-segmentation.v1",
   "status": "completed",
-  "runId": "series-6b440bbbcffdeb03c152",
+  "runId": "series-cb52d00e61c925f56cc1",
   "caseId": "P10-9-REAL-STUDY",
-  "inputId": "inp_c70061b6214446d9b00b2f8c085b18d5",
+  "inputId": "inp_16c80af4153d49fa936ddf48503e4027",
   "plane": "sagittal",
   "modelKey": "sagittal_spider",
   "sliceCount": 17,
@@ -38,7 +38,7 @@
       "coordinateSpaceWidth": 256,
       "coordinateSpaceHeight": 256,
       "maskId": "full-series-disc-l1-l2",
-      "segmentationRunId": "series-6b440bbbcffdeb03c152",
+      "segmentationRunId": "series-cb52d00e61c925f56cc1",
       "selectionRule": "maximum_predicted_disc_area_across_series",
       "automaticAnatomicalLocalizationValidated": false
     },
@@ -55,7 +55,7 @@
       "coordinateSpaceWidth": 256,
       "coordinateSpaceHeight": 256,
       "maskId": "full-series-disc-l2-l3",
-      "segmentationRunId": "series-6b440bbbcffdeb03c152",
+      "segmentationRunId": "series-cb52d00e61c925f56cc1",
       "selectionRule": "maximum_predicted_disc_area_across_series",
       "automaticAnatomicalLocalizationValidated": false
     },
@@ -72,7 +72,7 @@
       "coordinateSpaceWidth": 256,
       "coordinateSpaceHeight": 256,
       "maskId": "full-series-disc-l3-l4",
-      "segmentationRunId": "series-6b440bbbcffdeb03c152",
+      "segmentationRunId": "series-cb52d00e61c925f56cc1",
       "selectionRule": "maximum_predicted_disc_area_across_series",
       "automaticAnatomicalLocalizationValidated": false
     },
@@ -89,7 +89,7 @@
       "coordinateSpaceWidth": 256,
       "coordinateSpaceHeight": 256,
       "maskId": "full-series-disc-l4-l5",
-      "segmentationRunId": "series-6b440bbbcffdeb03c152",
+      "segmentationRunId": "series-cb52d00e61c925f56cc1",
       "selectionRule": "maximum_predicted_disc_area_across_series",
       "automaticAnatomicalLocalizationValidated": false
     },
@@ -106,7 +106,7 @@
       "coordinateSpaceWidth": 256,
       "coordinateSpaceHeight": 256,
       "maskId": "full-series-disc-l5-s1",
-      "segmentationRunId": "series-6b440bbbcffdeb03c152",
+      "segmentationRunId": "series-cb52d00e61c925f56cc1",
       "selectionRule": "maximum_predicted_disc_area_across_series",
       "automaticAnatomicalLocalizationValidated": false
     }
@@ -119,8 +119,8 @@
       "sliceIndex": 0,
       "status": "segmented",
       "assets": {
-        "original": "/v2/series-segmentation/series-6b440bbbcffdeb03c152/sagittal/slices/0/original.png",
-        "overlay": "/v2/series-segmentation/series-6b440bbbcffdeb03c152/sagittal/slices/0/overlay.png"
+        "original": "/v2/series-segmentation/series-cb52d00e61c925f56cc1/sagittal/slices/0/original.png",
+        "overlay": "/v2/series-segmentation/series-cb52d00e61c925f56cc1/sagittal/slices/0/overlay.png"
       },
       "segmentation": {
         "encoding": "rle-v1",
@@ -371,8 +371,8 @@
       "sliceIndex": 1,
       "status": "segmented",
       "assets": {
-        "original": "/v2/series-segmentation/series-6b440bbbcffdeb03c152/sagittal/slices/1/original.png",
-        "overlay": "/v2/series-segmentation/series-6b440bbbcffdeb03c152/sagittal/slices/1/overlay.png"
+        "original": "/v2/series-segmentation/series-cb52d00e61c925f56cc1/sagittal/slices/1/original.png",
+        "overlay": "/v2/series-segmentation/series-cb52d00e61c925f56cc1/sagittal/slices/1/overlay.png"
       },
       "segmentation": {
         "encoding": "rle-v1",

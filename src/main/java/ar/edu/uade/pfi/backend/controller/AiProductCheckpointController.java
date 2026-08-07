@@ -5,6 +5,7 @@ import ar.edu.uade.pfi.backend.dto.DiscDegenerativeProductRequestDto;
 import ar.edu.uade.pfi.backend.dto.DiscSegmentationSourceDto;
 import ar.edu.uade.pfi.backend.dto.FullSeriesSegmentationRequestDto;
 import ar.edu.uade.pfi.backend.service.DiscDegenerativeFindingsPersistenceService;
+import ar.edu.uade.pfi.backend.util.DiscDegenerativeFindingsPublicProjection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -77,13 +78,21 @@ public class AiProductCheckpointController {
             .body(body);
     }
 
+    @SuppressWarnings("unchecked")
     @PostMapping("/disc-degenerative-findings")
     public Map<String, Object> predictDiscDegenerative(@RequestBody DiscDegenerativeProductRequestDto request) {
         requireDiscRequest(request);
         Map<String, Object> prediction = aiClient.predictDiscDegenerativeFromSegmentation(request);
+        // Persist the full upstream prediction, probabilities included: validation,
+        // traceability, and audit need them. Only the public response below is
+        // projected -- persistImmutable never sees a sanitized copy.
         persistence.persistImmutable(request.multiplanarRunId(), prediction);
 
         Map<String, Object> result = new LinkedHashMap<>(prediction);
+        Object discFindings = result.get("discDegenerativeFindings");
+        if (discFindings instanceof Map<?, ?> map) {
+            result.put("discDegenerativeFindings", DiscDegenerativeFindingsPublicProjection.sanitize((Map<String, Object>) map));
+        }
         result.put("persistence", Map.of(
             "status", "persisted_immutable",
             "multiplanarRunId", request.multiplanarRunId(),

@@ -519,21 +519,52 @@ if ([string]::IsNullOrWhiteSpace($sagittalT1InputId) -or [string]::IsNullOrWhite
 
         $findingsEnvelope = Get-Property $discResponse "discDegenerativeFindings"
         $findings = Get-Array (Get-Property $findingsEnvelope "findings")
-        $allowedTypes = @("pfirrmann_grade", "modic_change", "upper_endplate_change", "lower_endplate_change", "spondylolisthesis", "disc_herniation", "disc_narrowing", "disc_bulging")
+        # P10.7 PASS requires the *exact* 8-type taxonomy present at least once each --
+        # order and repeat count (one per level) do not matter, but a missing or an
+        # unexpected type is a real contract violation, not a BLOCKED/incomplete state.
+        $requiredTypes = @("pfirrmann_grade", "modic_change", "upper_endplate_change", "lower_endplate_change", "spondylolisthesis", "disc_herniation", "disc_narrowing", "disc_bulging")
         $typesSeen = @($findings | ForEach-Object { [string](Get-Property $_ "findingType") })
-        $allTypesKnown = -not ($typesSeen | Where-Object { $allowedTypes -notcontains $_ })
+        $uniqueFindingTypes = @($typesSeen | Sort-Object -Unique)
+        $missingTypes = @($requiredTypes | Where-Object { $uniqueFindingTypes -notcontains $_ })
+        $unexpectedTypes = @($uniqueFindingTypes | Where-Object { $requiredTypes -notcontains $_ })
+        $exactTaxonomy = ($missingTypes.Count -eq 0) -and ($unexpectedTypes.Count -eq 0)
+        $result.e2e["p10_7FindingTypes"] = [ordered]@{
+            uniqueFindingTypes = $uniqueFindingTypes
+            missingTypes = $missingTypes
+            unexpectedTypes = $unexpectedTypes
+        }
+
+        # Public contract: classification.probabilities is internal-only (validation,
+        # traceability, persistence, audit). It must never appear in what Backend
+        # returns to a caller. This checks the *response object*, independent of the
+        # PII/path/token sweep in Test-NoSensitiveLeak, because "probabilities" is a
+        # contract-shape violation, not a leaked identifier.
+        $probabilitiesInPublicPost = $false
+        foreach ($finding in $findings) {
+            $classification = Get-Property $finding "classification"
+            if ($null -ne $classification -and $null -ne (Get-Property $classification "probabilities")) {
+                $probabilitiesInPublicPost = $true
+                break
+            }
+        }
+        $result.e2e["p10_7PublicContract"] = [ordered]@{ probabilitiesInPublicPost = $probabilitiesInPublicPost }
+
         $persistence = Get-Property $discResponse "persistence"
         if (
             (Get-Property $findingsEnvelope "schemaVersion") -eq "pfi.disc-degenerative-findings.v1" -and
-            $findings.Count -gt 0 -and $allTypesKnown -and
+            $findings.Count -gt 0 -and $exactTaxonomy -and (-not $probabilitiesInPublicPost) -and
             (Get-Property $discResponse "humanReviewRequired") -eq $true -and
             (Get-Property $discResponse "notClinicalDiagnosis") -eq $true -and
             (Get-Property $discResponse "autonomousDiagnosis") -eq $false -and
             (Get-Property $persistence "status") -eq "persisted_immutable"
         ) {
-            Add-Gate "p10_7" "PASS" "Real sagittal T1 ($segT1RunId) and T2 ($segT2RunId) full-series segmentation, independent per modality, fed segmentation-derived disc localizations into POST /api/ai/v2/product/disc-degenerative-findings; the frozen P10.7 checkpoint returned $($findings.Count) finding(s) across the supported taxonomy and Backend persisted them immutably onto multiplanarRunId=$multiplanarRunId."
+            Add-Gate "p10_7" "PASS" "Real sagittal T1 ($segT1RunId) and T2 ($segT2RunId) full-series segmentation, independent per modality, fed segmentation-derived disc localizations into POST /api/ai/v2/product/disc-degenerative-findings; the frozen P10.7 checkpoint returned $($findings.Count) finding(s) covering exactly the 8 required finding types ($($uniqueFindingTypes -join ', ')), the public response contains zero classification.probabilities, and Backend persisted the full prediction immutably onto multiplanarRunId=$multiplanarRunId."
         } else {
-            Add-Gate "p10_7" "FAIL" "P10.7 response did not satisfy the full product contract." "schemaVersion/findings/findingType taxonomy/safety flags/persistence status did not all validate."
+            $reason = @()
+            if (-not $exactTaxonomy) { $reason += "finding type taxonomy is not exactly the 8 required types (missing: $($missingTypes -join ', '); unexpected: $($unexpectedTypes -join ', '))" }
+            if ($probabilitiesInPublicPost) { $reason += "public POST response contains classification.probabilities" }
+            if ($reason.Count -eq 0) { $reason += "schemaVersion/findings/safety flags/persistence status did not all validate" }
+            Add-Gate "p10_7" "FAIL" "P10.7 response did not satisfy the full product contract." ($reason -join "; ")
         }
     } catch {
         Add-Gate "p10_7" "FAIL" "P10.7 product chain failed against the real study." $_.Exception.Message
@@ -602,18 +633,37 @@ if ([string]::IsNullOrWhiteSpace($multiplanarRunId)) {
         $runs = Get-Array (Get-Property $runsResponse "runs")
         $persistedRun = $runs | Where-Object { (Get-Property (Get-Property $_ "summary") "runId") -eq $multiplanarRunId } | Select-Object -First 1
         $metricsSnapshot = Get-Property $persistedRun "metricsSnapshot"
-        $discPersisted = $null -ne (Get-Property $metricsSnapshot "discDegenerativeFindings")
+        $persistedDiscFindings = Get-Property $metricsSnapshot "discDegenerativeFindings"
+        $discPersisted = $null -ne $persistedDiscFindings
         $measurementsByPlane = Get-Property $persistedRun "measurementsByPlane"
+
+        # Same public-contract rule as the live POST: the persisted-GET representation
+        # must not republish classification.probabilities either, even though the row in
+        # PostgreSQL still has it internally.
+        $probabilitiesInPersistedGet = $false
+        foreach ($persistedFinding in (Get-Array (Get-Property $persistedDiscFindings "findings"))) {
+            $persistedClassification = Get-Property $persistedFinding "classification"
+            if ($null -ne $persistedClassification -and $null -ne (Get-Property $persistedClassification "probabilities")) {
+                $probabilitiesInPersistedGet = $true
+                break
+            }
+        }
+
         $result.e2e["persistence"] = [ordered]@{
             runFoundInPostgres = $null -ne $persistedRun
             discDegenerativeFindingsPersisted = $discPersisted
+            probabilitiesInPersistedGet = $probabilitiesInPersistedGet
             measurementsByPlaneKeys = if ($null -ne $measurementsByPlane) { @($measurementsByPlane.PSObject.Properties.Name) } else { @() }
         }
         if ($null -ne $persistedRun) {
             $p10_7Gate = $script:Gates["p10_7"]
             $expectDisc = $p10_7Gate.status -eq "PASS"
-            if ((-not $expectDisc) -or $discPersisted) {
-                Add-Gate "persistence" "PASS" "GET /api/studies/$CaseId/runs, a fresh HTTP request against PostgreSQL (not an in-memory Java object), found the run created by POST /api/ai/multiplanar/run and, when P10.7 ran, its P10.7 findings inside metricsSnapshot.discDegenerativeFindings -- durable across the request boundary."
+            if ((-not $expectDisc) -and (-not $discPersisted)) {
+                Add-Gate "persistence" "PASS" "GET /api/studies/$CaseId/runs, a fresh HTTP request against PostgreSQL (not an in-memory Java object), found the run created by POST /api/ai/multiplanar/run -- durable across the request boundary. P10.7 did not PASS in this run, so no discDegenerativeFindings persistence was expected."
+            } elseif ($expectDisc -and $discPersisted -and (-not $probabilitiesInPersistedGet)) {
+                Add-Gate "persistence" "PASS" "GET /api/studies/$CaseId/runs, a fresh HTTP request against PostgreSQL (not an in-memory Java object), found the run created by POST /api/ai/multiplanar/run and its P10.7 findings inside metricsSnapshot.discDegenerativeFindings -- durable across the request boundary, and the published representation contains zero classification.probabilities."
+            } elseif ($expectDisc -and $discPersisted -and $probabilitiesInPersistedGet) {
+                Add-Gate "persistence" "FAIL" "Persisted run was found and its P10.7 findings survived, but the persisted-GET representation republishes classification.probabilities." "metricsSnapshot.discDegenerativeFindings via GET /api/studies/{caseId}/runs must be sanitized the same way as the live POST response."
             } else {
                 Add-Gate "persistence" "FAIL" "Run was found in PostgreSQL but its P10.7 findings were not durably persisted." "metricsSnapshot.discDegenerativeFindings missing after a P10.7 PASS."
             }

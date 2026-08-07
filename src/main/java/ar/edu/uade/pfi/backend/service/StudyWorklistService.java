@@ -13,6 +13,7 @@ import ar.edu.uade.pfi.backend.dto.StudyRunDetailDto;
 import ar.edu.uade.pfi.backend.dto.StudyRunSummaryDto;
 import ar.edu.uade.pfi.backend.dto.StudyRunsResponseDto;
 import ar.edu.uade.pfi.backend.repository.StudyRepository;
+import ar.edu.uade.pfi.backend.util.DiscDegenerativeFindingsPublicProjection;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -200,10 +201,17 @@ public class StudyWorklistService {
 
     @SuppressWarnings("unchecked")
     private Map<String, Object> publishedMetricsSnapshot(StudyRun run) {
+        // Deep-copies out of run.metricsSnapshot() before returning: the persisted
+        // snapshot itself (probabilities included) is never mutated here, only the
+        // response projection is.
         Map<String, Object> snapshot = new LinkedHashMap<>(run.metricsSnapshot());
         Object threeD = snapshot.get("threeD");
         if (threeD instanceof Map<?, ?> map) {
             snapshot.put("threeD", threeDAssetPublisher.publish(run.multiplanarRunId(), (Map<String, Object>) map));
+        }
+        Object discFindings = snapshot.get("discDegenerativeFindings");
+        if (discFindings instanceof Map<?, ?> map) {
+            snapshot.put("discDegenerativeFindings", DiscDegenerativeFindingsPublicProjection.sanitize((Map<String, Object>) map));
         }
         return snapshot;
     }
