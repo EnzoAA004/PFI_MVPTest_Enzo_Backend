@@ -1,0 +1,69 @@
+{
+  "schemaVersion": "pfi.p10-9.measurements-sample.v1",
+  "source": "planes.sagittal.measurements / planes.axial.measurements on POST /api/ai/multiplanar/run",
+  "note": "lumbarSample are the levels P10.7 findings and professional review corrections key off; nonLumbarSample shows the sagittal FOV can legitimately include non-lumbar levels too, still real AI output.",
+  "lumbarSample": [
+    {
+      "id": "sagittal-disc-l1-l2-area",
+      "labelKey": "disc area",
+      "value": 324.0,
+      "unit": "mm2",
+      "confidence": 0.9732,
+      "source": "ai",
+      "status": "pending_review",
+      "plane": "sagittal",
+      "level": "L1-L2",
+      "levelScope": "level",
+      "points": [],
+      "experimental": false,
+      "sliceIndex": 8,
+      "measurementBasis": "physical_spacing",
+      "linkedLandmarkIds": []
+    },
+    {
+      "id": "sagittal-disc-l1-l2-width",
+      "labelKey": "disc width",
+      "value": 40.72,
+      "unit": "mm",
+      "confidence": 0.9732,
+      "source": "ai",
+      "status": "pending_review",
+      "plane": "sagittal",
+      "level": "L1-L2",
+      "levelScope": "level",
+      "points": [
+        {
+          "x": 137.52,
+          "y": 82.32
+        },
+        {
+          "x": 117.36,
+          "y": 79.54
+        }
+      ],
+      "experimental": false,
+      "sliceIndex": 8,
+      "measurementBasis": "physical_spacing",
+      "linkedLandmarkIds": []
+    }
+  ],
+  "nonLumbarSample": [
+    {
+      "id": "sagittal-disc-t9-t10-area",
+      "labelKey": "disc area",
+      "value": 152.0,
+      "unit": "mm2",
+      "confidence": 0.9249,
+      "source": "ai",
+      "status": "pending_review",
+      "plane": "sagittal",
+      "level": "T9-T10",
+      "levelScope": "level",
+      "points": [],
+      "experimental": false,
+      "sliceIndex": 8,
+      "measurementBasis": "physical_spacing",
+      "linkedLandmarkIds": []
+    }
+  ]
+}

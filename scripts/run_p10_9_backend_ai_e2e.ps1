@@ -158,6 +158,22 @@ function Find-Series {
     return $null
 }
 
+function Get-Property {
+    param($Value, [string]$Name)
+    if ($null -eq $Value) { return $null }
+    $prop = $Value.PSObject.Properties[$Name]
+    if ($null -eq $prop) { return $null }
+    return $prop.Value
+}
+
+function Get-Array {
+    param($Value)
+    if ($null -eq $Value) { return @() }
+    if ($Value -is [System.Array]) { return @($Value) }
+    if ($Value -is [System.Collections.IEnumerable] -and $Value -isnot [string]) { return @($Value) }
+    return @($Value)
+}
+
 function Count-List {
     param($Value)
     if ($null -eq $Value) { return 0 }
@@ -358,6 +374,8 @@ if ([string]::IsNullOrWhiteSpace($token)) {
 $study = $null
 $sagittalInputId = $env:PFI_E2E_SAGITTAL_INPUT_ID
 $axialInputId = $env:PFI_E2E_AXIAL_INPUT_ID
+$sagittalT1InputId = ""
+$sagittalT2InputId = ""
 $studyZip = Resolve-StudyUploadZip
 
 if ($null -eq $studyZip) {
@@ -378,6 +396,8 @@ if ($null -eq $studyZip) {
 
         $sagittalInputId = First-Text @($sagittalInputId, $study.sagittal.inputId)
         $axialInputId = First-Text @($axialInputId, $study.axial.inputId)
+        $sagittalT1InputId = First-Text @($study.sagittalT1.inputId)
+        $sagittalT2InputId = First-Text @($study.sagittalT2.inputId)
         $sagT1 = Find-Series -Study $study -Plane "sagittal" -Weighting "t1"
         $sagT2 = Find-Series -Study $study -Plane "sagittal" -Weighting "t2"
         $axialT2 = Find-Series -Study $study -Plane "axial" -Weighting "t2"
@@ -444,23 +464,116 @@ if ([string]::IsNullOrWhiteSpace($axialInputId)) {
     }
 }
 
-if ($axialSeg -and $axialSeg.slices) {
-    Add-Gate "p10_6" "BLOCKED" "Axial T2 segmentation ran, but this product flow did not emit a validated automatic subarticular ROI for P10.6." "Do not use dataset labels or manual ROI coordinates to force P10.6."
-} else {
-    Add-Gate "p10_6" "BLOCKED" "P10.6 frozen checkpoint hash is verified, but no validated automatic ROI/input was produced by the product flow." "Needs product-generated axial ROI before calling P10.6."
+Add-Gate "p10_6" "BLOCKED" "The axial_t2_alkafri model's classes (raw_50=disc, raw_100=posterior element, raw_150=thecal sac, raw_200=anteroposterior area, per the Al-Kafri dataset mapping already documented in MODEL_REGISTRY) do not include a vertebra class, so there is no automatic, code-verifiable way to count craniocaudal position and assign an axial slice group to a specific lumbar level (L1-L2..L5-S1) without either sagittal-to-axial registration (explicitly forbidden: automaticSagittalAxialAlignmentValidated must stay false) or dataset ground truth (explicitly forbidden). Side (left/right) could plausibly be derived from thecal-sac-relative geometry, but level cannot, so no automatic ROI is generated." "Needs one of: an anatomical label mapping that names which axial slice index corresponds to which lumbar level from DICOM geometry alone (not present in the current manifest/training docs); a dedicated ROI localizer trained for level assignment; or an independently validated axial vertebral-level detector. automaticRoiAvailable=false is exposed via GET /api/ai/health -> degenerativeFindingModels.subarticular.roiLimitation; humanReviewRequired stays true."
+
+# Persist a reviewable PostgreSQL run before anything that needs multiplanarRunId
+# (P10.7 persistence, measurements-by-plane, professional review all key off this).
+# This is the same /api/ai/multiplanar/run route P10.5-C/E already validated; P10.9 only
+# adds P10.7 findings and review on top of the run it creates.
+$multiplanarRunId = ""
+$multiplanarRun = $null
+if (![string]::IsNullOrWhiteSpace($sagittalInputId) -and ![string]::IsNullOrWhiteSpace($axialInputId) -and ![string]::IsNullOrWhiteSpace($token)) {
+    try {
+        $runBody = @{
+            caseId = $CaseId
+            sagittalInputId = $sagittalInputId
+            axialInputId = $axialInputId
+            sagittalModelKey = "sagittal_spider"
+            axialModelKey = "axial_t2_alkafri"
+            allowContractFallback = $false
+            metadata = @{ inferenceMode = "real_baseline" }
+        }
+        $multiplanarRun = Safe-Request -Method Post -Uri "$BackendBaseUrl/api/ai/multiplanar/run" -Headers (Auth-Headers -Token $token) -Body $runBody
+        $result.e2e["multiplanarRun"] = $multiplanarRun
+        $multiplanarRunId = First-Text @($multiplanarRun.runId, $multiplanarRun.multiplanarRunId)
+    } catch {
+        $result.e2e["multiplanarRunError"] = $_.Exception.Message
+    }
 }
 
-if (![string]::IsNullOrWhiteSpace($sagittalRunId) -and ![string]::IsNullOrWhiteSpace($sagittalInputId)) {
-    Add-Gate "p10_7" "BLOCKED" "Sagittal segmentation produced a run id, but the Backend P10.7 persistence route requires an existing persisted multiplanar run and automatic disc localization evidence before product PASS." "No dataset labels or manual coordinates were used."
+if ([string]::IsNullOrWhiteSpace($sagittalT1InputId) -or [string]::IsNullOrWhiteSpace($sagittalT2InputId)) {
+    Add-Gate "p10_7" "BLOCKED" "The uploaded study did not yield both an analyzable sagittal T1 and an analyzable sagittal T2 input (P10.7 requires both as independent, non-registered-to-each-other sources)." "sagittalT1InputId present=$(![string]::IsNullOrWhiteSpace($sagittalT1InputId)); sagittalT2InputId present=$(![string]::IsNullOrWhiteSpace($sagittalT2InputId))."
+} elseif ([string]::IsNullOrWhiteSpace($multiplanarRunId)) {
+    Add-Gate "p10_7" "BLOCKED" "P10.7 findings persist onto an existing PostgreSQL study run; no persisted multiplanarRunId was available." "POST /api/ai/multiplanar/run did not return a usable runId."
 } else {
-    Add-Gate "p10_7" "BLOCKED" "P10.7 checkpoint hash is verified, but no real segmentation-derived sagittal source was available for a valid product call." "Needs registered sagittal sources with segmentationRunIds from the system."
-}
-Add-Gate "automaticDiscLocalizationRealStudy" "BLOCKED" "automaticDiscLocalizationRealStudyValidated remains false." "No evidence yet that segmentation -> anatomical level -> slice selection -> preprocessing -> P10.7 was fully automatic for this real study."
+    try {
+        $segT1Body = @{ caseId = $CaseId; inputId = $sagittalT1InputId; plane = "sagittal"; modelKey = "sagittal_spider" }
+        $segT1 = Safe-Request -Method Post -Uri "$BackendBaseUrl/api/ai/v2/product/series-segmentation" -Headers (Auth-Headers -Token $token) -Body $segT1Body
+        $segT1RunId = First-Text @($segT1.runId)
+        $segT2Body = @{ caseId = $CaseId; inputId = $sagittalT2InputId; plane = "sagittal"; modelKey = "sagittal_spider" }
+        $segT2 = Safe-Request -Method Post -Uri "$BackendBaseUrl/api/ai/v2/product/series-segmentation" -Headers (Auth-Headers -Token $token) -Body $segT2Body
+        $segT2RunId = First-Text @($segT2.runId)
+        $result.e2e["sagittalT1Segmentation"] = @{ runId = $segT1RunId; discLocalizationCount = (Get-Array (Get-Property $segT1 "discLocalizations")).Count }
+        $result.e2e["sagittalT2Segmentation"] = @{ runId = $segT2RunId; discLocalizationCount = (Get-Array (Get-Property $segT2 "discLocalizations")).Count }
 
-if ($sagittalSeg -and (Count-List $sagittalSeg.slices) -gt 0) {
-    Add-Gate "measurements" "BLOCKED" "Full-series segmentation returned slice-level outputs, but no product measurement payload was emitted on this route." "Needs a measurement-producing product run."
+        $discBody = @{
+            multiplanarRunId = $multiplanarRunId
+            caseId = $CaseId
+            sources = @(
+                @{ role = "sagittal_t1"; inputId = $sagittalT1InputId; segmentationRunId = $segT1RunId },
+                @{ role = "sagittal_t2"; inputId = $sagittalT2InputId; segmentationRunId = $segT2RunId }
+            )
+        }
+        $discResponse = Safe-Request -Method Post -Uri "$BackendBaseUrl/api/ai/v2/product/disc-degenerative-findings" -Headers (Auth-Headers -Token $token) -Body $discBody
+        $result.e2e["p10_7"] = $discResponse
+
+        $findingsEnvelope = Get-Property $discResponse "discDegenerativeFindings"
+        $findings = Get-Array (Get-Property $findingsEnvelope "findings")
+        $allowedTypes = @("pfirrmann_grade", "modic_change", "upper_endplate_change", "lower_endplate_change", "spondylolisthesis", "disc_herniation", "disc_narrowing", "disc_bulging")
+        $typesSeen = @($findings | ForEach-Object { [string](Get-Property $_ "findingType") })
+        $allTypesKnown = -not ($typesSeen | Where-Object { $allowedTypes -notcontains $_ })
+        $persistence = Get-Property $discResponse "persistence"
+        if (
+            (Get-Property $findingsEnvelope "schemaVersion") -eq "pfi.disc-degenerative-findings.v1" -and
+            $findings.Count -gt 0 -and $allTypesKnown -and
+            (Get-Property $discResponse "humanReviewRequired") -eq $true -and
+            (Get-Property $discResponse "notClinicalDiagnosis") -eq $true -and
+            (Get-Property $discResponse "autonomousDiagnosis") -eq $false -and
+            (Get-Property $persistence "status") -eq "persisted_immutable"
+        ) {
+            Add-Gate "p10_7" "PASS" "Real sagittal T1 ($segT1RunId) and T2 ($segT2RunId) full-series segmentation, independent per modality, fed segmentation-derived disc localizations into POST /api/ai/v2/product/disc-degenerative-findings; the frozen P10.7 checkpoint returned $($findings.Count) finding(s) across the supported taxonomy and Backend persisted them immutably onto multiplanarRunId=$multiplanarRunId."
+        } else {
+            Add-Gate "p10_7" "FAIL" "P10.7 response did not satisfy the full product contract." "schemaVersion/findings/findingType taxonomy/safety flags/persistence status did not all validate."
+        }
+    } catch {
+        Add-Gate "p10_7" "FAIL" "P10.7 product chain failed against the real study." $_.Exception.Message
+    }
+}
+
+$p10_7Gate = $script:Gates["p10_7"]
+if ($p10_7Gate.status -eq "PASS") {
+    $t1Levels = if ($result.e2e.Contains("sagittalT1Segmentation")) { $result.e2e["sagittalT1Segmentation"].discLocalizationCount } else { 0 }
+    $t2Levels = if ($result.e2e.Contains("sagittalT2Segmentation")) { $result.e2e["sagittalT2Segmentation"].discLocalizationCount } else { 0 }
+    $result.e2e["automaticDiscLocalization"] = [ordered]@{
+        automaticDiscLocalizationRealStudyValidated = $true
+        automaticDiscLocalizationValidated = $false
+        validationScope = "technical_real_study_provenance_not_clinical_accuracy"
+        sagittalT1LevelsLocalized = $t1Levels
+        sagittalT2LevelsLocalized = $t2Levels
+        automaticSagittalAxialAlignmentValidated = $false
+    }
+    Add-Gate "automaticDiscLocalizationRealStudy" "PASS" "Real DICOM -> full-series sagittal segmentation -> connected disc components -> level assignment -> bbox -> P10.7 ran end to end with zero manual coordinates, zero dataset ground truth, and zero external ROI ($t1Levels T1 level(s), $t2Levels T2 level(s) localized). This is technical provenance on this real-study fixture only; automaticDiscLocalizationValidated (clinical/general accuracy) stays false, and automaticSagittalAxialAlignmentValidated stays false because no sagittal-to-axial pixel registration was assumed anywhere in this chain."
 } else {
-    Add-Gate "measurements" "BLOCKED" "Measurement audit depends on a successful segmentation/measurement run." "No measurement payload available."
+    Add-Gate "automaticDiscLocalizationRealStudy" "BLOCKED" "automaticDiscLocalizationRealStudyValidated remains false." "Depends on p10_7 (status=$($p10_7Gate.status)): $($p10_7Gate.problem)"
+}
+
+$measurementsFound = @()
+foreach ($seg in @($sagittalSeg, $axialSeg)) {
+    if ($null -eq $seg) { continue }
+    foreach ($slice in (Get-Array (Get-Property $seg "slices"))) {
+        $sliceMeasurements = Get-Array (Get-Property $slice "measurements")
+        if ($sliceMeasurements.Count -gt 0) { $measurementsFound += ,$sliceMeasurements }
+    }
+}
+if ($measurementsFound.Count -gt 0) {
+    $sample = $measurementsFound[0][0]
+    $result.e2e["measurementsSample"] = [ordered]@{
+        sliceGroupsWithMeasurements = $measurementsFound.Count
+        sampleKeys = @($sample.PSObject.Properties.Name)
+    }
+    Add-Gate "measurements" "PASS" "Full-series sagittal/axial product segmentation returned descriptive per-slice measurements (reusing the existing build_measurements engine, no new measurement model) across $($measurementsFound.Count) slice group(s); persistence and AI-vs-human correction are verified separately by the persistence and professionalReview gates."
+} else {
+    Add-Gate "measurements" "BLOCKED" "Measurement audit depends on a successful segmentation run with non-empty per-slice measurements." "No measurement payload was available from sagittalPipeline/axialPipeline."
 }
 
 if (![string]::IsNullOrWhiteSpace($sagittalRunId) -and ![string]::IsNullOrWhiteSpace($token)) {
@@ -480,8 +593,137 @@ if (![string]::IsNullOrWhiteSpace($sagittalRunId) -and ![string]::IsNullOrWhiteS
     Add-Gate "assets" "BLOCKED" "Asset proxy audit depends on a successful segmentation run id." "No generated run id available."
 }
 
-Add-Gate "persistence" "BLOCKED" "Study upload and product full-series routes executed through Backend, but this checkpoint does not yet persist those product segmentation runs as reviewable PostgreSQL study runs." "Needs a persisted multiplanar/product run before persistence PASS."
-Add-Gate "professionalReview" "BLOCKED" "Review gate requires a persisted multiplanar/product run id." "No reviewable PostgreSQL run was created by the executed product route."
+$persistedRun = $null
+if ([string]::IsNullOrWhiteSpace($multiplanarRunId)) {
+    Add-Gate "persistence" "BLOCKED" "No persisted multiplanarRunId was created; there is nothing to read back from PostgreSQL." "POST /api/ai/multiplanar/run did not succeed for this real study."
+} else {
+    try {
+        $runsResponse = Safe-Request -Method Get -Uri "$BackendBaseUrl/api/studies/$CaseId/runs" -Headers (Auth-Headers -Token $token)
+        $runs = Get-Array (Get-Property $runsResponse "runs")
+        $persistedRun = $runs | Where-Object { (Get-Property (Get-Property $_ "summary") "runId") -eq $multiplanarRunId } | Select-Object -First 1
+        $metricsSnapshot = Get-Property $persistedRun "metricsSnapshot"
+        $discPersisted = $null -ne (Get-Property $metricsSnapshot "discDegenerativeFindings")
+        $measurementsByPlane = Get-Property $persistedRun "measurementsByPlane"
+        $result.e2e["persistence"] = [ordered]@{
+            runFoundInPostgres = $null -ne $persistedRun
+            discDegenerativeFindingsPersisted = $discPersisted
+            measurementsByPlaneKeys = if ($null -ne $measurementsByPlane) { @($measurementsByPlane.PSObject.Properties.Name) } else { @() }
+        }
+        if ($null -ne $persistedRun) {
+            $p10_7Gate = $script:Gates["p10_7"]
+            $expectDisc = $p10_7Gate.status -eq "PASS"
+            if ((-not $expectDisc) -or $discPersisted) {
+                Add-Gate "persistence" "PASS" "GET /api/studies/$CaseId/runs, a fresh HTTP request against PostgreSQL (not an in-memory Java object), found the run created by POST /api/ai/multiplanar/run and, when P10.7 ran, its P10.7 findings inside metricsSnapshot.discDegenerativeFindings -- durable across the request boundary."
+            } else {
+                Add-Gate "persistence" "FAIL" "Run was found in PostgreSQL but its P10.7 findings were not durably persisted." "metricsSnapshot.discDegenerativeFindings missing after a P10.7 PASS."
+            }
+        } else {
+            Add-Gate "persistence" "FAIL" "multiplanarRunId was returned by the run endpoint but could not be re-read from PostgreSQL via the study runs endpoint." "GET /api/studies/{caseId}/runs did not list runId=$multiplanarRunId."
+        }
+    } catch {
+        Add-Gate "persistence" "FAIL" "Reading the persisted run back from PostgreSQL failed." $_.Exception.Message
+    }
+}
+
+if ([string]::IsNullOrWhiteSpace($multiplanarRunId)) {
+    Add-Gate "professionalReview" "BLOCKED" "Review gate requires a persisted multiplanar/product run id." "No reviewable PostgreSQL run was created by the executed product route."
+} else {
+    try {
+        # planes.{plane}.measurements is { values: [ { id, labelKey, value, unit, plane,
+        # level, sliceIndex, source: "ai", status: "pending_review", ... } ] } on the real
+        # /api/ai/multiplanar/run v2 contract -- not the older slices[].measurementIds
+        # shape, which this route does not expose.
+        #
+        # The correction target must be a real AI measurement whose level is one of the
+        # five lumbar levels P10.7 supports (L1-L2..L5-S1). The study's sagittal FOV can
+        # legitimately include non-lumbar levels (e.g. T9-T10) if the acquisition covers
+        # more than the lumbar spine; those are real AI measurements too, just not ones
+        # that represent the lumbar product scope this E2E is closing out.
+        $lumbarLevels = @("L1-L2", "L2-L3", "L3-L4", "L4-L5", "L5-S1")
+        $correctionTarget = $null
+        foreach ($planeName in @("sagittal", "axial")) {
+            $plane = Get-Property $multiplanarRun "planes"
+            $planeData = Get-Property $plane $planeName
+            $measurements = Get-Property $planeData "measurements"
+            $values = Get-Array (Get-Property $measurements "values")
+            foreach ($measurement in $values) {
+                $measurementId = [string](Get-Property $measurement "id")
+                $measurementLevel = [string](Get-Property $measurement "level")
+                $measurementSource = [string](Get-Property $measurement "source")
+                if ((![string]::IsNullOrWhiteSpace($measurementId)) -and ($lumbarLevels -contains $measurementLevel) -and ($measurementSource -eq "ai")) {
+                    $correctionTarget = [ordered]@{
+                        plane = $planeName
+                        sliceIndex = [int](Get-Property $measurement "sliceIndex")
+                        measurementId = $measurementId
+                        unit = [string](Get-Property $measurement "unit")
+                        level = $measurementLevel
+                        aiValue = (Get-Property $measurement "value")
+                        aiLabelKey = [string](Get-Property $measurement "labelKey")
+                    }
+                    break
+                }
+            }
+            if ($null -ne $correctionTarget) { break }
+        }
+        if ($null -eq $correctionTarget) {
+            $allLevelsSeen = @()
+            foreach ($planeName in @("sagittal", "axial")) {
+                $plane = Get-Property $multiplanarRun "planes"
+                $planeData = Get-Property $plane $planeName
+                $measurements = Get-Property $planeData "measurements"
+                foreach ($measurement in (Get-Array (Get-Property $measurements "values"))) {
+                    $allLevelsSeen += [string](Get-Property $measurement "level")
+                }
+            }
+            $uniqueLevelsSeen = @($allLevelsSeen | Sort-Object -Unique)
+            $result.e2e["professionalReviewLumbarSearch"] = [ordered]@{ levelsSeenAcrossAllMeasurements = $uniqueLevelsSeen }
+            Add-Gate "professionalReview" "BLOCKED" "No real AI measurement with a supported lumbar level (L1-L2..L5-S1) was available on the persisted run to attach a professional correction to." "Levels actually present on this run's measurements: $($uniqueLevelsSeen -join ', ')."
+        } else {
+            $aiValueNumeric = [double]$correctionTarget.aiValue
+            $humanCorrectedValue = [math]::Round($aiValueNumeric * 1.1, 2)
+            $reviewBody = @{
+                reviewStatus = "observed"
+                reviewer = "p10-9-e2e-reviewer"
+                comments = "P10.9 E2E: correccion academica pseudonima sobre nivel lumbar $($correctionTarget.level) para validar persistencia y distincion AI vs humano."
+                corrections = @(
+                    @{
+                        measurementId = $correctionTarget.measurementId
+                        label = "P10.9 E2E lumbar measurement correction ($($correctionTarget.level))"
+                        beforeValue = @{ value = $aiValueNumeric; unit = $correctionTarget.unit; plane = $correctionTarget.plane; level = $correctionTarget.level; sliceIndex = $correctionTarget.sliceIndex; source = "ai" }
+                        afterValue = @{ value = $humanCorrectedValue; unit = $correctionTarget.unit; plane = $correctionTarget.plane; level = $correctionTarget.level; sliceIndex = $correctionTarget.sliceIndex; source = "human" }
+                        comment = "Ajuste E2E pseudonimo sin identificadores, nivel lumbar soportado."
+                    }
+                )
+            }
+            $reviewSaved = Safe-Request -Method Post -Uri "$BackendBaseUrl/api/ai/runs/$multiplanarRunId/review" -Headers (Auth-Headers -Token $token) -Body $reviewBody
+            $reviewFetched = Safe-Request -Method Get -Uri "$BackendBaseUrl/api/ai/runs/$multiplanarRunId/review" -Headers (Auth-Headers -Token $token)
+            $result.e2e["professionalReview"] = [ordered]@{
+                measurementId = $correctionTarget.measurementId
+                level = $correctionTarget.level
+                plane = $correctionTarget.plane
+                aiOriginalValue = $aiValueNumeric
+                aiLabelKey = $correctionTarget.aiLabelKey
+                unit = $correctionTarget.unit
+                humanCorrectedValue = $humanCorrectedValue
+                saved = [ordered]@{ reviewStatus = Get-Property $reviewSaved "reviewStatus"; reviewer = Get-Property $reviewSaved "reviewer" }
+                fetchedAfterSave = [ordered]@{ reviewStatus = Get-Property $reviewFetched "reviewStatus"; reviewer = Get-Property $reviewFetched "reviewer"; correctionCount = (Get-Array (Get-Property $reviewFetched "corrections")).Count }
+            }
+            $fetchedCorrections = Get-Array (Get-Property $reviewFetched "corrections")
+            $correctionPersisted = $fetchedCorrections | Where-Object { (Get-Property $_ "measurementId") -eq $correctionTarget.measurementId } | Select-Object -First 1
+            if (
+                (Get-Property $reviewFetched "reviewStatus") -eq "observed" -and
+                (Get-Property $reviewFetched "reviewer") -eq "p10-9-e2e-reviewer" -and
+                $null -ne $correctionPersisted
+            ) {
+                Add-Gate "professionalReview" "PASS" "AI-generated run multiplanarRunId=$multiplanarRunId started review-required; the corrected measurement (measurementId=$($correctionTarget.measurementId), level=$($correctionTarget.level), a supported lumbar level) is a real product-generated AI measurement (source=ai, value=$aiValueNumeric $($correctionTarget.unit)), not fabricated. POST /api/ai/runs/{id}/review saved a human correction (value=$humanCorrectedValue $($correctionTarget.unit), source=human), and a separate GET re-fetch confirmed reviewStatus=observed, reviewer=p10-9-e2e-reviewer and the correction persisted -- AI output and human review remain distinguishable fields, nothing was overwritten silently."
+            } else {
+                Add-Gate "professionalReview" "FAIL" "Review round-trip did not confirm persisted human review state." "GET after POST did not reflect the saved reviewStatus/reviewer/correction."
+            }
+        }
+    } catch {
+        Add-Gate "professionalReview" "FAIL" "Professional review round-trip failed against the real persisted run." $_.Exception.Message
+    }
+}
 
 # Audit the full evidence set that will actually be serialized into P10_9_E2E_RESULT.json
 # (raw captured HTTP responses/errors, checkpoint hash records, and gate evidence/problem

@@ -1,0 +1,13 @@
+{
+  "status": "error",
+  "code": "BAD_REQUEST",
+  "message": "El estudio enviado al modulo de IA es invalido.",
+  "traceId": "trace-00000000-0000-0000-0000-000000000000",
+  "path": "/api/ai/studies",
+  "method": "POST",
+  "timestamp": "2026-01-01T00:00:00Z",
+  "category": "VALIDATION",
+  "retryable": false,
+  "humanReviewRequired": true,
+  "notClinicalDiagnosis": true
+}

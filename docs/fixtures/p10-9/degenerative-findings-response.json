@@ -1,0 +1,2339 @@
+{
+  "discDegenerativeFindings": {
+    "schemaVersion": "pfi.disc-degenerative-findings.v1",
+    "findings": [
+      {
+        "findingId": "4032630d-b3ab-56b6-847c-602fb3b39678",
+        "findingType": "pfirrmann_grade",
+        "anatomy": {
+          "level": "L1-L2"
+        },
+        "classification": {
+          "kind": "categorical",
+          "label": "II",
+          "probabilities": {
+            "I": 0.13446398023042092,
+            "II": 0.6321551177234407,
+            "III": 0.1410412037422085,
+            "IV": 0.08843196146381663,
+            "V": 0.003907736840113238
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "experimental",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              6,
+              7,
+              8
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              7,
+              8,
+              9
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "e8d15a30-b3d0-5af1-b75c-1cd59c9daa96",
+        "findingType": "modic_change",
+        "anatomy": {
+          "level": "L1-L2"
+        },
+        "classification": {
+          "kind": "categorical",
+          "label": "none",
+          "probabilities": {
+            "none": 0.9233194840578075,
+            "I": 0.003816950485081992,
+            "II": 0.06772165621685157,
+            "III": 0.0051419092402589135
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "not_product_supported",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              6,
+              7,
+              8
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              7,
+              8,
+              9
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "a3d2a675-4d32-5fa2-81e9-b5822b62496f",
+        "findingType": "upper_endplate_change",
+        "anatomy": {
+          "level": "L1-L2"
+        },
+        "classification": {
+          "kind": "binary",
+          "label": "absent",
+          "probabilities": {
+            "absent": 0.7311016917228699,
+            "present": 0.2688983082771301
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "supported_internal",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              6,
+              7,
+              8
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              7,
+              8,
+              9
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "af5b18b7-4735-53e0-bd4d-8a55500ef231",
+        "findingType": "lower_endplate_change",
+        "anatomy": {
+          "level": "L1-L2"
+        },
+        "classification": {
+          "kind": "binary",
+          "label": "absent",
+          "probabilities": {
+            "absent": 0.7269962430000305,
+            "present": 0.2730037569999695
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "supported_internal",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              6,
+              7,
+              8
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              7,
+              8,
+              9
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "97cabaab-9381-58de-953c-65a69c3bff82",
+        "findingType": "spondylolisthesis",
+        "anatomy": {
+          "level": "L1-L2"
+        },
+        "classification": {
+          "kind": "binary",
+          "label": "absent",
+          "probabilities": {
+            "absent": 0.9891188172623515,
+            "present": 0.010881182737648487
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "not_product_supported",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              6,
+              7,
+              8
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              7,
+              8,
+              9
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "4e6b45b1-75c9-5f82-9017-679be5cf7479",
+        "findingType": "disc_herniation",
+        "anatomy": {
+          "level": "L1-L2"
+        },
+        "classification": {
+          "kind": "binary",
+          "label": "absent",
+          "probabilities": {
+            "absent": 0.9921990358270705,
+            "present": 0.007800964172929525
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "not_product_supported",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              6,
+              7,
+              8
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              7,
+              8,
+              9
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "63590228-4b6e-5053-bf10-dd8f2bef8b05",
+        "findingType": "disc_narrowing",
+        "anatomy": {
+          "level": "L1-L2"
+        },
+        "classification": {
+          "kind": "binary",
+          "label": "absent",
+          "probabilities": {
+            "absent": 0.9589003920555115,
+            "present": 0.041099607944488525
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "supported_internal",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              6,
+              7,
+              8
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              7,
+              8,
+              9
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "26c3f6cc-f579-53e3-9b48-059ab77ded5e",
+        "findingType": "disc_bulging",
+        "anatomy": {
+          "level": "L1-L2"
+        },
+        "classification": {
+          "kind": "binary",
+          "label": "absent",
+          "probabilities": {
+            "absent": 0.8496014028787613,
+            "present": 0.1503985971212387
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "supported_internal",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              6,
+              7,
+              8
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              7,
+              8,
+              9
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "0f93ab0d-babe-5515-94c7-0ff7f761c5e3",
+        "findingType": "pfirrmann_grade",
+        "anatomy": {
+          "level": "L2-L3"
+        },
+        "classification": {
+          "kind": "categorical",
+          "label": "IV",
+          "probabilities": {
+            "I": 0.04581133193817974,
+            "II": 0.25661336020539377,
+            "III": 0.2974582800894631,
+            "IV": 0.38120948702306034,
+            "V": 0.018907540743903044
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "experimental",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              7,
+              8,
+              9
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              7,
+              8,
+              9
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "48d01309-c2f8-5216-ac7f-b49d588b381f",
+        "findingType": "modic_change",
+        "anatomy": {
+          "level": "L2-L3"
+        },
+        "classification": {
+          "kind": "categorical",
+          "label": "none",
+          "probabilities": {
+            "none": 0.789905659948423,
+            "I": 0.007849253640982753,
+            "II": 0.19487811443509429,
+            "III": 0.007366971975500025
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "not_product_supported",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              7,
+              8,
+              9
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              7,
+              8,
+              9
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "97afe5e9-edb6-527f-8dc8-f488db69f981",
+        "findingType": "upper_endplate_change",
+        "anatomy": {
+          "level": "L2-L3"
+        },
+        "classification": {
+          "kind": "binary",
+          "label": "present",
+          "probabilities": {
+            "absent": 0.34883636236190796,
+            "present": 0.651163637638092
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "supported_internal",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              7,
+              8,
+              9
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              7,
+              8,
+              9
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "5b6edced-3942-53ce-8158-4258c570cdd8",
+        "findingType": "lower_endplate_change",
+        "anatomy": {
+          "level": "L2-L3"
+        },
+        "classification": {
+          "kind": "binary",
+          "label": "present",
+          "probabilities": {
+            "absent": 0.3886304497718811,
+            "present": 0.6113695502281189
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "supported_internal",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              7,
+              8,
+              9
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              7,
+              8,
+              9
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "a9c0ee4b-36f6-58db-84a1-a73e6e156c35",
+        "findingType": "spondylolisthesis",
+        "anatomy": {
+          "level": "L2-L3"
+        },
+        "classification": {
+          "kind": "binary",
+          "label": "absent",
+          "probabilities": {
+            "absent": 0.983100201934576,
+            "present": 0.016899798065423965
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "not_product_supported",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              7,
+              8,
+              9
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              7,
+              8,
+              9
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "bf1e4af6-ff21-5ca3-80f4-2b97b651f039",
+        "findingType": "disc_herniation",
+        "anatomy": {
+          "level": "L2-L3"
+        },
+        "classification": {
+          "kind": "binary",
+          "label": "absent",
+          "probabilities": {
+            "absent": 0.9790715053677559,
+            "present": 0.02092849463224411
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "not_product_supported",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              7,
+              8,
+              9
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              7,
+              8,
+              9
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "c268303f-2ee9-57e2-94bd-582fe899918d",
+        "findingType": "disc_narrowing",
+        "anatomy": {
+          "level": "L2-L3"
+        },
+        "classification": {
+          "kind": "binary",
+          "label": "absent",
+          "probabilities": {
+            "absent": 0.860593855381012,
+            "present": 0.13940614461898804
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "supported_internal",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              7,
+              8,
+              9
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              7,
+              8,
+              9
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "227ceb35-68ca-5f3f-bd9c-84eabaac27ea",
+        "findingType": "disc_bulging",
+        "anatomy": {
+          "level": "L2-L3"
+        },
+        "classification": {
+          "kind": "binary",
+          "label": "present",
+          "probabilities": {
+            "absent": 0.49092239141464233,
+            "present": 0.5090776085853577
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "supported_internal",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              7,
+              8,
+              9
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              7,
+              8,
+              9
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "79665599-cc62-593f-b9ab-a61147fa3bcb",
+        "findingType": "pfirrmann_grade",
+        "anatomy": {
+          "level": "L3-L4"
+        },
+        "classification": {
+          "kind": "categorical",
+          "label": "II",
+          "probabilities": {
+            "I": 0.13483619300655836,
+            "II": 0.3891063518242008,
+            "III": 0.24712226571441606,
+            "IV": 0.21760285762540196,
+            "V": 0.011332331829422818
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "experimental",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "fbed4381-fb23-599c-a673-7a63f2593668",
+        "findingType": "modic_change",
+        "anatomy": {
+          "level": "L3-L4"
+        },
+        "classification": {
+          "kind": "categorical",
+          "label": "none",
+          "probabilities": {
+            "none": 0.8539048429726723,
+            "I": 0.00425252394453905,
+            "II": 0.13692889567576602,
+            "III": 0.004913737407022563
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "not_product_supported",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "cff99236-39f6-5237-9e13-bd0a28ea7f84",
+        "findingType": "upper_endplate_change",
+        "anatomy": {
+          "level": "L3-L4"
+        },
+        "classification": {
+          "kind": "binary",
+          "label": "absent",
+          "probabilities": {
+            "absent": 0.5218809545040131,
+            "present": 0.47811904549598694
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "supported_internal",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "0a3c6b89-9d9c-5172-a19f-85197a188d49",
+        "findingType": "lower_endplate_change",
+        "anatomy": {
+          "level": "L3-L4"
+        },
+        "classification": {
+          "kind": "binary",
+          "label": "absent",
+          "probabilities": {
+            "absent": 0.5604217052459717,
+            "present": 0.4395782947540283
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "supported_internal",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "fc23d8f6-384f-5f27-8124-b041bde6e97a",
+        "findingType": "spondylolisthesis",
+        "anatomy": {
+          "level": "L3-L4"
+        },
+        "classification": {
+          "kind": "binary",
+          "label": "absent",
+          "probabilities": {
+            "absent": 0.9911855924874544,
+            "present": 0.008814407512545586
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "not_product_supported",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "2141fb97-04a4-541b-be02-6c4334677684",
+        "findingType": "disc_herniation",
+        "anatomy": {
+          "level": "L3-L4"
+        },
+        "classification": {
+          "kind": "binary",
+          "label": "absent",
+          "probabilities": {
+            "absent": 0.9927021944895387,
+            "present": 0.00729780551046133
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "not_product_supported",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "878797bd-844b-5220-8a3d-60014585822d",
+        "findingType": "disc_narrowing",
+        "anatomy": {
+          "level": "L3-L4"
+        },
+        "classification": {
+          "kind": "binary",
+          "label": "absent",
+          "probabilities": {
+            "absent": 0.8956134766340256,
+            "present": 0.10438652336597443
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "supported_internal",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "d13ae9de-e5f0-51d2-9507-b5cd4c4086d7",
+        "findingType": "disc_bulging",
+        "anatomy": {
+          "level": "L3-L4"
+        },
+        "classification": {
+          "kind": "binary",
+          "label": "absent",
+          "probabilities": {
+            "absent": 0.72831591963768,
+            "present": 0.27168408036231995
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "supported_internal",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "f9e01553-5be8-54cd-b016-97ce53319f09",
+        "findingType": "pfirrmann_grade",
+        "anatomy": {
+          "level": "L4-L5"
+        },
+        "classification": {
+          "kind": "categorical",
+          "label": "III",
+          "probabilities": {
+            "I": 0.04076396240645703,
+            "II": 0.13407657840733858,
+            "III": 0.4055958329797412,
+            "IV": 0.38407024168863535,
+            "V": 0.03549338451782786
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "experimental",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "a95b669b-cb90-5902-bac9-8faf3cbf1787",
+        "findingType": "modic_change",
+        "anatomy": {
+          "level": "L4-L5"
+        },
+        "classification": {
+          "kind": "categorical",
+          "label": "none",
+          "probabilities": {
+            "none": 0.6777953902238801,
+            "I": 0.009714888200093141,
+            "II": 0.3031544329622215,
+            "III": 0.009335288613805207
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "not_product_supported",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "5860940c-1823-5a1c-98cb-ed20014859bb",
+        "findingType": "upper_endplate_change",
+        "anatomy": {
+          "level": "L4-L5"
+        },
+        "classification": {
+          "kind": "binary",
+          "label": "present",
+          "probabilities": {
+            "absent": 0.21816229820251465,
+            "present": 0.7818377017974854
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "supported_internal",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "6b052a72-0bdc-5657-8e58-f68e688fc858",
+        "findingType": "lower_endplate_change",
+        "anatomy": {
+          "level": "L4-L5"
+        },
+        "classification": {
+          "kind": "binary",
+          "label": "present",
+          "probabilities": {
+            "absent": 0.2679746150970459,
+            "present": 0.7320253849029541
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "supported_internal",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "4279f311-cfe1-5809-9281-c373177e4648",
+        "findingType": "spondylolisthesis",
+        "anatomy": {
+          "level": "L4-L5"
+        },
+        "classification": {
+          "kind": "binary",
+          "label": "absent",
+          "probabilities": {
+            "absent": 0.9851457802578807,
+            "present": 0.014854219742119312
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "not_product_supported",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "dc93bede-8862-58dc-bec9-51276c04fee1",
+        "findingType": "disc_herniation",
+        "anatomy": {
+          "level": "L4-L5"
+        },
+        "classification": {
+          "kind": "binary",
+          "label": "absent",
+          "probabilities": {
+            "absent": 0.9862941978499293,
+            "present": 0.013705802150070667
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "not_product_supported",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "da88f1ce-8d6e-5338-9acd-2f84ec7617af",
+        "findingType": "disc_narrowing",
+        "anatomy": {
+          "level": "L4-L5"
+        },
+        "classification": {
+          "kind": "binary",
+          "label": "absent",
+          "probabilities": {
+            "absent": 0.6783578991889954,
+            "present": 0.32164210081100464
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "supported_internal",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "04915cb1-9232-57f7-abff-8f60f7b6d6b6",
+        "findingType": "disc_bulging",
+        "anatomy": {
+          "level": "L4-L5"
+        },
+        "classification": {
+          "kind": "binary",
+          "label": "present",
+          "probabilities": {
+            "absent": 0.48158061504364014,
+            "present": 0.5184193849563599
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "supported_internal",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              8,
+              9,
+              10
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "4d4dc5aa-7521-53f9-8b8a-cd79a4aada3d",
+        "findingType": "pfirrmann_grade",
+        "anatomy": {
+          "level": "L5-S1"
+        },
+        "classification": {
+          "kind": "categorical",
+          "label": "IV",
+          "probabilities": {
+            "I": 0.03984722107705764,
+            "II": 0.061400525043157766,
+            "III": 0.29553034791525323,
+            "IV": 0.3677357719550439,
+            "V": 0.23548613400948742
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "experimental",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              6,
+              7,
+              8
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              6,
+              7,
+              8
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "bbf26de2-b152-519c-82a3-7470dbc9fc89",
+        "findingType": "modic_change",
+        "anatomy": {
+          "level": "L5-S1"
+        },
+        "classification": {
+          "kind": "categorical",
+          "label": "II",
+          "probabilities": {
+            "none": 0.4259500627016623,
+            "I": 0.029265380196574396,
+            "II": 0.5078722030423797,
+            "III": 0.036912354059383666
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "not_product_supported",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              6,
+              7,
+              8
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              6,
+              7,
+              8
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "a297d80d-18d1-5c6d-af8a-4c59e105ced8",
+        "findingType": "upper_endplate_change",
+        "anatomy": {
+          "level": "L5-S1"
+        },
+        "classification": {
+          "kind": "binary",
+          "label": "present",
+          "probabilities": {
+            "absent": 0.4270409941673279,
+            "present": 0.5729590058326721
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "supported_internal",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              6,
+              7,
+              8
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              6,
+              7,
+              8
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "7fb13dcb-39d1-52ff-b54a-18cf59c3320c",
+        "findingType": "lower_endplate_change",
+        "anatomy": {
+          "level": "L5-S1"
+        },
+        "classification": {
+          "kind": "binary",
+          "label": "present",
+          "probabilities": {
+            "absent": 0.30785679817199707,
+            "present": 0.6921432018280029
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "supported_internal",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              6,
+              7,
+              8
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              6,
+              7,
+              8
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "04e0442d-e95f-5fbb-bde6-b5afd3b1ce13",
+        "findingType": "spondylolisthesis",
+        "anatomy": {
+          "level": "L5-S1"
+        },
+        "classification": {
+          "kind": "binary",
+          "label": "absent",
+          "probabilities": {
+            "absent": 0.7917471081018448,
+            "present": 0.2082528918981552
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "not_product_supported",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              6,
+              7,
+              8
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              6,
+              7,
+              8
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "bf98e9f4-e995-5265-a7ab-1a5864d8ed30",
+        "findingType": "disc_herniation",
+        "anatomy": {
+          "level": "L5-S1"
+        },
+        "classification": {
+          "kind": "binary",
+          "label": "absent",
+          "probabilities": {
+            "absent": 0.6956735551357269,
+            "present": 0.30432644486427307
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "not_product_supported",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              6,
+              7,
+              8
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              6,
+              7,
+              8
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "f8ec7994-57f7-506f-b99c-96f1e5220880",
+        "findingType": "disc_narrowing",
+        "anatomy": {
+          "level": "L5-S1"
+        },
+        "classification": {
+          "kind": "binary",
+          "label": "present",
+          "probabilities": {
+            "absent": 0.17338114976882935,
+            "present": 0.8266188502311707
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "supported_internal",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              6,
+              7,
+              8
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              6,
+              7,
+              8
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      },
+      {
+        "findingId": "74e72696-917b-51ba-9c90-701abeee0a21",
+        "findingType": "disc_bulging",
+        "anatomy": {
+          "level": "L5-S1"
+        },
+        "classification": {
+          "kind": "binary",
+          "label": "present",
+          "probabilities": {
+            "absent": 0.1208961009979248,
+            "present": 0.8791038990020752
+          }
+        },
+        "evidence": {
+          "deploymentStatus": "supported_internal",
+          "evaluationDataset": "SPIDER_internal_test",
+          "externalValidationAvailable": false
+        },
+        "evaluation": {
+          "status": "evaluated"
+        },
+        "sourceSeries": [
+          {
+            "role": "sagittal_t1",
+            "available": true,
+            "positions": [
+              6,
+              7,
+              8
+            ]
+          },
+          {
+            "role": "sagittal_t2",
+            "available": true,
+            "positions": [
+              6,
+              7,
+              8
+            ]
+          }
+        ],
+        "localization": {
+          "source": "segmentation_derived_disc_level",
+          "researchOnly": true,
+          "automaticAnatomicalLocalizationValidated": false
+        },
+        "model": {
+          "modelId": "spider_degenerative_multitask_sagittal_t1_t2_2p5d",
+          "modelSha256": "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293"
+        },
+        "review": {
+          "required": true,
+          "status": "pending"
+        },
+        "notClinicalDiagnosis": true
+      }
+    ]
+  },
+  "humanReviewRequired": true,
+  "notClinicalDiagnosis": true,
+  "autonomousDiagnosis": false,
+  "runtime": {
+    "preprocessingSpec": "pfi.p10-7.notebook-66-crop-2p5d.v1",
+    "preprocessingParityValidated": true,
+    "localizationSource": "segmentation_derived_disc_level",
+    "automaticDiscLocalizationValidated": false,
+    "humanReviewRequired": true,
+    "notClinicalDiagnosis": true
+  },
+  "orchestration": {
+    "source": "full_series_segmentation_reports",
+    "sourceRoles": [
+      "sagittal_t1",
+      "sagittal_t2"
+    ],
+    "automaticDiscLocalizationValidated": false,
+    "crossModalityPixelRegistrationAssumed": false,
+    "humanReviewRequired": true,
+    "notClinicalDiagnosis": true
+  },
+  "persistence": {
+    "reviewStoredSeparately": true,
+    "multiplanarRunId": "multi-7372dd2ca0d194b3d65f",
+    "status": "persisted_immutable"
+  }
+}

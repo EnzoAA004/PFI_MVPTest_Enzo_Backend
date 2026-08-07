@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "pfi.p10-9.review-response-sample.v1",
+  "correctedMeasurement": {
+    "measurementId": "sagittal-disc-l1-l2-area",
+    "level": "L1-L2",
+    "plane": "sagittal",
+    "unit": "mm2",
+    "aiOriginalValue": 324,
+    "aiLabelKey": "disc area",
+    "humanCorrectedValue": 356.4
+  },
+  "afterProfessionalReview": {
+    "reviewStatus": "observed",
+    "reviewer": "p10-9-e2e-reviewer",
+    "correctionCount": null
+  }
+}

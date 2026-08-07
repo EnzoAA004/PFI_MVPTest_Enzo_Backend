@@ -1,0 +1,79 @@
+{
+  "caseId": "P10-9-REAL-STUDY",
+  "studyId": "e1ee76f8e0674ec098dab386c578de9f",
+  "seriesFound": [
+    {
+      "inputId": "inp_ce86c79e93ad437591e421faf838176f",
+      "plane": "axial",
+      "description": "T2",
+      "weighting": "t2",
+      "sliceCount": 21,
+      "multiplanar": false,
+      "derived": false,
+      "analyzable": true
+    },
+    {
+      "inputId": "inp_e41d8bcebfbb413b994581cfc5f0f747",
+      "plane": "sagittal",
+      "description": "T1",
+      "weighting": "t1",
+      "sliceCount": 17,
+      "multiplanar": false,
+      "derived": false,
+      "analyzable": true
+    },
+    {
+      "inputId": "inp_c70061b6214446d9b00b2f8c085b18d5",
+      "plane": "sagittal",
+      "description": "T2",
+      "weighting": "t2",
+      "sliceCount": 17,
+      "multiplanar": false,
+      "derived": false,
+      "analyzable": true
+    }
+  ],
+  "sagittal": {
+    "inputId": "inp_c70061b6214446d9b00b2f8c085b18d5",
+    "seriesIndex": 2,
+    "plane": "sagittal",
+    "format": "dicom_series",
+    "size": 5068540,
+    "description": "T2",
+    "weighting": "t2",
+    "sliceCount": 17
+  },
+  "axial": {
+    "inputId": "inp_ce86c79e93ad437591e421faf838176f",
+    "seriesIndex": 0,
+    "plane": "axial",
+    "format": "dicom_series",
+    "size": 6312316,
+    "description": "T2",
+    "weighting": "t2",
+    "sliceCount": 21
+  },
+  "sagittalT1": {
+    "inputId": "inp_e41d8bcebfbb413b994581cfc5f0f747",
+    "seriesIndex": 1,
+    "plane": "sagittal",
+    "format": "dicom_series",
+    "size": 5213180,
+    "description": "T1",
+    "weighting": "t1",
+    "sliceCount": 17
+  },
+  "sagittalT2": {
+    "inputId": "inp_c70061b6214446d9b00b2f8c085b18d5",
+    "seriesIndex": 2,
+    "plane": "sagittal",
+    "format": "dicom_series",
+    "size": 5068540,
+    "description": "T2",
+    "weighting": "t2",
+    "sliceCount": 17
+  },
+  "warnings": [],
+  "humanReviewRequired": true,
+  "notClinicalDiagnosis": true
+}

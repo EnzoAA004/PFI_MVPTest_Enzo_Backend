@@ -202,7 +202,7 @@ class SecurityAuthorizationIntegrationTest {
         @Test
         void studyUploadAllowed() throws Exception {
             when(aiBackendService.uploadStudy(any(), any())).thenReturn(new StudyUploadResponseDto(
-                "CASE-1", "study-1", List.of(), null, null, List.of(), true, true));
+                "CASE-1", "study-1", List.of(), null, null, null, null, List.of(), true, true));
             mockMvc.perform(multipart("/api/ai/studies")
                     .file(zipFile())
                     .param("caseId", "CASE-1")

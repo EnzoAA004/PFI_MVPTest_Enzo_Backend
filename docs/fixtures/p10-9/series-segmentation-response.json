@@ -1,0 +1,608 @@
+{
+  "schemaVersion": "pfi.full-series-segmentation.v1",
+  "status": "completed",
+  "runId": "series-6b440bbbcffdeb03c152",
+  "caseId": "P10-9-REAL-STUDY",
+  "inputId": "inp_c70061b6214446d9b00b2f8c085b18d5",
+  "plane": "sagittal",
+  "modelKey": "sagittal_spider",
+  "sliceCount": 17,
+  "segmentedSliceCount": 17,
+  "coverageComplete": true,
+  "defaultPresentation": "original",
+  "overlayPresentation": "on_demand",
+  "anatomyColorPolicy": "stable_by_anatomical_role",
+  "semanticColors": {
+    "disc": "#3b82f6",
+    "disc_group": "#3b82f6",
+    "vertebra": "#f59e0b",
+    "vertebra_group": "#f59e0b",
+    "posterior_element": "#f97316",
+    "canal": "#10b981",
+    "raw_50": "#3b82f6",
+    "raw_100": "#f97316",
+    "raw_150": "#10b981",
+    "raw_200": "#8b5cf6"
+  },
+  "discLocalizations": [
+    {
+      "source": "segmentation_derived_disc_level",
+      "level": "L1-L2",
+      "sliceIndex": 8,
+      "bboxYx": [
+        79,
+        85,
+        118,
+        138
+      ],
+      "coordinateSpaceWidth": 256,
+      "coordinateSpaceHeight": 256,
+      "maskId": "full-series-disc-l1-l2",
+      "segmentationRunId": "series-6b440bbbcffdeb03c152",
+      "selectionRule": "maximum_predicted_disc_area_across_series",
+      "automaticAnatomicalLocalizationValidated": false
+    },
+    {
+      "source": "segmentation_derived_disc_level",
+      "level": "L2-L3",
+      "sliceIndex": 8,
+      "bboxYx": [
+        101,
+        107,
+        114,
+        136
+      ],
+      "coordinateSpaceWidth": 256,
+      "coordinateSpaceHeight": 256,
+      "maskId": "full-series-disc-l2-l3",
+      "segmentationRunId": "series-6b440bbbcffdeb03c152",
+      "selectionRule": "maximum_predicted_disc_area_across_series",
+      "automaticAnatomicalLocalizationValidated": false
+    },
+    {
+      "source": "segmentation_derived_disc_level",
+      "level": "L3-L4",
+      "sliceIndex": 9,
+      "bboxYx": [
+        125,
+        130,
+        110,
+        134
+      ],
+      "coordinateSpaceWidth": 256,
+      "coordinateSpaceHeight": 256,
+      "maskId": "full-series-disc-l3-l4",
+      "segmentationRunId": "series-6b440bbbcffdeb03c152",
+      "selectionRule": "maximum_predicted_disc_area_across_series",
+      "automaticAnatomicalLocalizationValidated": false
+    },
+    {
+      "source": "segmentation_derived_disc_level",
+      "level": "L4-L5",
+      "sliceIndex": 9,
+      "bboxYx": [
+        148,
+        154,
+        109,
+        133
+      ],
+      "coordinateSpaceWidth": 256,
+      "coordinateSpaceHeight": 256,
+      "maskId": "full-series-disc-l4-l5",
+      "segmentationRunId": "series-6b440bbbcffdeb03c152",
+      "selectionRule": "maximum_predicted_disc_area_across_series",
+      "automaticAnatomicalLocalizationValidated": false
+    },
+    {
+      "source": "segmentation_derived_disc_level",
+      "level": "L5-S1",
+      "sliceIndex": 7,
+      "bboxYx": [
+        170,
+        181,
+        112,
+        133
+      ],
+      "coordinateSpaceWidth": 256,
+      "coordinateSpaceHeight": 256,
+      "maskId": "full-series-disc-l5-s1",
+      "segmentationRunId": "series-6b440bbbcffdeb03c152",
+      "selectionRule": "maximum_predicted_disc_area_across_series",
+      "automaticAnatomicalLocalizationValidated": false
+    }
+  ],
+  "automaticDiscLocalizationValidated": false,
+  "humanReviewRequired": true,
+  "notClinicalDiagnosis": true,
+  "slices": [
+    {
+      "sliceIndex": 0,
+      "status": "segmented",
+      "assets": {
+        "original": "/v2/series-segmentation/series-6b440bbbcffdeb03c152/sagittal/slices/0/original.png",
+        "overlay": "/v2/series-segmentation/series-6b440bbbcffdeb03c152/sagittal/slices/0/overlay.png"
+      },
+      "segmentation": {
+        "encoding": "rle-v1",
+        "width": 256,
+        "height": 256,
+        "data": [
+          0,
+          39559,
+          1,
+          3,
+          0,
+          252,
+          1,
+          5,
+          0,
+          250,
+          1,
+          6,
+          0,
+          249,
+          1,
+          7,
+          0,
+          249,
+          1,
+          7,
+          0,
+          248,
+          1,
+          7,
+          0,
+          249,
+          1,
+          7,
+          0,
+          249,
+          1,
+          6,
+          0,
+          250,
+          1,
+          5,
+          0,
+          252,
+          1,
+          2,
+          0,
+          23674
+        ],
+        "instances": [
+          {
+            "index": 1,
+            "id": "sagittal-vertebra-b1",
+            "label": "vertebra",
+            "classKey": "vertebra_group"
+          }
+        ]
+      },
+      "masks": [
+        {
+          "id": "mask-sagittal-vertebra-b1",
+          "label": "vertebra",
+          "className": "vertebra_group",
+          "classId": 1,
+          "color": "#e6194b",
+          "confidence": 0.9239,
+          "editable": true,
+          "enabled": true,
+          "contours": [
+            {
+              "seriesId": "series-sagittal",
+              "sliceIndex": 0,
+              "points": [
+                {
+                  "x": 132.0,
+                  "y": 158.0
+                },
+                {
+                  "x": 132.0,
+                  "y": 157.0
+                },
+                {
+                  "x": 133.0,
+                  "y": 156.0
+                },
+                {
+                  "x": 134.0,
+                  "y": 155.0
+                },
+                {
+                  "x": 135.0,
+                  "y": 154.0
+                },
+                {
+                  "x": 136.0,
+                  "y": 154.0
+                },
+                {
+                  "x": 137.0,
+                  "y": 154.0
+                },
+                {
+                  "x": 138.0,
+                  "y": 155.0
+                },
+                {
+                  "x": 138.0,
+                  "y": 156.0
+                },
+                {
+                  "x": 138.0,
+                  "y": 157.0
+                },
+                {
+                  "x": 138.0,
+                  "y": 158.0
+                },
+                {
+                  "x": 137.0,
+                  "y": 159.0
+                },
+                {
+                  "x": 137.0,
+                  "y": 160.0
+                },
+                {
+                  "x": 136.0,
+                  "y": 161.0
+                },
+                {
+                  "x": 135.0,
+                  "y": 162.0
+                },
+                {
+                  "x": 134.0,
+                  "y": 162.0
+                },
+                {
+                  "x": 133.0,
+                  "y": 163.0
+                },
+                {
+                  "x": 132.0,
+                  "y": 163.0
+                },
+                {
+                  "x": 131.0,
+                  "y": 162.0
+                },
+                {
+                  "x": 131.0,
+                  "y": 161.0
+                },
+                {
+                  "x": 131.0,
+                  "y": 160.0
+                },
+                {
+                  "x": 131.0,
+                  "y": 159.0
+                }
+              ]
+            }
+          ],
+          "anatomyKey": "vertebra",
+          "semanticColor": "#f59e0b",
+          "colorPolicy": "stable_by_anatomical_role"
+        }
+      ],
+      "measurements": [
+        {
+          "id": "sagittal-vertebra-v1-area",
+          "label": "vertebra area",
+          "labelKey": "vertebra area",
+          "value": 220.0,
+          "aiValue": 220.0,
+          "unit": "mm2",
+          "points": [],
+          "experimental": false,
+          "levelScope": "level",
+          "sliceIndex": 0,
+          "source": "AI",
+          "confidence": 0.9239,
+          "status": "pendiente",
+          "outlier": false,
+          "linkedLandmarks": []
+        },
+        {
+          "id": "sagittal-vertebra-v1-width",
+          "label": "vertebra width",
+          "labelKey": "vertebra width",
+          "value": 14.42,
+          "aiValue": 14.42,
+          "unit": "mm",
+          "points": [
+            {
+              "x": 137.53,
+              "y": 160.46
+            },
+            {
+              "x": 131.56,
+              "y": 156.42
+            }
+          ],
+          "experimental": false,
+          "levelScope": "level",
+          "sliceIndex": 0,
+          "source": "AI",
+          "confidence": 0.9239,
+          "status": "pendiente",
+          "outlier": false,
+          "linkedLandmarks": []
+        },
+        {
+          "id": "sagittal-vertebra-v1-height",
+          "label": "vertebra height",
+          "labelKey": "vertebra height",
+          "value": 23.29,
+          "aiValue": 23.29,
+          "unit": "mm",
+          "points": [
+            {
+              "x": 137.73,
+              "y": 153.66
+            },
+            {
+              "x": 131.2,
+              "y": 163.3
+            }
+          ],
+          "experimental": false,
+          "levelScope": "level",
+          "sliceIndex": 0,
+          "source": "AI",
+          "confidence": 0.9239,
+          "status": "pendiente",
+          "outlier": false,
+          "linkedLandmarks": []
+        }
+      ],
+      "quality": {
+        "meanConfidence": 0.9998,
+        "meanForegroundConfidence": 0.9239,
+        "foregroundRatio": 0.000839
+      }
+    },
+    {
+      "sliceIndex": 1,
+      "status": "segmented",
+      "assets": {
+        "original": "/v2/series-segmentation/series-6b440bbbcffdeb03c152/sagittal/slices/1/original.png",
+        "overlay": "/v2/series-segmentation/series-6b440bbbcffdeb03c152/sagittal/slices/1/overlay.png"
+      },
+      "segmentation": {
+        "encoding": "rle-v1",
+        "width": 256,
+        "height": 256,
+        "data": [
+          0,
+          39813,
+          1,
+          3,
+          0,
+          252,
+          1,
+          5,
+          0,
+          250,
+          1,
+          6,
+          0,
+          249,
+          1,
+          8,
+          0,
+          247,
+          1,
+          9,
+          0,
+          247,
+          1,
+          8,
+          0,
+          249,
+          1,
+          7,
+          0,
+          251,
+          1,
+          3,
+          0,
+          23929
+        ],
+        "instances": [
+          {
+            "index": 1,
+            "id": "sagittal-vertebra-b1",
+            "label": "vertebra",
+            "classKey": "vertebra_group"
+          }
+        ]
+      },
+      "masks": [
+        {
+          "id": "mask-sagittal-vertebra-b1",
+          "label": "vertebra",
+          "className": "vertebra_group",
+          "classId": 1,
+          "color": "#e6194b",
+          "confidence": 0.896,
+          "editable": true,
+          "enabled": true,
+          "contours": [
+            {
+              "seriesId": "series-sagittal",
+              "sliceIndex": 1,
+              "points": [
+                {
+                  "x": 130.0,
+                  "y": 158.0
+                },
+                {
+                  "x": 131.0,
+                  "y": 157.0
+                },
+                {
+                  "x": 132.0,
+                  "y": 156.0
+                },
+                {
+                  "x": 133.0,
+                  "y": 155.0
+                },
+                {
+                  "x": 134.0,
+                  "y": 155.0
+                },
+                {
+                  "x": 135.0,
+                  "y": 155.0
+                },
+                {
+                  "x": 136.0,
+                  "y": 156.0
+                },
+                {
+                  "x": 136.0,
+                  "y": 157.0
+                },
+                {
+                  "x": 137.0,
+                  "y": 158.0
+                },
+                {
+                  "x": 137.0,
+                  "y": 159.0
+                },
+                {
+                  "x": 136.0,
+                  "y": 160.0
+                },
+                {
+                  "x": 136.0,
+                  "y": 161.0
+                },
+                {
+                  "x": 135.0,
+                  "y": 161.0
+                },
+                {
+                  "x": 134.0,
+                  "y": 162.0
+                },
+                {
+                  "x": 133.0,
+                  "y": 162.0
+                },
+                {
+                  "x": 132.0,
+                  "y": 162.0
+                },
+                {
+                  "x": 131.0,
+                  "y": 161.0
+                },
+                {
+                  "x": 130.0,
+                  "y": 161.0
+                },
+                {
+                  "x": 129.0,
+                  "y": 160.0
+                },
+                {
+                  "x": 129.0,
+                  "y": 159.0
+                }
+              ]
+            }
+          ],
+          "anatomyKey": "vertebra",
+          "semanticColor": "#f59e0b",
+          "colorPolicy": "stable_by_anatomical_role"
+        }
+      ],
+      "measurements": [
+        {
+          "id": "sagittal-vertebra-v1-area",
+          "label": "vertebra area",
+          "labelKey": "vertebra area",
+          "value": 196.0,
+          "aiValue": 196.0,
+          "unit": "mm2",
+          "points": [],
+          "experimental": false,
+          "levelScope": "level",
+          "sliceIndex": 1,
+          "source": "AI",
+          "confidence": 0.896,
+          "status": "pendiente",
+          "outlier": false,
+          "linkedLandmarks": []
+        },
+        {
+          "id": "sagittal-vertebra-v1-width",
+          "label": "vertebra width",
+          "labelKey": "vertebra width",
+          "value": 18.86,
+          "aiValue": 18.86,
+          "unit": "mm",
+          "points": [
+            {
+              "x": 136.96,
+              "y": 156.2
+            },
+            {
+              "x": 129.1,
+              "y": 161.4
+            }
+          ],
+          "experimental": false,
+          "levelScope": "level",
+          "sliceIndex": 1,
+          "source": "AI",
+          "confidence": 0.896,
+          "status": "pendiente",
+          "outlier": false,
+          "linkedLandmarks": []
+        },
+        {
+          "id": "sagittal-vertebra-v1-height",
+          "label": "vertebra height",
+          "labelKey": "vertebra height",
+          "value": 16.09,
+          "aiValue": 16.09,
+          "unit": "mm",
+          "points": [
+            {
+              "x": 135.52,
+              "y": 162.15
+            },
+            {
+              "x": 131.08,
+              "y": 155.44
+            }
+          ],
+          "experimental": false,
+          "levelScope": "level",
+          "sliceIndex": 1,
+          "source": "AI",
+          "confidence": 0.896,
+          "status": "pendiente",
+          "outlier": false,
+          "linkedLandmarks": []
+        }
+      ],
+      "quality": {
+        "meanConfidence": 0.9997,
+        "meanForegroundConfidence": 0.896,
+        "foregroundRatio": 0.000748
+      }
+    }
+  ],
+  "_fixtureNote": "Trimmed from 17 real slices to 2 for fixture size; shape is otherwise exactly the real response."
+}

@@ -713,6 +713,8 @@ public class AiBackendService {
         String studyId = text(response.get("studyId"));
         StudyUploadInputDto sagittal = toStudyInput(response.get("sagittal"), "sagittal", response.get("seriesFound"));
         StudyUploadInputDto axial = toStudyInput(response.get("axial"), "axial", response.get("seriesFound"));
+        StudyUploadInputDto sagittalT1 = toStudyInput(response.get("sagittalT1"), "sagittal", response.get("seriesFound"));
+        StudyUploadInputDto sagittalT2 = toStudyInput(response.get("sagittalT2"), "sagittal", response.get("seriesFound"));
         List<StudyUploadSeriesDto> seriesFound = toStudySeriesList(response.get("seriesFound"));
         if (seriesFound.isEmpty()) {
             seriesFound = inferredSeries(sagittal, axial);
@@ -726,6 +728,8 @@ public class AiBackendService {
             List.copyOf(seriesFound),
             sagittal,
             axial,
+            sagittalT1,
+            sagittalT2,
             toSafeWarnings(response.get("warnings")),
             true,
             true
