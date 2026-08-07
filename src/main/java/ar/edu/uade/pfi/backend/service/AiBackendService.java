@@ -465,6 +465,56 @@ public class AiBackendService {
         return new ResponseEntity<>(upstream.getBody(), headers, upstream.getStatusCode());
     }
 
+    /**
+     * Identificador de corrida de plano: hexadecimal, como lo emite el modulo de IA.
+     *
+     * <p>Se valida antes de armar la URL upstream porque estos identificadores van a un
+     * path, y un valor con barras o puntos podria hacer que la peticion salga a otra ruta
+     * del modulo de IA.
+     */
+    private static final Pattern PLANE_RUN_ID_PATTERN = Pattern.compile("^[0-9a-zA-Z._-]{1,64}$");
+
+    public ResponseEntity<byte[]> getRunSegmentation(String planeRunId, String plane) {
+        return dicomExport(planeRunId, plane, aiServiceClient::getRunSegmentation, "segmentation.dcm");
+    }
+
+    public ResponseEntity<byte[]> getRunMeasurementReport(String planeRunId, String plane) {
+        return dicomExport(planeRunId, plane, aiServiceClient::getRunMeasurementReport, "measurements.dcm");
+    }
+
+    /**
+     * Descarga de un objeto DICOM generado por el modulo de IA.
+     *
+     * <p>Sin cache, a diferencia de los cortes: el objeto se construye en el momento y una
+     * corrida revisada puede producir uno distinto. Servir una version vieja de un archivo
+     * que alguien va a abrir en otro visor es peor que volver a generarlo.
+     */
+    private ResponseEntity<byte[]> dicomExport(
+        String planeRunId,
+        String plane,
+        java.util.function.BiFunction<String, String, ResponseEntity<byte[]>> fetch,
+        String filename
+    ) {
+        String normalizedRunId = trimmed(planeRunId);
+        if (!PLANE_RUN_ID_PATTERN.matcher(normalizedRunId).matches()) {
+            throw badRequest("runId invalido.");
+        }
+        String normalizedPlane = trimmed(plane).toLowerCase(java.util.Locale.ROOT);
+        if (!normalizedPlane.equals("sagittal") && !normalizedPlane.equals("axial")) {
+            throw badRequest("plane invalido.");
+        }
+        ResponseEntity<byte[]> upstream = fetch.apply(normalizedRunId, normalizedPlane);
+        HttpHeaders headers = new HttpHeaders();
+        headers.add(HttpHeaders.CONTENT_TYPE, "application/dicom");
+        // El nombre lo arma el backend y no se copia del upstream: un Content-Disposition
+        // que venga de afuera es una via para que un nombre de archivo elegido por otro
+        // sistema llegue al disco del usuario.
+        headers.add(HttpHeaders.CONTENT_DISPOSITION,
+            "attachment; filename=\"" + normalizedRunId + "-" + normalizedPlane + "-" + filename + "\"");
+        headers.add(HttpHeaders.CACHE_CONTROL, "no-store");
+        return new ResponseEntity<>(upstream.getBody(), headers, upstream.getStatusCode());
+    }
+
     private ResponseEntity<byte[]> durableAsset(RunAssetContent content, RunArtifact artifact, String source) {
         HttpHeaders headers = new HttpHeaders();
         headers.add(HttpHeaders.CONTENT_TYPE, artifact.contentType());

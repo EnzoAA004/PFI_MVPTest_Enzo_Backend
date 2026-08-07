@@ -120,6 +120,30 @@ public class AiBackendController {
         return aiBackendService.getSeriesSlice(inputId, index);
     }
 
+    /**
+     * La segmentacion de una corrida en formato DICOM SEG.
+     *
+     * <p>Es lo que permite abrir el resultado en 3D Slicer, OHIF o un PACS de hospital sin
+     * este software en el medio. Hasta ahora la exportacion era csv, html o json: formatos
+     * que solo entiende este producto.
+     */
+    @GetMapping("/runs/{planeRunId}/{plane}/segmentation.dcm")
+    public ResponseEntity<byte[]> getRunSegmentation(
+        @PathVariable String planeRunId,
+        @PathVariable String plane
+    ) {
+        return aiBackendService.getRunSegmentation(planeRunId, plane);
+    }
+
+    /** Las mediciones de una corrida en formato DICOM SR. Contraparte del SEG. */
+    @GetMapping("/runs/{planeRunId}/{plane}/measurements.sr.dcm")
+    public ResponseEntity<byte[]> getRunMeasurementReport(
+        @PathVariable String planeRunId,
+        @PathVariable String plane
+    ) {
+        return aiBackendService.getRunMeasurementReport(planeRunId, plane);
+    }
+
     @GetMapping("/agent/reports")
     public Map<String, Object> getRecentAgentReports(@RequestParam(defaultValue = "20") int limit) {
         return aiBackendService.getRecentAgentReports(limit);

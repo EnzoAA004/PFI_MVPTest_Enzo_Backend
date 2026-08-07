@@ -46,6 +46,21 @@ public interface AiServiceOperations {
         throw new UnsupportedOperationException("series_slice_proxy_unavailable");
     }
 
+    /**
+     * La segmentacion de una corrida como objeto DICOM SEG, o las mediciones como SR.
+     *
+     * <p>Son lo que permite abrir los resultados en 3D Slicer, OHIF o un PACS de hospital
+     * sin este software en el medio. Se construyen en el momento del lado del modulo de
+     * IA: no son assets escritos en disco.
+     */
+    default ResponseEntity<byte[]> getRunSegmentation(String planeRunId, String plane) {
+        throw new UnsupportedOperationException("dicom_seg_export_unavailable");
+    }
+
+    default ResponseEntity<byte[]> getRunMeasurementReport(String planeRunId, String plane) {
+        throw new UnsupportedOperationException("dicom_sr_export_unavailable");
+    }
+
     default CanonicalMultiplanarRun runMultiplanar(MultiplanarRunRequestDto request) {
         throw new UnsupportedOperationException("multiplanar_run_unavailable");
     }

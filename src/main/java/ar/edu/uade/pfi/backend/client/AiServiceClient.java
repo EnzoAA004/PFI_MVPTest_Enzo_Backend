@@ -265,6 +265,42 @@ public class AiServiceClient implements AiServiceOperations {
             .block(timeout));
     }
 
+    @Override
+    public ResponseEntity<byte[]> getRunSegmentation(String planeRunId, String plane) {
+        return dicomExport("/runs/{runId}/{plane}/segmentation.dcm", planeRunId, plane, "segmentation");
+    }
+
+    @Override
+    public ResponseEntity<byte[]> getRunMeasurementReport(String planeRunId, String plane) {
+        return dicomExport("/runs/{runId}/{plane}/measurements.sr.dcm", planeRunId, plane, "measurement report");
+    }
+
+    /**
+     * Descarga un objeto DICOM construido en el momento por el modulo de IA.
+     *
+     * <p>El 409 se propaga tal cual y no se convierte en 502: significa que la corrida
+     * existe pero no reune las condiciones para exportar —entrada que no es DICOM,
+     * mascara vacia, corrida sin mediciones—. Colapsarlo a "el modulo de IA fallo" haria
+     * que el visor ofrezca reintentar algo que nunca va a funcionar.
+     */
+    private ResponseEntity<byte[]> dicomExport(String path, String planeRunId, String plane, String what) {
+        return execute(() -> aiWebClient.get()
+            .uri(uriBuilder -> uriBuilder.path(path).build(planeRunId, plane))
+            .headers(this::applyTraceHeader)
+            .exchangeToMono(response -> {
+                if (response.statusCode().is2xxSuccessful()) {
+                    return response.toEntity(byte[].class);
+                }
+                int status = response.statusCode().value();
+                if (status == 400 || status == 404 || status == 409) {
+                    return response.releaseBody().then(Mono.error(
+                        new ResponseStatusException(response.statusCode(), "AI Module " + what + " export failed")));
+                }
+                return response.releaseBody().then(Mono.error(upstreamUnavailable()));
+            })
+            .block(timeout));
+    }
+
     /**
      * A-F: resolves the configured contract version, builds the appropriate request,
      * calls exactly one endpoint, deserializes to the matching DTO, adapts to
