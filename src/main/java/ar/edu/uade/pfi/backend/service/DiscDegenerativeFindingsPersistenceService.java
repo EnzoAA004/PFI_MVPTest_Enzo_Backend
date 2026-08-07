@@ -1,6 +1,8 @@
 package ar.edu.uade.pfi.backend.service;
 
 import ar.edu.uade.pfi.backend.domain.StudyRun;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,7 +43,8 @@ public class DiscDegenerativeFindingsPersistenceService {
     }
 
     public Map<String, Object> persistImmutable(String multiplanarRunId, Map<String, Object> upstream) {
-        StudyRun run = studyRunService.findRunByMultiplanarRunId(requireText(multiplanarRunId, "multiplanarRunId"))
+        String runId = requirePublicText(multiplanarRunId, "multiplanarRunId");
+        StudyRun run = studyRunService.findRunByMultiplanarRunId(runId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Corrida no encontrada."));
 
         Map<String, Object> disc = validatedDiscEnvelope(upstream);
@@ -66,7 +69,6 @@ public class DiscDegenerativeFindingsPersistenceService {
         return current;
     }
 
-    @SuppressWarnings("unchecked")
     private Map<String, Object> validatedDiscEnvelope(Map<String, Object> upstream) {
         if (upstream == null
             || !Boolean.TRUE.equals(upstream.get("humanReviewRequired"))
@@ -85,20 +87,19 @@ public class DiscDegenerativeFindingsPersistenceService {
             if (!(item instanceof Map<?, ?> findingRaw)) throw invalidUpstream();
             validateFinding(stringMap(findingRaw));
         }
-        return deepImmutableCopy(disc);
+        return deepReadOnlyCopy(disc);
     }
 
     private void validateFinding(Map<String, Object> finding) {
-        requireText(finding.get("findingId"), "findingId");
-        String type = requireText(finding.get("findingType"), "findingType");
+        requireUpstreamText(finding.get("findingId"));
+        String type = requireUpstreamText(finding.get("findingType"));
         if (!VALID_TASKS.contains(type)) throw invalidUpstream();
 
         Map<String, Object> anatomy = requireMap(finding.get("anatomy"));
-        if (!VALID_LEVELS.contains(requireText(anatomy.get("level"), "level"))) throw invalidUpstream();
+        if (!VALID_LEVELS.contains(requireUpstreamText(anatomy.get("level")))) throw invalidUpstream();
 
         Map<String, Object> classification = requireMap(finding.get("classification"));
-        String label = requireText(classification.get("label"), "label");
-        if (label.isBlank()) throw invalidUpstream();
+        requireUpstreamText(classification.get("label"));
         Object probabilitiesRaw = classification.get("probabilities");
         if (!(probabilitiesRaw instanceof Map<?, ?> probabilities) || probabilities.isEmpty()) throw invalidUpstream();
         double sum = 0.0d;
@@ -111,7 +112,7 @@ public class DiscDegenerativeFindingsPersistenceService {
         if (Math.abs(sum - 1.0d) > 0.01d) throw invalidUpstream();
 
         Map<String, Object> evidence = requireMap(finding.get("evidence"));
-        if (!VALID_DEPLOYMENT.contains(requireText(evidence.get("deploymentStatus"), "deploymentStatus"))) throw invalidUpstream();
+        if (!VALID_DEPLOYMENT.contains(requireUpstreamText(evidence.get("deploymentStatus")))) throw invalidUpstream();
 
         Map<String, Object> localization = requireMap(finding.get("localization"));
         if (!"segmentation_derived_disc_level".equals(localization.get("source"))) throw invalidUpstream();
@@ -132,9 +133,15 @@ public class DiscDegenerativeFindingsPersistenceService {
         return stringMap(map);
     }
 
-    private String requireText(Object value, String field) {
+    private String requirePublicText(Object value, String field) {
         String text = value == null ? "" : value.toString().trim();
         if (text.isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, field + " es obligatorio.");
+        return text;
+    }
+
+    private String requireUpstreamText(Object value) {
+        String text = value == null ? "" : value.toString().trim();
+        if (text.isBlank()) throw invalidUpstream();
         return text;
     }
 
@@ -147,19 +154,25 @@ public class DiscDegenerativeFindingsPersistenceService {
         return result;
     }
 
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> deepImmutableCopy(Map<String, Object> source) {
+    /** Read-only deep copy that deliberately preserves JSON null values such as anatomy.side. */
+    private Map<String, Object> deepReadOnlyCopy(Map<String, Object> source) {
         Map<String, Object> copy = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : source.entrySet()) {
-            Object value = entry.getValue();
-            if (value instanceof Map<?, ?> map) {
-                value = deepImmutableCopy(stringMap(map));
-            } else if (value instanceof List<?> list) {
-                value = list.stream().map(item -> item instanceof Map<?, ?> map ? deepImmutableCopy(stringMap(map)) : item).toList();
-            }
-            copy.put(entry.getKey(), value);
+            copy.put(entry.getKey(), deepReadOnlyValue(entry.getValue()));
         }
-        return Map.copyOf(copy);
+        return Collections.unmodifiableMap(copy);
+    }
+
+    private Object deepReadOnlyValue(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            return deepReadOnlyCopy(stringMap(map));
+        }
+        if (value instanceof List<?> list) {
+            List<Object> copy = new ArrayList<>();
+            for (Object item : list) copy.add(deepReadOnlyValue(item));
+            return Collections.unmodifiableList(copy);
+        }
+        return value;
     }
 
     private ResponseStatusException invalidUpstream() {
