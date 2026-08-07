@@ -10,6 +10,7 @@ import ar.edu.uade.pfi.backend.dto.AiInputResponseDto;
 import ar.edu.uade.pfi.backend.dto.AiMultiplanarV2RequestDto;
 import ar.edu.uade.pfi.backend.dto.AiMultiplanarV2ResponseDto;
 import ar.edu.uade.pfi.backend.dto.AiStructuredErrorV2Dto;
+import ar.edu.uade.pfi.backend.dto.DiscDegenerativeFindingsV1Dto;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunRequestDto;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunResponseDto;
 import ar.edu.uade.pfi.backend.dto.PipelineRunRequestDto;
@@ -247,6 +248,26 @@ public class AiServiceClient implements AiServiceOperations {
         return multiplanarContractVersion == AiMultiplanarContractVersion.V2
             ? runMultiplanarV2(request)
             : runMultiplanarV1(request);
+    }
+
+    @Override
+    public DiscDegenerativeFindingsV1Dto predictDiscDegenerative(Map<String, Object> request) {
+        String traceId = resolveTraceId();
+        return executeHttp(() -> aiWebClient.post()
+            .uri("/degenerative-findings/disc-multitask/predict")
+            .headers(headers -> applyTraceHeader(headers, traceId))
+            .bodyValue(request)
+            .exchangeToMono(clientResponse -> {
+                if (clientResponse.statusCode().is2xxSuccessful()) {
+                    return clientResponse.bodyToMono(DiscDegenerativeFindingsV1Dto.class);
+                }
+                if (clientResponse.statusCode().is4xxClientError()) {
+                    return clientResponse.releaseBody().then(Mono.error(
+                        new ResponseStatusException(clientResponse.statusCode(), "La solicitud P10.7 no esta disponible para inferencia productiva.")));
+                }
+                return clientResponse.releaseBody().then(Mono.error(upstreamUnavailable()));
+            })
+            .block(timeout));
     }
 
     /**

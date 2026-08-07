@@ -2,6 +2,7 @@ package ar.edu.uade.pfi.backend.client;
 
 import ar.edu.uade.pfi.backend.domain.CanonicalMultiplanarRun;
 import ar.edu.uade.pfi.backend.dto.AiInputResponseDto;
+import ar.edu.uade.pfi.backend.dto.DiscDegenerativeFindingsV1Dto;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunRequestDto;
 import ar.edu.uade.pfi.backend.dto.PipelineRunRequestDto;
 import java.util.Map;
@@ -41,6 +42,10 @@ public interface AiServiceOperations {
 
     default CanonicalMultiplanarRun runMultiplanar(MultiplanarRunRequestDto request) {
         throw new UnsupportedOperationException("multiplanar_run_unavailable");
+    }
+
+    default DiscDegenerativeFindingsV1Dto predictDiscDegenerative(Map<String, Object> request) {
+        throw new UnsupportedOperationException("disc_degenerative_predict_unavailable");
     }
 
     Map<String, Object> getAgentReport(String runId);

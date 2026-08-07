@@ -229,6 +229,9 @@ public class StudyWorklistService {
         if (snapshot.containsKey("degenerativeFindings")) {
             canonical.put("degenerativeFindings", snapshot.get("degenerativeFindings"));
         }
+        if (snapshot.containsKey("discDegenerativeFindings")) {
+            canonical.put("discDegenerativeFindings", snapshot.get("discDegenerativeFindings"));
+        }
         Map<String, Object> review = new LinkedHashMap<>();
         review.put("status", ReviewStatusMapper.toApiStatus(run.reviewStatus()));
         review.put("reviewer", blankToNull(run.reviewer()));
