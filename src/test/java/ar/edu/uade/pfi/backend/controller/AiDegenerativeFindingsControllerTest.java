@@ -172,6 +172,89 @@ class AiDegenerativeFindingsControllerTest {
             .andExpect(status().isBadGateway());
     }
 
+    /**
+     * Queda registro de lo que el sistema mostro, no solo de que se pregunto.
+     *
+     * <p>Sin las probabilidades en el evento, cuando el revisor acepta o corrige un
+     * hallazgo lo unico auditable es "el medico acepto algo". Con ellas se puede
+     * reconstruir que se le mostro, y medir cuanto se le corrige al modelo.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void seAuditaLoQueElSistemaMostro() throws Exception {
+        AiServiceOperations ai = Mockito.mock(AiServiceOperations.class);
+        Mockito.when(ai.predictSubarticular(Mockito.any())).thenReturn(okResponse());
+        ar.edu.uade.pfi.backend.service.AuditService audit =
+            Mockito.mock(ar.edu.uade.pfi.backend.service.AuditService.class);
+
+        MockMvcBuilders
+            .standaloneSetup(new AiDegenerativeFindingsController(ai, new DegenerativeFindingsV1Validator(), audit))
+            .setControllerAdvice(new ApiExceptionHandler())
+            .build()
+            .perform(post("/api/ai/degenerative-findings/subarticular")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(VALID_REQUEST))
+            .andExpect(status().isOk());
+
+        ArgumentCaptor<java.util.Map<String, Object>> metadata = ArgumentCaptor.forClass(java.util.Map.class);
+        Mockito.verify(audit).record(
+            Mockito.eq("backend"),
+            Mockito.eq("degenerative_findings.subarticular.requested"),
+            Mockito.anyString(), Mockito.any(), metadata.capture());
+
+        java.util.Map<String, Object> recorded = metadata.getValue();
+        // Sobre que se pregunto.
+        org.junit.jupiter.api.Assertions.assertEquals("L4-L5", recorded.get("level"));
+        org.junit.jupiter.api.Assertions.assertEquals("right", recorded.get("side"));
+        // Que respondio el sistema.
+        org.junit.jupiter.api.Assertions.assertEquals("moderate", recorded.get("label"));
+        java.util.Map<String, Object> probabilities = (java.util.Map<String, Object>) recorded.get("probabilities");
+        org.junit.jupiter.api.Assertions.assertEquals(0.62d, (Double) probabilities.get("moderate"), 1e-9);
+        // Con que modelo, para poder atarlo a una version concreta.
+        org.junit.jupiter.api.Assertions.assertEquals("d41262d5e84a", recorded.get("checkpointSha256"));
+        // Y que clase de registro es: el evento no es una conclusion sobre el paciente.
+        org.junit.jupiter.api.Assertions.assertEquals(true, recorded.get("researchOnly"));
+        org.junit.jupiter.api.Assertions.assertEquals(true, recorded.get("notClinicalDiagnosis"));
+    }
+
+    /**
+     * Lo que identifica al paciente no entra al evento.
+     *
+     * <p>Auditar el resultado es una cosa; convertir el log en una historia clinica
+     * paralela es otra. El evento describe una accion del sistema sobre un input, no sobre
+     * una persona.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void laAuditoriaNoRegistraLaCoordenadaNiIdentificadoresDelPaciente() throws Exception {
+        AiServiceOperations ai = Mockito.mock(AiServiceOperations.class);
+        Mockito.when(ai.predictSubarticular(Mockito.any())).thenReturn(okResponse());
+        ar.edu.uade.pfi.backend.service.AuditService audit =
+            Mockito.mock(ar.edu.uade.pfi.backend.service.AuditService.class);
+
+        MockMvcBuilders
+            .standaloneSetup(new AiDegenerativeFindingsController(ai, new DegenerativeFindingsV1Validator(), audit))
+            .setControllerAdvice(new ApiExceptionHandler())
+            .build()
+            .perform(post("/api/ai/degenerative-findings/subarticular")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(VALID_REQUEST))
+            .andExpect(status().isOk());
+
+        ArgumentCaptor<java.util.Map<String, Object>> metadata = ArgumentCaptor.forClass(java.util.Map.class);
+        Mockito.verify(audit).record(Mockito.anyString(), Mockito.anyString(),
+            Mockito.anyString(), Mockito.any(), metadata.capture());
+
+        java.util.Map<String, Object> recorded = metadata.getValue();
+        // La coordenada exacta del clic no aporta a la trazabilidad y es lo mas parecido a
+        // un dato de la anatomia de esa persona que hay en el pedido.
+        org.junit.jupiter.api.Assertions.assertFalse(recorded.containsKey("x"));
+        org.junit.jupiter.api.Assertions.assertFalse(recorded.containsKey("y"));
+        for (String forbidden : java.util.List.of("patientId", "PatientName", "StudyInstanceUID", "SeriesInstanceUID")) {
+            org.junit.jupiter.api.Assertions.assertFalse(recorded.containsKey(forbidden), forbidden);
+        }
+    }
+
     /** El cliente por defecto de la interfaz lanza UnsupportedOperationException: eso es un 503, no un 500. */
     @Test
     void unClienteSinLaOperacionDevuelve503() throws Exception {

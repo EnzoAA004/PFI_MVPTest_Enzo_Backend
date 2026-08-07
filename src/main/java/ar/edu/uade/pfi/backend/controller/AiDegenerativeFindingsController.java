@@ -4,6 +4,7 @@ import ar.edu.uade.pfi.backend.client.AiServiceOperations;
 import ar.edu.uade.pfi.backend.config.error.ApiErrorCode;
 import ar.edu.uade.pfi.backend.dto.AiSubarticularPredictRequestDto;
 import ar.edu.uade.pfi.backend.dto.DegenerativeFindingSideV1;
+import ar.edu.uade.pfi.backend.dto.DegenerativeFindingsV1Dto;
 import ar.edu.uade.pfi.backend.dto.SubarticularPredictionRequestDto;
 import ar.edu.uade.pfi.backend.dto.SubarticularPredictionResponseDto;
 import ar.edu.uade.pfi.backend.service.AuditService;
@@ -29,10 +30,18 @@ import org.springframework.web.server.ResponseStatusException;
  * ruta es la que faltaba para cerrar ese camino. Sin ella el panel de hallazgos solo podia
  * mostrar lo que ya venia adentro de una corrida multiplanar.
  *
- * <p><b>No persiste.</b> La prediccion es puntual y {@code researchOnly}: se pide, se
- * muestra y se descarta. Guardarla exige una tabla propia y una decision de gobernanza
- * clinica sobre que significa un hallazgo asistido en la historia de un paciente, y esa
- * decision no esta tomada. Mientras tanto, no dejar rastro es la opcion conservadora.
+ * <p><b>No persiste como hallazgo, pero si se audita.</b> Son dos cosas distintas y vale
+ * separarlas.
+ *
+ * <p>La prediccion no entra al dominio del estudio: es puntual y {@code researchOnly}, y
+ * guardarla como hallazgo exige una tabla propia y una decision de gobernanza clinica
+ * sobre que significa un hallazgo asistido en la historia de un paciente.
+ *
+ * <p>Pero si queda un evento de auditoria con lo que el sistema mostro: la clase elegida,
+ * sus probabilidades y el SHA del checkpoint. Sin eso, cuando el revisor acepta o corrige
+ * un hallazgo lo unico auditable seria "el medico acepto algo", que no permite reconstruir
+ * nada. El evento describe una accion del sistema, no una conclusion sobre el paciente, y
+ * no es fuente del informe clinico.
  */
 @RestController
 @RequestMapping("/api/ai/degenerative-findings")
@@ -211,7 +220,50 @@ public class AiDegenerativeFindingsController {
         metadata.put("level", request.level());
         metadata.put("side", request.side());
         metadata.put("modelId", response.model() == null ? "" : response.model().modelId());
+        // El SHA del checkpoint es lo que ata el resultado a un modelo concreto. Sin el,
+        // dentro de seis meses no se puede saber cual de dos versiones produjo esto.
+        metadata.put("checkpointSha256", response.model() == null ? "" : response.model().checkpointSha256());
+        metadata.putAll(predictionEvidence(response));
         metadata.put("researchOnly", true);
+        // El evento describe lo que el sistema mostro, no una conclusion sobre el
+        // paciente. Queda escrito en el propio evento para que no se lea como otra cosa.
+        metadata.put("notClinicalDiagnosis", true);
         auditService.record("backend", "degenerative_findings.subarticular.requested", request.inputId(), null, metadata);
+    }
+
+    /**
+     * Que se le mostro al profesional: la clase elegida y sus probabilidades.
+     *
+     * <p><b>Por que se audita el resultado y no solo el pedido.</b> Si el revisor acepta o
+     * corrige un hallazgo y despues aparece una discrepancia, "el medico acepto algo" no es
+     * auditable; "el sistema mostro moderada con 0,62 y el medico la acepto" si lo es. Es
+     * ademas la unica evidencia para medir cuanto se le corrige al modelo.
+     *
+     * <p>Auditar no es persistir en la historia del paciente: este evento es un registro de
+     * lo que hizo el sistema, con su propia retencion, y no es fuente del informe clinico.
+     * Esa distincion es la que permite guardarlo sin convertirlo en un diagnostico por la
+     * puerta de atras.
+     */
+    private Map<String, Object> predictionEvidence(SubarticularPredictionResponseDto response) {
+        Map<String, Object> evidence = new LinkedHashMap<>();
+        if (response.degenerativeFindings() == null || response.degenerativeFindings().findings() == null) {
+            return evidence;
+        }
+        DegenerativeFindingsV1Dto.DegenerativeFindingV1Dto finding = response.degenerativeFindings().findings().stream()
+            .findFirst()
+            .orElse(null);
+        if (finding == null || finding.classification() == null) return evidence;
+
+        evidence.put("label", finding.classification().label() == null
+            ? "" : finding.classification().label().wireValue());
+        DegenerativeFindingsV1Dto.Probabilities probabilities = finding.classification().probabilities();
+        if (probabilities != null) {
+            Map<String, Object> byClass = new LinkedHashMap<>();
+            byClass.put("normal_mild", probabilities.normalMild());
+            byClass.put("moderate", probabilities.moderate());
+            byClass.put("severe", probabilities.severe());
+            evidence.put("probabilities", byClass);
+        }
+        return evidence;
     }
 }
