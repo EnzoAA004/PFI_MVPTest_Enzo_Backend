@@ -254,26 +254,26 @@ function Auth-Headers {
 }
 
 function Hash-File-Or-Blocked {
-    param([string]$Path, [string]$Expected)
+    param([string]$CheckpointName, [string]$Path, [string]$Expected)
     $resolved = Resolve-Path -LiteralPath $Path -ErrorAction SilentlyContinue
     if ($null -eq $resolved) {
-        return [ordered]@{ present = $false; expected = $Expected; observed = $null; path = $Path }
+        return [ordered]@{ checkpoint = $CheckpointName; source = "host"; present = $false; expected = $Expected; observed = $null }
     }
     $hash = (Get-FileHash -LiteralPath $resolved.Path -Algorithm SHA256).Hash.ToLowerInvariant()
-    return [ordered]@{ present = $true; expected = $Expected; observed = $hash; match = ($hash -eq $Expected); path = $resolved.Path }
+    return [ordered]@{ checkpoint = $CheckpointName; source = "host"; present = $true; expected = $Expected; observed = $hash; match = ($hash -eq $Expected) }
 }
 
 function Hash-Container-File {
-    param([string]$Container, [string]$Path, [string]$Expected)
+    param([string]$CheckpointName, [string]$Container, [string]$Path, [string]$Expected)
     try {
         $output = & docker exec $Container sha256sum $Path 2>$null
         if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($output)) {
-            return [ordered]@{ present = $false; expected = $Expected; observed = $null; path = $Path; container = $Container }
+            return [ordered]@{ checkpoint = $CheckpointName; source = "container"; present = $false; expected = $Expected; observed = $null }
         }
         $hash = ($output -split "\s+")[0].ToLowerInvariant()
-        return [ordered]@{ present = $true; expected = $Expected; observed = $hash; match = ($hash -eq $Expected); path = $Path; container = $Container }
+        return [ordered]@{ checkpoint = $CheckpointName; source = "container"; present = $true; expected = $Expected; observed = $hash; match = ($hash -eq $Expected) }
     } catch {
-        return [ordered]@{ present = $false; expected = $Expected; observed = $null; path = $Path; container = $Container; error = $_.Exception.Message }
+        return [ordered]@{ checkpoint = $CheckpointName; source = "container"; present = $false; expected = $Expected; observed = $null; error = "hash lookup failed" }
     }
 }
 
@@ -305,10 +305,10 @@ $result = [ordered]@{
     e2e = [ordered]@{}
 }
 
-$p10_6 = Hash-File-Or-Blocked -Path $P10_6Path -Expected $ExpectedP10_6Sha
-$p10_7 = Hash-File-Or-Blocked -Path $P10_7Path -Expected $ExpectedP10_7Sha
-$p10_6Container = Hash-Container-File -Container "pfi-ai-module" -Path "/models/subarticular/frozen_subarticular_checkpoint.pt" -Expected $ExpectedP10_6Sha
-$p10_7Container = Hash-Container-File -Container "pfi-ai-module" -Path "/models/disc-degenerative/frozen_p10_7_spider_degenerative_multitask.pt" -Expected $ExpectedP10_7Sha
+$p10_6 = Hash-File-Or-Blocked -CheckpointName "p10_6" -Path $P10_6Path -Expected $ExpectedP10_6Sha
+$p10_7 = Hash-File-Or-Blocked -CheckpointName "p10_7" -Path $P10_7Path -Expected $ExpectedP10_7Sha
+$p10_6Container = Hash-Container-File -CheckpointName "p10_6" -Container "pfi-ai-module" -Path "/models/subarticular/frozen_subarticular_checkpoint.pt" -Expected $ExpectedP10_6Sha
+$p10_7Container = Hash-Container-File -CheckpointName "p10_7" -Container "pfi-ai-module" -Path "/models/disc-degenerative/frozen_p10_7_spider_degenerative_multitask.pt" -Expected $ExpectedP10_7Sha
 $result.checkpoints["p10_6"] = $p10_6
 $result.checkpoints["p10_7"] = $p10_7
 $result.checkpoints["p10_6Container"] = $p10_6Container
@@ -483,11 +483,22 @@ if (![string]::IsNullOrWhiteSpace($sagittalRunId) -and ![string]::IsNullOrWhiteS
 Add-Gate "persistence" "BLOCKED" "Study upload and product full-series routes executed through Backend, but this checkpoint does not yet persist those product segmentation runs as reviewable PostgreSQL study runs." "Needs a persisted multiplanar/product run before persistence PASS."
 Add-Gate "professionalReview" "BLOCKED" "Review gate requires a persisted multiplanar/product run id." "No reviewable PostgreSQL run was created by the executed product route."
 
-$piiHits = Test-NoSensitiveLeak -Objects $script:Responses
+# Audit the full evidence set that will actually be serialized into P10_9_E2E_RESULT.json
+# (raw captured HTTP responses/errors, checkpoint hash records, and gate evidence/problem
+# text), not just the redacted response mirror kept for diagnostics. This is evaluated
+# before the "piiAudit" gate itself is added to $script:Gates, so the audit never inspects
+# its own verdict (no self-referential PASS).
+$evidenceForPiiAudit = [ordered]@{
+    responses = $script:Responses
+    checkpoints = $result.checkpoints
+    e2e = $result.e2e
+    gates = $script:Gates
+}
+$piiHits = Test-NoSensitiveLeak -Objects $evidenceForPiiAudit
 if ($piiHits.Count -eq 0) {
-    Add-Gate "piiAudit" "PASS" "No configured PII/path/token patterns were found in captured JSON responses."
+    Add-Gate "piiAudit" "PASS" "No configured PII/path/token patterns were found across captured responses, checkpoint records, e2e payloads, and gate evidence destined for the public JSON."
 } else {
-    Add-Gate "piiAudit" "FAIL" "Sensitive-looking patterns found in captured responses." ($piiHits -join ", ")
+    Add-Gate "piiAudit" "FAIL" "Sensitive-looking patterns found in evidence destined for the public JSON." ($piiHits -join ", ")
 }
 
 $overall = "PASS"
@@ -523,4 +534,10 @@ $lines | Set-Content -LiteralPath $mdPath -Encoding UTF8
 Write-Output "P10_9_BACKEND_AI_REAL_STUDY_E2E=$overall"
 Write-Output "JSON=$jsonPath"
 Write-Output "AUDIT=$mdPath"
+
+# Fail-closed exit codes: an automated caller must not read BLOCKED as success.
+# PASS = 0, FAIL = 1, BLOCKED = 2. Evidence files are already written above for all
+# three outcomes before this exit.
 if ($overall -eq "FAIL") { exit 1 }
+elseif ($overall -eq "BLOCKED") { exit 2 }
+else { exit 0 }
