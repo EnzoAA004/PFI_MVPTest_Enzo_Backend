@@ -27,26 +27,23 @@ services:
       PORT: 8000
       PFI_MODEL_DIR: /models/final
       PFI_OUTPUT_DIR: /app/outputs
-      # Las series subidas viven acá. Sin volumen quedaban en la capa efímera del
-      # contenedor: al recrearlo, el visor seguía mostrando cortes —las previsualizaciones
-      # sí están en outputs— pero cualquier inputId devolvía 404 porque el archivo ya no
-      # existía. Verificado el 2026-08-06 sobre una corrida real.
       PFI_UPLOAD_DIR: /app/uploads/inputs
       PFI_MAX_UPLOAD_BYTES: ${PFI_AI_STUDY_UPLOAD_MAX_BYTES:-209715200}
-      # Clasificador subarticular de P10.6. El .pt no esta en Git —pesa y es un artefacto
-      # de release— asi que se monta desde afuera. Si el archivo no existe, el modulo de
-      # IA arranca igual y solo ese endpoint responde 503 con
-      # SUBARTICULAR_CHECKPOINT_UNAVAILABLE: el resto del sistema no se entera.
-      # Estado real del checkpoint: GET /health -> subarticular.status
+      # P10.6: clasificador subarticular congelado. El artefacto vive fuera de Git y
+      # el runtime verifica SHA-256 antes de deserializarlo.
       PFI_SUBARTICULAR_CHECKPOINT_PATH: /models/subarticular/frozen_subarticular_checkpoint.pt
+      # P10.7: clasificador degenerativo multitarea SPIDER. Igual que P10.6, se monta
+      # como artefacto de release y el runtime falla cerrado si el hash no coincide.
+      PFI_P10_7_CHECKPOINT_PATH: /models/disc-degenerative/frozen_p10_7_spider_degenerative_multitask.pt
+      PFI_P10_7_DEVICE: ${PFI_P10_7_DEVICE:-cpu}
     ports:
       - "${AI_MODULE_PORT:-8000}:8000"
     volumes:
       - ${AI_MODEL_DIR:-../PFI_MVPTest_Enzo_AImodule/models/final}:/models/final:ro
-      # Se monta el directorio y no el archivo: con bind de archivo, si el .pt no existe en
-      # el host, Docker crea un directorio vacio en su lugar y el error que se ve despues
-      # no menciona el checkpoint.
+      # Se montan directorios y no archivos: si una ruta de host falta, Docker no debe
+      # convertir silenciosamente el path esperado del .pt en un directorio vacio.
       - ${PFI_SUBARTICULAR_CHECKPOINT_DIR:-../PFI_MVPTest_Enzo_AImodule/models/subarticular}:/models/subarticular:ro
+      - ${PFI_P10_7_CHECKPOINT_DIR:-../PFI_MVPTest_Enzo_AImodule/models/disc-degenerative}:/models/disc-degenerative:ro
       - ai-outputs:/app/outputs
       - ai-uploads:/app/uploads
     healthcheck:
@@ -68,13 +65,7 @@ services:
       DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-pfi_backend}?user=${POSTGRES_USER:-pfi}&password=${POSTGRES_PASSWORD:-change-me-local-only}
       PFI_AI_SERVICE_URL: http://ai-module:8000
       PFI_AI_TIMEOUT_SECONDS: ${PFI_AI_TIMEOUT_SECONDS:-180}
-      # El contrato v1 no transporta la metadata volumetrica del .mha
-      # (canonicalShape, sliceCount, selectedAxis, orientationTransform), asi que
-      # una corrida sagital real queda marcada como no evaluable en el frontend.
-      # v2 es el valor de rollout documentado en el handoff.
       PFI_AI_SERVICE_MULTIPLANAR_CONTRACT_VERSION: ${PFI_AI_SERVICE_MULTIPLANAR_CONTRACT_VERSION:-v2}
-      # Techo del estudio completo. Un zip de RM lumbar con todas sus series ronda las
-      # decenas de MB; 200 acota un envio desbocado sin rechazar un estudio real.
       PFI_AI_STUDY_UPLOAD_MAX_BYTES: ${PFI_AI_STUDY_UPLOAD_MAX_BYTES:-209715200}
       PFI_AUTH_JWT_SECRET: ${PFI_AUTH_JWT_SECRET:-change-me-local-jwt-secret}
       PFI_CORS_ALLOWED_ORIGINS: ${PFI_CORS_ALLOWED_ORIGINS:-http://localhost:8088}
@@ -86,10 +77,6 @@ services:
       ai-module:
         condition: service_healthy
     healthcheck:
-      # `/api/system/health` es el unico endpoint anonimo del backend. El healthcheck
-      # apuntaba a `/api/ai/health`, que exige autenticacion: devolvia 401, el
-      # contenedor quedaba unhealthy para siempre y el frontend -que espera a que el
-      # backend este sano- no arrancaba nunca, aunque el backend estuviera perfecto.
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/api/system/health >/dev/null || exit 1"]
       interval: 15s
       timeout: 5s
