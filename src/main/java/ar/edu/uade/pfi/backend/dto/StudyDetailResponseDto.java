@@ -11,5 +11,4 @@ public record StudyDetailResponseDto(
     List<StudyRunDetailDto> runs,
     List<DomainAuditEvent> auditTrail,
     boolean humanReviewRequired,
-    boolean notClinicalDiagnosis
-) {}
+    boolean notClinicalDiagnosis) {}

@@ -12,6 +12,4 @@ public record SagittalRealBaselineProperties(
     @NotBlank String modelSha256,
     @NotBlank String releaseId,
     @NotBlank String releaseContentSha256,
-    @NotBlank String releaseManifestSha256
-) {
-}
+    @NotBlank String releaseManifestSha256) {}

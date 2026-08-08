@@ -1,7 +1,7 @@
 package ar.edu.uade.pfi.backend.controller;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -16,8 +16,8 @@ import ar.edu.uade.pfi.backend.config.ApiExceptionHandler;
 import ar.edu.uade.pfi.backend.domain.RunArtifact;
 import ar.edu.uade.pfi.backend.domain.Study;
 import ar.edu.uade.pfi.backend.repository.PostgresStudyRepository;
-import ar.edu.uade.pfi.backend.service.ReviewerAnnotationService;
 import ar.edu.uade.pfi.backend.service.AuditService;
+import ar.edu.uade.pfi.backend.service.ReviewerAnnotationService;
 import ar.edu.uade.pfi.backend.service.RunReviewService;
 import ar.edu.uade.pfi.backend.service.StudyRunService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -37,47 +37,66 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 @Testcontainers
 class AiRunReviewControllerTest {
-    @Container
-    static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")
-        .withDatabaseName("pfi_be007")
-        .withUsername("pfi")
-        .withPassword("pfi");
+  @Container
+  static final PostgreSQLContainer<?> postgres =
+      new PostgreSQLContainer<>("postgres:16-alpine")
+          .withDatabaseName("pfi_be007")
+          .withUsername("pfi")
+          .withPassword("pfi");
 
-    private MockMvc mockMvc;
-    private StudyRunService studyRunService;
-    private PostgresStudyRepository repository;
+  private MockMvc mockMvc;
+  private StudyRunService studyRunService;
+  private PostgresStudyRepository repository;
 
-    @BeforeEach
-    void setUp() {
-        repository = new PostgresStudyRepository(
+  @BeforeEach
+  void setUp() {
+    repository =
+        new PostgresStudyRepository(
             new ObjectMapper(),
-            postgres.getJdbcUrl() + "&user=" + postgres.getUsername() + "&password=" + postgres.getPassword(),
-            true
-        );
-        studyRunService = new StudyRunService(repository);
-        RunReviewService reviewService = new RunReviewService(repository);
-        AuditService auditService = new AuditService(repository);
-        RoleAuthorizationService authorizationService = new RoleAuthorizationService(auditService);
-        mockMvc = MockMvcBuilders.standaloneSetup(new AiRunReviewController(reviewService, auditService, authorizationService, new ReviewerAnnotationService(repository)))
+            postgres.getJdbcUrl()
+                + "&user="
+                + postgres.getUsername()
+                + "&password="
+                + postgres.getPassword(),
+            true);
+    studyRunService = new StudyRunService(repository);
+    RunReviewService reviewService = new RunReviewService(repository);
+    AuditService auditService = new AuditService(repository);
+    RoleAuthorizationService authorizationService = new RoleAuthorizationService(auditService);
+    mockMvc =
+        MockMvcBuilders.standaloneSetup(
+                new AiRunReviewController(
+                    reviewService,
+                    auditService,
+                    authorizationService,
+                    new ReviewerAnnotationService(repository)))
             .setControllerAdvice(new ApiExceptionHandler(auditService))
             .build();
-    }
+  }
 
-    @Test
-    void cannotBeConstructedWithoutAuthorizationService() {
-        assertThrows(NullPointerException.class, () ->
-            new AiRunReviewController(mock(RunReviewService.class), mock(AuditService.class), null, mock(ReviewerAnnotationService.class))
-        );
-    }
+  @Test
+  void cannotBeConstructedWithoutAuthorizationService() {
+    assertThrows(
+        NullPointerException.class,
+        () ->
+            new AiRunReviewController(
+                mock(RunReviewService.class),
+                mock(AuditService.class),
+                null,
+                mock(ReviewerAnnotationService.class)));
+  }
 
-    @Test
-    void registersAndRetrievesProfessionalReviewWithCorrections() throws Exception {
-        seedRun("multi-review-001", "trace-review-001");
+  @Test
+  void registersAndRetrievesProfessionalReviewWithCorrections() throws Exception {
+    seedRun("multi-review-001", "trace-review-001");
 
-        mockMvc.perform(post("/api/ai/runs/multi-review-001/review")
+    mockMvc
+        .perform(
+            post("/api/ai/runs/multi-review-001/review")
                 .with(reviewer())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("""
+                .content(
+                    """
                     {
                       "reviewStatus": "observed",
                       "reviewer": "dra-demo",
@@ -93,202 +112,244 @@ class AiRunReviewControllerTest {
                       ]
                     }
                     """))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.multiplanarRunId").value("multi-review-001"))
-            .andExpect(jsonPath("$.traceId").value("trace-review-001"))
-            .andExpect(jsonPath("$.reviewStatus").value("observed"))
-            .andExpect(jsonPath("$.reviewer").value("dra-demo"))
-            .andExpect(jsonPath("$.reviewedAt").exists())
-            .andExpect(jsonPath("$.corrections[0].measurementId").value("canalAreaMm2"))
-            .andExpect(jsonPath("$.corrections[0].afterValue.value").value(85.1));
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.multiplanarRunId").value("multi-review-001"))
+        .andExpect(jsonPath("$.traceId").value("trace-review-001"))
+        .andExpect(jsonPath("$.reviewStatus").value("observed"))
+        .andExpect(jsonPath("$.reviewer").value("dra-demo"))
+        .andExpect(jsonPath("$.reviewedAt").exists())
+        .andExpect(jsonPath("$.corrections[0].measurementId").value("canalAreaMm2"))
+        .andExpect(jsonPath("$.corrections[0].afterValue.value").value(85.1));
 
-        mockMvc.perform(get("/api/ai/runs/multi-review-001/review").with(reviewer()))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.reviewStatus").value("observed"))
-            .andExpect(jsonPath("$.comments").value("Medicion observada para ajuste academico."))
-            .andExpect(jsonPath("$.corrections[0].label").value("Area del canal"));
-    }
+    mockMvc
+        .perform(get("/api/ai/runs/multi-review-001/review").with(reviewer()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.reviewStatus").value("observed"))
+        .andExpect(jsonPath("$.comments").value("Medicion observada para ajuste academico."))
+        .andExpect(jsonPath("$.corrections[0].label").value("Area del canal"));
+  }
 
-    @Test
-    void doctorCanRegisterReview() throws Exception {
-        seedRun("multi-review-doctor", "trace-review-doctor");
+  @Test
+  void doctorCanRegisterReview() throws Exception {
+    seedRun("multi-review-doctor", "trace-review-doctor");
 
-        mockMvc.perform(post("/api/ai/runs/multi-review-doctor/review")
+    mockMvc
+        .perform(
+            post("/api/ai/runs/multi-review-doctor/review")
                 .with(doctor())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("""
+                .content(
+                    """
                     {"reviewStatus":"accepted","reviewer":"dr-demo","comments":"Aceptado por profesional."}
                     """))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.reviewStatus").value("accepted"))
-            .andExpect(jsonPath("$.reviewer").value("dr-demo"));
-    }
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.reviewStatus").value("accepted"))
+        .andExpect(jsonPath("$.reviewer").value("dr-demo"));
+  }
 
-    @Test
-    void updatesExistingReview() throws Exception {
-        seedRun("multi-review-002", "trace-review-002");
+  @Test
+  void updatesExistingReview() throws Exception {
+    seedRun("multi-review-002", "trace-review-002");
 
-        mockMvc.perform(post("/api/ai/runs/multi-review-002/review")
+    mockMvc
+        .perform(
+            post("/api/ai/runs/multi-review-002/review")
                 .with(reviewer())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("""
+                .content(
+                    """
                     {"reviewStatus":"observed","reviewer":"dra-demo","comments":"Primera revision"}
                     """))
-            .andExpect(status().isOk());
+        .andExpect(status().isOk());
 
-        mockMvc.perform(put("/api/ai/runs/multi-review-002/review")
+    mockMvc
+        .perform(
+            put("/api/ai/runs/multi-review-002/review")
                 .with(reviewer())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("""
+                .content(
+                    """
                     {"reviewStatus":"accepted","reviewer":"dra-demo","comments":"Aceptado luego de revisar"}
                     """))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.reviewStatus").value("accepted"))
-            .andExpect(jsonPath("$.comments").value("Aceptado luego de revisar"));
-    }
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.reviewStatus").value("accepted"))
+        .andExpect(jsonPath("$.comments").value("Aceptado luego de revisar"));
+  }
 
-    @Test
-    void pendingDraftAndSpanishRejectedAliasPersistInDomainModel() throws Exception {
-        seedRun("multi-review-pending", "trace-review-pending");
+  @Test
+  void pendingDraftAndSpanishRejectedAliasPersistInDomainModel() throws Exception {
+    seedRun("multi-review-pending", "trace-review-pending");
 
-        mockMvc.perform(put("/api/ai/runs/multi-review-pending/review")
+    mockMvc
+        .perform(
+            put("/api/ai/runs/multi-review-pending/review")
                 .with(reviewer())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("""
+                .content(
+                    """
                     {"reviewStatus":"pending","comments":"Borrador pendiente con mediciones.","corrections":[]}
                     """))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.reviewStatus").value("pending"))
-            .andExpect(jsonPath("$.reviewedAt").doesNotExist());
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.reviewStatus").value("pending"))
+        .andExpect(jsonPath("$.reviewedAt").doesNotExist());
 
-        assertTrue(repository.findRunByMultiplanarRunId("multi-review-pending")
+    assertTrue(
+        repository
+            .findRunByMultiplanarRunId("multi-review-pending")
             .filter(run -> "pending".equals(run.reviewStatus()) && run.reviewedAt() == null)
             .isPresent());
 
-        mockMvc.perform(put("/api/ai/runs/multi-review-pending/review")
+    mockMvc
+        .perform(
+            put("/api/ai/runs/multi-review-pending/review")
                 .with(reviewer())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("""
+                .content(
+                    """
                     {"reviewStatus":"descartado","reviewer":"dra-demo","comments":"Descartado por inconsistencia academica."}
                     """))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.reviewStatus").value("rejected"));
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.reviewStatus").value("rejected"));
 
-        assertTrue(repository.findAuditEventsByEntityId("multi-review-pending").stream()
+    assertTrue(
+        repository.findAuditEventsByEntityId("multi-review-pending").stream()
             .anyMatch(event -> "review.updated".equals(event.action())));
-    }
+  }
 
-    @Test
-    void rejectsMissingRunInvalidStatusAndMissingReviewer() throws Exception {
-        mockMvc.perform(post("/api/ai/runs/missing-run/review")
+  @Test
+  void rejectsMissingRunInvalidStatusAndMissingReviewer() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/ai/runs/missing-run/review")
                 .with(reviewer())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("""
+                .content(
+                    """
                     {"reviewStatus":"accepted","reviewer":"dra-demo"}
                     """))
-            .andExpect(status().isNotFound());
+        .andExpect(status().isNotFound());
 
-        seedRun("multi-review-003", "trace-review-003");
+    seedRun("multi-review-003", "trace-review-003");
 
-        mockMvc.perform(post("/api/ai/runs/multi-review-003/review")
+    mockMvc
+        .perform(
+            post("/api/ai/runs/multi-review-003/review")
                 .with(reviewer())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("""
+                .content(
+                    """
                     {"reviewStatus":"invalid","reviewer":"dra-demo"}
                     """))
-            .andExpect(status().isBadRequest());
+        .andExpect(status().isBadRequest());
 
-        mockMvc.perform(post("/api/ai/runs/multi-review-003/review")
+    mockMvc
+        .perform(
+            post("/api/ai/runs/multi-review-003/review")
                 .with(reviewer())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("""
+                .content(
+                    """
                     {"reviewStatus":"accepted","reviewer":""}
                     """))
-            .andExpect(status().isBadRequest());
+        .andExpect(status().isBadRequest());
 
-        mockMvc.perform(post("/api/ai/runs/multi-review-003/review")
+    mockMvc
+        .perform(
+            post("/api/ai/runs/multi-review-003/review")
                 .with(reviewer())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("""
+                .content(
+                    """
                     {"reviewStatus":"rejected","reviewer":"dra-demo","comments":""}
                     """))
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.code").value("REVIEW_COMMENT_REQUIRED"));
-    }
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("REVIEW_COMMENT_REQUIRED"));
+  }
 
-    @Test
-    void rejectsReviewWhenRoleIsInsufficientAndAuditsDeniedAccess() throws Exception {
-        seedRun("multi-review-denied", "trace-review-denied");
+  @Test
+  void rejectsReviewWhenRoleIsInsufficientAndAuditsDeniedAccess() throws Exception {
+    seedRun("multi-review-denied", "trace-review-denied");
 
-        mockMvc.perform(post("/api/ai/runs/multi-review-denied/review")
+    mockMvc
+        .perform(
+            post("/api/ai/runs/multi-review-denied/review")
                 .with(pendingApproval())
                 .header("X-Trace-Id", "trace-denied-review")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("""
+                .content(
+                    """
                     {"reviewStatus":"accepted","reviewer":"dra-demo"}
                     """))
-            .andExpect(status().isForbidden())
-            .andExpect(jsonPath("$.message").value("No tiene permisos para realizar esta operacion."));
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.message").value("No tiene permisos para realizar esta operacion."));
 
-        assertTrue(repository.findAuditEventsByEntityId("multi-review-denied").stream()
+    assertTrue(
+        repository.findAuditEventsByEntityId("multi-review-denied").stream()
             .anyMatch(event -> "access.denied".equals(event.action())));
-    }
+  }
 
-    private void seedRun(String multiplanarRunId, String traceId) {
-        Study study = studyRunService.createStudy("CASE-" + multiplanarRunId, "created");
-        String runId = UUID.randomUUID().toString();
-        Instant now = Instant.now();
-        studyRunService.createRunWithId(
-            runId,
-            study,
-            multiplanarRunId,
-            traceId,
-            "real_baseline",
-            "real_baseline",
-            "sagittal_spider",
-            "axial_t2_alkafri",
-            "sha256:sag",
-            "sha256:ax",
-            "run-sag-" + multiplanarRunId,
-            "run-ax-" + multiplanarRunId,
-            Map.of("workspace", "workspace.json"),
-            Map.of("quality", Map.of("score", 0.92)),
-            List.of(new RunArtifact(UUID.randomUUID().toString(), runId, "run-sag-" + multiplanarRunId, "sagittal", "overlay.png", "image/png", "overlay.png", now)),
-            "completed",
-            "pending",
-            "",
-            null,
-            ""
-        );
-    }
+  private void seedRun(String multiplanarRunId, String traceId) {
+    Study study = studyRunService.createStudy("CASE-" + multiplanarRunId, "created");
+    String runId = UUID.randomUUID().toString();
+    Instant now = Instant.now();
+    studyRunService.createRunWithId(
+        runId,
+        study,
+        multiplanarRunId,
+        traceId,
+        "real_baseline",
+        "real_baseline",
+        "sagittal_spider",
+        "axial_t2_alkafri",
+        "sha256:sag",
+        "sha256:ax",
+        "run-sag-" + multiplanarRunId,
+        "run-ax-" + multiplanarRunId,
+        Map.of("workspace", "workspace.json"),
+        Map.of("quality", Map.of("score", 0.92)),
+        List.of(
+            new RunArtifact(
+                UUID.randomUUID().toString(),
+                runId,
+                "run-sag-" + multiplanarRunId,
+                "sagittal",
+                "overlay.png",
+                "image/png",
+                "overlay.png",
+                now)),
+        "completed",
+        "pending",
+        "",
+        null,
+        "");
+  }
 
-    private static RequestPostProcessor reviewer() {
-        return request -> {
-            request.setAttribute(
-                AuthFilter.AUTH_CLAIMS_ATTRIBUTE,
-                new TokenService.Claims("reviewer-id", "reviewer@pfi.local", "Reviewer", List.of("REVIEWER"))
-            );
-            return request;
-        };
-    }
+  private static RequestPostProcessor reviewer() {
+    return request -> {
+      request.setAttribute(
+          AuthFilter.AUTH_CLAIMS_ATTRIBUTE,
+          new TokenService.Claims(
+              "reviewer-id", "reviewer@pfi.local", "Reviewer", List.of("REVIEWER")));
+      return request;
+    };
+  }
 
-    private static RequestPostProcessor doctor() {
-        return request -> {
-            request.setAttribute(
-                AuthFilter.AUTH_CLAIMS_ATTRIBUTE,
-                new TokenService.Claims("doctor-id", "doctor@pfi.local", "Doctor", List.of("DOCTOR"))
-            );
-            return request;
-        };
-    }
+  private static RequestPostProcessor doctor() {
+    return request -> {
+      request.setAttribute(
+          AuthFilter.AUTH_CLAIMS_ATTRIBUTE,
+          new TokenService.Claims("doctor-id", "doctor@pfi.local", "Doctor", List.of("DOCTOR")));
+      return request;
+    };
+  }
 
-    private static RequestPostProcessor pendingApproval() {
-        return request -> {
-            request.setAttribute(
-                AuthFilter.AUTH_CLAIMS_ATTRIBUTE,
-                new TokenService.Claims("pending-id", "pending@pfi.local", "Pending", List.of("PENDING_APPROVAL"))
-            );
-            return request;
-        };
-    }
+  private static RequestPostProcessor pendingApproval() {
+    return request -> {
+      request.setAttribute(
+          AuthFilter.AUTH_CLAIMS_ATTRIBUTE,
+          new TokenService.Claims(
+              "pending-id", "pending@pfi.local", "Pending", List.of("PENDING_APPROVAL")));
+      return request;
+    };
+  }
 }

@@ -7,5 +7,4 @@ public record StudyRunsResponseDto(
     String caseId,
     List<StudyRunDetailDto> runs,
     boolean humanReviewRequired,
-    boolean notClinicalDiagnosis
-) {}
+    boolean notClinicalDiagnosis) {}

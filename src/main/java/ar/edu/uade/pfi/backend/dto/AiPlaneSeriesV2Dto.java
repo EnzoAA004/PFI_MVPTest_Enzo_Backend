@@ -9,5 +9,4 @@ public record AiPlaneSeriesV2Dto(
     String sequence,
     Integer selectedSliceIndex,
     Integer sliceCount,
-    String status
-) {}
+    String status) {}

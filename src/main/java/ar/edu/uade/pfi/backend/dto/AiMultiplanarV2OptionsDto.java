@@ -7,5 +7,4 @@ public record AiMultiplanarV2OptionsDto(
     Integer sliceIndex,
     Integer sliceAxis,
     Integer sliceWindowRadius,
-    String inputOrientationTransform
-) {}
+    String inputOrientationTransform) {}

@@ -10,5 +10,4 @@ public record StudyUploadResponseDto(
     StudyUploadInputDto axial,
     List<String> warnings,
     boolean humanReviewRequired,
-    boolean notClinicalDiagnosis
-) {}
+    boolean notClinicalDiagnosis) {}

@@ -4,15 +4,15 @@ import org.springframework.http.HttpStatus;
 
 /** Thrown when an operation would leave the system without any non-demo ADMIN account. */
 public class LastAdminProtectionException extends RuntimeException {
-    public LastAdminProtectionException() {
-        super("La operacion dejaria al sistema sin un administrador activo.");
-    }
+  public LastAdminProtectionException() {
+    super("La operacion dejaria al sistema sin un administrador activo.");
+  }
 
-    public HttpStatus status() {
-        return HttpStatus.CONFLICT;
-    }
+  public HttpStatus status() {
+    return HttpStatus.CONFLICT;
+  }
 
-    public String code() {
-        return "LAST_ADMIN_PROTECTION";
-    }
+  public String code() {
+    return "LAST_ADMIN_PROTECTION";
+  }
 }

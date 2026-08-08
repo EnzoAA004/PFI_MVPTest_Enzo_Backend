@@ -9,5 +9,4 @@ public record StudyMetadataDto(
     LocalDate studyDate,
     String modality,
     String description,
-    String reviewPriority
-) {}
+    String reviewPriority) {}

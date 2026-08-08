@@ -1,7 +1,7 @@
 package ar.edu.uade.pfi.backend.controller;
 
-import static org.mockito.Mockito.when;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -10,9 +10,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
 import ar.edu.uade.pfi.backend.config.ApiExceptionHandler;
+import ar.edu.uade.pfi.backend.domain.RunArtifact;
 import ar.edu.uade.pfi.backend.domain.RunAssetContent;
 import ar.edu.uade.pfi.backend.domain.RunAssetStorageDiagnostics;
-import ar.edu.uade.pfi.backend.domain.RunArtifact;
 import ar.edu.uade.pfi.backend.domain.Study;
 import ar.edu.uade.pfi.backend.domain.StudyRun;
 import ar.edu.uade.pfi.backend.repository.InMemoryStudyRepository;
@@ -39,96 +39,123 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.server.ResponseStatusException;
 
 class AiAssetDurableProxyControllerTest {
-    @Test
-    void getAssetServesPersistedPayloadBeforeCallingAiModule() throws Exception {
-        AiServiceOperations ai = Mockito.mock(AiServiceOperations.class);
-        InMemoryStudyRepository repository = repositoryWithArtifact("multi-stored", "trace-stored", "run-sag-stored", "overlay.png");
-        RunArtifact artifact = repository.findArtifactByRunPlaneAndName("run-sag-stored", "sagittal", "overlay.png").orElseThrow();
-        FakeStorage storage = new FakeStorage();
-        byte[] png = png(7);
-        storage.store(artifact, png, sha256(png));
-        repository.updateArtifactStorage(artifact.id(), "stored", "postgres_bytea", (long) png.length, sha256(png));
+  @Test
+  void getAssetServesPersistedPayloadBeforeCallingAiModule() throws Exception {
+    AiServiceOperations ai = Mockito.mock(AiServiceOperations.class);
+    InMemoryStudyRepository repository =
+        repositoryWithArtifact("multi-stored", "trace-stored", "run-sag-stored", "overlay.png");
+    RunArtifact artifact =
+        repository
+            .findArtifactByRunPlaneAndName("run-sag-stored", "sagittal", "overlay.png")
+            .orElseThrow();
+    FakeStorage storage = new FakeStorage();
+    byte[] png = png(7);
+    storage.store(artifact, png, sha256(png));
+    repository.updateArtifactStorage(
+        artifact.id(), "stored", "postgres_bytea", (long) png.length, sha256(png));
 
-        mockMvc(ai, repository, storage, null)
-            .perform(get("/api/ai/assets/run-sag-stored/sagittal/overlay.png"))
-            .andExpect(status().isOk())
-            .andExpect(header().string("X-PFI-Asset-Source", "postgres"))
-            .andExpect(header().string(HttpHeaders.CONTENT_TYPE, MediaType.IMAGE_PNG_VALUE))
-            .andExpect(header().string(HttpHeaders.ETAG, "\"" + sha256(png) + "\""))
-            .andExpect(content().bytes(png));
+    mockMvc(ai, repository, storage, null)
+        .perform(get("/api/ai/assets/run-sag-stored/sagittal/overlay.png"))
+        .andExpect(status().isOk())
+        .andExpect(header().string("X-PFI-Asset-Source", "postgres"))
+        .andExpect(header().string(HttpHeaders.CONTENT_TYPE, MediaType.IMAGE_PNG_VALUE))
+        .andExpect(header().string(HttpHeaders.ETAG, "\"" + sha256(png) + "\""))
+        .andExpect(content().bytes(png));
 
-        Mockito.verifyNoInteractions(ai);
-    }
+    Mockito.verifyNoInteractions(ai);
+  }
 
-    @Test
-    void getWorkspaceMeshJsonServesPersistedPayloadWithAiModuleOff() throws Exception {
-        AiServiceOperations ai = Mockito.mock(AiServiceOperations.class);
-        InMemoryStudyRepository repository = repositoryWithArtifact(
+  @Test
+  void getWorkspaceMeshJsonServesPersistedPayloadWithAiModuleOff() throws Exception {
+    AiServiceOperations ai = Mockito.mock(AiServiceOperations.class);
+    InMemoryStudyRepository repository =
+        repositoryWithArtifact(
             "multi-3d-stored",
             "trace-3d-stored",
             "multi-3d-stored",
             "workspace",
             "lumbar-3d-mesh.json",
-            "application/json"
-        );
-        RunArtifact artifact = repository.findArtifactByRunPlaneAndName("multi-3d-stored", "workspace", "lumbar-3d-mesh.json").orElseThrow();
-        FakeStorage storage = new FakeStorage();
-        byte[] mesh = "{\"kind\":\"experimental_geometric_proxy\"}".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        storage.store(artifact, mesh, sha256(mesh));
-        repository.updateArtifactStorage(artifact.id(), "stored", "postgres_bytea", (long) mesh.length, sha256(mesh));
+            "application/json");
+    RunArtifact artifact =
+        repository
+            .findArtifactByRunPlaneAndName("multi-3d-stored", "workspace", "lumbar-3d-mesh.json")
+            .orElseThrow();
+    FakeStorage storage = new FakeStorage();
+    byte[] mesh =
+        "{\"kind\":\"experimental_geometric_proxy\"}"
+            .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    storage.store(artifact, mesh, sha256(mesh));
+    repository.updateArtifactStorage(
+        artifact.id(), "stored", "postgres_bytea", (long) mesh.length, sha256(mesh));
 
-        mockMvc(ai, repository, storage, null)
-            .perform(get("/api/ai/assets/multi-3d-stored/workspace/lumbar-3d-mesh.json"))
-            .andExpect(status().isOk())
-            .andExpect(header().string("X-PFI-Asset-Source", "postgres"))
-            .andExpect(header().string(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE))
-            .andExpect(content().bytes(mesh));
+    mockMvc(ai, repository, storage, null)
+        .perform(get("/api/ai/assets/multi-3d-stored/workspace/lumbar-3d-mesh.json"))
+        .andExpect(status().isOk())
+        .andExpect(header().string("X-PFI-Asset-Source", "postgres"))
+        .andExpect(header().string(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE))
+        .andExpect(content().bytes(mesh));
 
-        Mockito.verifyNoInteractions(ai);
-    }
+    Mockito.verifyNoInteractions(ai);
+  }
 
-    @Test
-    void getAssetBackfillsOnceWhenMetadataExistsWithoutPayload() throws Exception {
-        AiServiceOperations ai = Mockito.mock(AiServiceOperations.class);
-        InMemoryStudyRepository repository = repositoryWithArtifact("multi-backfill", "trace-backfill", "run-sag-backfill", "input.png");
-        FakeStorage storage = new FakeStorage();
-        byte[] png = png(8);
-        when(ai.getAsset("run-sag-backfill", "sagittal", "input.png"))
-            .thenReturn(ResponseEntity.ok().header(HttpHeaders.CONTENT_TYPE, MediaType.IMAGE_PNG_VALUE).body(png));
-        RunAssetSnapshotService snapshotService = new RunAssetSnapshotService(ai, repository, storage, null, 5L * 1024L * 1024L);
+  @Test
+  void getAssetBackfillsOnceWhenMetadataExistsWithoutPayload() throws Exception {
+    AiServiceOperations ai = Mockito.mock(AiServiceOperations.class);
+    InMemoryStudyRepository repository =
+        repositoryWithArtifact("multi-backfill", "trace-backfill", "run-sag-backfill", "input.png");
+    FakeStorage storage = new FakeStorage();
+    byte[] png = png(8);
+    when(ai.getAsset("run-sag-backfill", "sagittal", "input.png"))
+        .thenReturn(
+            ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_TYPE, MediaType.IMAGE_PNG_VALUE)
+                .body(png));
+    RunAssetSnapshotService snapshotService =
+        new RunAssetSnapshotService(ai, repository, storage, null, 5L * 1024L * 1024L);
 
-        mockMvc(ai, repository, storage, snapshotService)
-            .perform(get("/api/ai/assets/run-sag-backfill/sagittal/input.png"))
-            .andExpect(status().isOk())
-            .andExpect(header().string("X-PFI-Asset-Source", "ai-module-backfill"))
-            .andExpect(content().bytes(png));
+    mockMvc(ai, repository, storage, snapshotService)
+        .perform(get("/api/ai/assets/run-sag-backfill/sagittal/input.png"))
+        .andExpect(status().isOk())
+        .andExpect(header().string("X-PFI-Asset-Source", "ai-module-backfill"))
+        .andExpect(content().bytes(png));
 
-        RunArtifact artifact = repository.findArtifactByRunPlaneAndName("run-sag-backfill", "sagittal", "input.png").orElseThrow();
-        assertEquals("stored", artifact.storageStatus());
-    }
+    RunArtifact artifact =
+        repository
+            .findArtifactByRunPlaneAndName("run-sag-backfill", "sagittal", "input.png")
+            .orElseThrow();
+    assertEquals("stored", artifact.storageStatus());
+  }
 
-    @Test
-    void getAssetReturnsStructuredUnavailableWhenBackfillMisses() throws Exception {
-        AiServiceOperations ai = Mockito.mock(AiServiceOperations.class);
-        InMemoryStudyRepository repository = repositoryWithArtifact("multi-missing", "trace-missing", "run-sag-missing", "mask-preview.png");
-        FakeStorage storage = new FakeStorage();
-        when(ai.getAsset("run-sag-missing", "sagittal", "mask-preview.png"))
-            .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset no encontrado."));
-        RunAssetSnapshotService snapshotService = new RunAssetSnapshotService(ai, repository, storage, null, 5L * 1024L * 1024L);
+  @Test
+  void getAssetReturnsStructuredUnavailableWhenBackfillMisses() throws Exception {
+    AiServiceOperations ai = Mockito.mock(AiServiceOperations.class);
+    InMemoryStudyRepository repository =
+        repositoryWithArtifact(
+            "multi-missing", "trace-missing", "run-sag-missing", "mask-preview.png");
+    FakeStorage storage = new FakeStorage();
+    when(ai.getAsset("run-sag-missing", "sagittal", "mask-preview.png"))
+        .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset no encontrado."));
+    RunAssetSnapshotService snapshotService =
+        new RunAssetSnapshotService(ai, repository, storage, null, 5L * 1024L * 1024L);
 
-        mockMvc(ai, repository, storage, snapshotService)
-            .perform(get("/api/ai/assets/run-sag-missing/sagittal/mask-preview.png"))
-            .andExpect(status().isNotFound())
-            .andExpect(jsonPath("$.code").value("ASSET_CONTENT_UNAVAILABLE"))
-            .andExpect(jsonPath("$.runId").value("run-sag-missing"))
-            .andExpect(jsonPath("$.plane").value("sagittal"))
-            .andExpect(jsonPath("$.assetName").value("mask-preview.png"))
-            .andExpect(jsonPath("$.humanReviewRequired").value(true))
-            .andExpect(jsonPath("$.notClinicalDiagnosis").value(true));
-    }
+    mockMvc(ai, repository, storage, snapshotService)
+        .perform(get("/api/ai/assets/run-sag-missing/sagittal/mask-preview.png"))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.code").value("ASSET_CONTENT_UNAVAILABLE"))
+        .andExpect(jsonPath("$.runId").value("run-sag-missing"))
+        .andExpect(jsonPath("$.plane").value("sagittal"))
+        .andExpect(jsonPath("$.assetName").value("mask-preview.png"))
+        .andExpect(jsonPath("$.humanReviewRequired").value(true))
+        .andExpect(jsonPath("$.notClinicalDiagnosis").value(true));
+  }
 
-    private MockMvc mockMvc(AiServiceOperations ai, InMemoryStudyRepository repository, FakeStorage storage, RunAssetSnapshotService snapshotService) {
-        AiBackendService service = new AiBackendService(
+  private MockMvc mockMvc(
+      AiServiceOperations ai,
+      InMemoryStudyRepository repository,
+      FakeStorage storage,
+      RunAssetSnapshotService snapshotService) {
+    AiBackendService service =
+        new AiBackendService(
             ai,
             Mockito.mock(ReviewStoreService.class),
             null,
@@ -139,23 +166,35 @@ class AiAssetDurableProxyControllerTest {
             repository,
             storage,
             snapshotService,
-            null
-        );
-        return MockMvcBuilders.standaloneSetup(new AiBackendController(service, Mockito.mock(ar.edu.uade.pfi.backend.auth.RoleAuthorizationService.class)))
-            .setControllerAdvice(new ApiExceptionHandler())
-            .build();
-    }
+            null);
+    return MockMvcBuilders.standaloneSetup(
+            new AiBackendController(
+                service, Mockito.mock(ar.edu.uade.pfi.backend.auth.RoleAuthorizationService.class)))
+        .setControllerAdvice(new ApiExceptionHandler())
+        .build();
+  }
 
-    private InMemoryStudyRepository repositoryWithArtifact(String multiplanarRunId, String traceId, String planeRunId, String assetName) {
-        return repositoryWithArtifact(multiplanarRunId, traceId, planeRunId, "sagittal", assetName, "image/png");
-    }
+  private InMemoryStudyRepository repositoryWithArtifact(
+      String multiplanarRunId, String traceId, String planeRunId, String assetName) {
+    return repositoryWithArtifact(
+        multiplanarRunId, traceId, planeRunId, "sagittal", assetName, "image/png");
+  }
 
-    private InMemoryStudyRepository repositoryWithArtifact(String multiplanarRunId, String traceId, String planeRunId, String plane, String assetName, String contentType) {
-        InMemoryStudyRepository repository = new InMemoryStudyRepository();
-        Instant now = Instant.parse("2026-07-26T13:00:00Z");
-        Study study = repository.saveStudy(new Study(UUID.randomUUID().toString(), "CASE-" + multiplanarRunId, "ready", now, now));
-        String studyRunId = UUID.randomUUID().toString();
-        repository.saveRun(new StudyRun(
+  private InMemoryStudyRepository repositoryWithArtifact(
+      String multiplanarRunId,
+      String traceId,
+      String planeRunId,
+      String plane,
+      String assetName,
+      String contentType) {
+    InMemoryStudyRepository repository = new InMemoryStudyRepository();
+    Instant now = Instant.parse("2026-07-26T13:00:00Z");
+    Study study =
+        repository.saveStudy(
+            new Study(UUID.randomUUID().toString(), "CASE-" + multiplanarRunId, "ready", now, now));
+    String studyRunId = UUID.randomUUID().toString();
+    repository.saveRun(
+        new StudyRun(
             studyRunId,
             study.id(),
             multiplanarRunId,
@@ -170,55 +209,65 @@ class AiAssetDurableProxyControllerTest {
             "",
             Map.of("sagittal", Map.of(assetName, assetName)),
             Map.of("humanReviewRequired", true, "notClinicalDiagnosis", true),
-            List.of(new RunArtifact(UUID.randomUUID().toString(), studyRunId, planeRunId, plane, assetName, contentType, assetName, now)),
+            List.of(
+                new RunArtifact(
+                    UUID.randomUUID().toString(),
+                    studyRunId,
+                    planeRunId,
+                    plane,
+                    assetName,
+                    contentType,
+                    assetName,
+                    now)),
             "completed",
             "pending",
             "",
             null,
             "",
             now,
-            now
-        ));
-        return repository;
+            now));
+    return repository;
+  }
+
+  private byte[] png(int marker) {
+    return new byte[] {(byte) 0x89, 0x50, 0x4e, 0x47, (byte) marker};
+  }
+
+  private String sha256(byte[] value) throws Exception {
+    return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value));
+  }
+
+  private static class FakeStorage implements RunAssetContentStorage {
+    private final Map<String, RunAssetContent> values = new ConcurrentHashMap<>();
+
+    @Override
+    public RunAssetContent store(RunArtifact artifact, byte[] content, String sha256) {
+      return deleteOrReplace(artifact, content, sha256);
     }
 
-    private byte[] png(int marker) {
-        return new byte[] {(byte) 0x89, 0x50, 0x4e, 0x47, (byte) marker};
+    @Override
+    public Optional<RunAssetContent> find(String artifactId) {
+      return Optional.ofNullable(values.get(artifactId));
     }
 
-    private String sha256(byte[] value) throws Exception {
-        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value));
+    @Override
+    public boolean exists(String artifactId) {
+      return values.containsKey(artifactId);
     }
 
-    private static class FakeStorage implements RunAssetContentStorage {
-        private final Map<String, RunAssetContent> values = new ConcurrentHashMap<>();
-
-        @Override
-        public RunAssetContent store(RunArtifact artifact, byte[] content, String sha256) {
-            return deleteOrReplace(artifact, content, sha256);
-        }
-
-        @Override
-        public Optional<RunAssetContent> find(String artifactId) {
-            return Optional.ofNullable(values.get(artifactId));
-        }
-
-        @Override
-        public boolean exists(String artifactId) {
-            return values.containsKey(artifactId);
-        }
-
-        @Override
-        public RunAssetContent deleteOrReplace(RunArtifact artifact, byte[] content, String sha256) {
-            RunAssetContent value = new RunAssetContent(artifact.id(), content, sha256, content.length, "postgres_bytea", Instant.now());
-            values.put(artifact.id(), value);
-            return value;
-        }
-
-        @Override
-        public RunAssetStorageDiagnostics diagnostics() {
-            long bytes = values.values().stream().mapToLong(RunAssetContent::sizeBytes).sum();
-            return new RunAssetStorageDiagnostics("postgres_bytea", true, values.size(), bytes, 0);
-        }
+    @Override
+    public RunAssetContent deleteOrReplace(RunArtifact artifact, byte[] content, String sha256) {
+      RunAssetContent value =
+          new RunAssetContent(
+              artifact.id(), content, sha256, content.length, "postgres_bytea", Instant.now());
+      values.put(artifact.id(), value);
+      return value;
     }
+
+    @Override
+    public RunAssetStorageDiagnostics diagnostics() {
+      long bytes = values.values().stream().mapToLong(RunAssetContent::sizeBytes).sum();
+      return new RunAssetStorageDiagnostics("postgres_bytea", true, values.size(), bytes, 0);
+    }
+  }
 }

@@ -4,9 +4,4 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record AiInputResponseDto(
-    String inputId,
-    String caseId,
-    String plane,
-    String format,
-    long size
-) {}
+    String inputId, String caseId, String plane, String format, long size) {}

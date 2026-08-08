@@ -14,36 +14,37 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/ai/models")
 public class AiModelSyncController {
-    private final AiServiceOperations aiServiceClient;
-    private final RoleAuthorizationService authorizationService;
-    private final SagittalRealBaselineContractValidator sagittalContractValidator;
+  private final AiServiceOperations aiServiceClient;
+  private final RoleAuthorizationService authorizationService;
+  private final SagittalRealBaselineContractValidator sagittalContractValidator;
 
-    public AiModelSyncController(AiServiceOperations aiServiceClient, RoleAuthorizationService authorizationService) {
-        this(aiServiceClient, authorizationService, null);
-    }
+  public AiModelSyncController(
+      AiServiceOperations aiServiceClient, RoleAuthorizationService authorizationService) {
+    this(aiServiceClient, authorizationService, null);
+  }
 
-    @Autowired
-    public AiModelSyncController(
-        AiServiceOperations aiServiceClient,
-        RoleAuthorizationService authorizationService,
-        SagittalRealBaselineContractValidator sagittalContractValidator
-    ) {
-        this.aiServiceClient = aiServiceClient;
-        this.authorizationService = authorizationService;
-        this.sagittalContractValidator = sagittalContractValidator;
-    }
+  @Autowired
+  public AiModelSyncController(
+      AiServiceOperations aiServiceClient,
+      RoleAuthorizationService authorizationService,
+      SagittalRealBaselineContractValidator sagittalContractValidator) {
+    this.aiServiceClient = aiServiceClient;
+    this.authorizationService = authorizationService;
+    this.sagittalContractValidator = sagittalContractValidator;
+  }
 
-    @PostMapping("/sync")
-    public Map<String, Object> sync(@RequestParam(defaultValue = "false") boolean force, HttpServletRequest request) {
-        authorizationService.requireAdmin(request, "models.sync");
-        Map<String, Object> response = aiServiceClient.syncModels(force);
-        if (sagittalContractValidator != null) {
-            sagittalContractValidator.validateSagittalSync(response);
-            response.put("sagittalReadyForRealInference", true);
-        }
-        response.putIfAbsent("proxiedByBackend", true);
-        response.putIfAbsent("humanReviewRequired", true);
-        response.putIfAbsent("notClinicalDiagnosis", true);
-        return response;
+  @PostMapping("/sync")
+  public Map<String, Object> sync(
+      @RequestParam(defaultValue = "false") boolean force, HttpServletRequest request) {
+    authorizationService.requireAdmin(request, "models.sync");
+    Map<String, Object> response = aiServiceClient.syncModels(force);
+    if (sagittalContractValidator != null) {
+      sagittalContractValidator.validateSagittalSync(response);
+      response.put("sagittalReadyForRealInference", true);
     }
+    response.putIfAbsent("proxiedByBackend", true);
+    response.putIfAbsent("humanReviewRequired", true);
+    response.putIfAbsent("notClinicalDiagnosis", true);
+    return response;
+  }
 }

@@ -10,5 +10,4 @@ public record AiMultiplanarV2RequestDto(
     String inferenceMode,
     Boolean allowContractFallback,
     AiMultiplanarV2PlanesRequestDto planes,
-    AiMultiplanarV2OptionsDto options
-) {}
+    AiMultiplanarV2OptionsDto options) {}

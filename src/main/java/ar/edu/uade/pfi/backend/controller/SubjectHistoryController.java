@@ -12,17 +12,22 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/subjects")
 public class SubjectHistoryController {
-    private final PatientHistoryService patientHistoryService;
-    private final ProfessionalAccessAuditService accessAuditService;
+  private final PatientHistoryService patientHistoryService;
+  private final ProfessionalAccessAuditService accessAuditService;
 
-    public SubjectHistoryController(PatientHistoryService patientHistoryService, ProfessionalAccessAuditService accessAuditService) {
-        this.patientHistoryService = patientHistoryService;
-        this.accessAuditService = accessAuditService;
-    }
+  public SubjectHistoryController(
+      PatientHistoryService patientHistoryService,
+      ProfessionalAccessAuditService accessAuditService) {
+    this.patientHistoryService = patientHistoryService;
+    this.accessAuditService = accessAuditService;
+  }
 
-    @GetMapping("/{subjectRef}/history")
-    public Map<String, Object> history(@PathVariable String subjectRef, HttpServletRequest request) {
-        accessAuditService.record(request, "access_subject_history", "Historial longitudinal de-identificado consultado subjectRef=" + subjectRef);
-        return patientHistoryService.history(subjectRef);
-    }
+  @GetMapping("/{subjectRef}/history")
+  public Map<String, Object> history(@PathVariable String subjectRef, HttpServletRequest request) {
+    accessAuditService.record(
+        request,
+        "access_subject_history",
+        "Historial longitudinal de-identificado consultado subjectRef=" + subjectRef);
+    return patientHistoryService.history(subjectRef);
+  }
 }

@@ -27,23 +27,22 @@ public record StudyRun(
     Instant reviewedAt,
     String comments,
     Instant createdAt,
-    Instant updatedAt
-) {
-    public StudyRun {
-        Objects.requireNonNull(id, "id");
-        Objects.requireNonNull(studyId, "studyId");
-        Objects.requireNonNull(multiplanarRunId, "multiplanarRunId");
-        Objects.requireNonNull(assets, "assets");
-        Objects.requireNonNull(metricsSnapshot, "metricsSnapshot");
-        Objects.requireNonNull(artifacts, "artifacts");
-        Objects.requireNonNull(status, "status");
-        Objects.requireNonNull(reviewStatus, "reviewStatus");
-        Objects.requireNonNull(reviewer, "reviewer");
-        Objects.requireNonNull(comments, "comments");
-        Objects.requireNonNull(createdAt, "createdAt");
-        Objects.requireNonNull(updatedAt, "updatedAt");
-        assets = Map.copyOf(assets);
-        metricsSnapshot = Map.copyOf(metricsSnapshot);
-        artifacts = List.copyOf(artifacts);
-    }
+    Instant updatedAt) {
+  public StudyRun {
+    Objects.requireNonNull(id, "id");
+    Objects.requireNonNull(studyId, "studyId");
+    Objects.requireNonNull(multiplanarRunId, "multiplanarRunId");
+    Objects.requireNonNull(assets, "assets");
+    Objects.requireNonNull(metricsSnapshot, "metricsSnapshot");
+    Objects.requireNonNull(artifacts, "artifacts");
+    Objects.requireNonNull(status, "status");
+    Objects.requireNonNull(reviewStatus, "reviewStatus");
+    Objects.requireNonNull(reviewer, "reviewer");
+    Objects.requireNonNull(comments, "comments");
+    Objects.requireNonNull(createdAt, "createdAt");
+    Objects.requireNonNull(updatedAt, "updatedAt");
+    assets = Map.copyOf(assets);
+    metricsSnapshot = Map.copyOf(metricsSnapshot);
+    artifacts = List.copyOf(artifacts);
+  }
 }
