@@ -14,5 +14,4 @@ public record ReviewExportResponseDto(
     Boolean rawImagesIncluded,
     Boolean humanReviewRequired,
     Boolean notClinicalDiagnosis,
-    Instant generatedAt
-) {}
+    Instant generatedAt) {}

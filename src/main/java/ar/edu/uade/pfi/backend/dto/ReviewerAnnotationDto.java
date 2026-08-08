@@ -7,10 +7,10 @@ import java.util.Map;
 /**
  * Wire shape of a reviewer annotation.
  *
- * <p>{@code id} and {@code createdAt} are echoed back rather than assigned by the
- * server: the reviewer's client creates annotations locally while reading and only
- * persists when they save, so the identity has to survive that round trip for the
- * client to reconcile what it already has on screen.
+ * <p>{@code id} and {@code createdAt} are echoed back rather than assigned by the server: the
+ * reviewer's client creates annotations locally while reading and only persists when they save, so
+ * the identity has to survive that round trip for the client to reconcile what it already has on
+ * screen.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record ReviewerAnnotationDto(
@@ -28,5 +28,4 @@ public record ReviewerAnnotationDto(
     String unit,
     String text,
     String author,
-    String createdAt
-) {}
+    String createdAt) {}

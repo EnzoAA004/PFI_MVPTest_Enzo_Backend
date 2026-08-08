@@ -9,5 +9,4 @@ public record AiWorkspaceQualityV2Dto(
     Integer maskCount,
     Integer landmarkCount,
     Integer measurementCount,
-    Map<String, AiPlaneQualityV2Dto> byPlane
-) {}
+    Map<String, AiPlaneQualityV2Dto> byPlane) {}

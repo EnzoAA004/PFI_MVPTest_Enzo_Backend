@@ -12,64 +12,101 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class AiEvaluationControllerTest {
-    @Test
-    void contractReturnsEvaluationShape() throws Exception {
-        MockMvc mvc = MockMvcBuilders.standaloneSetup(new AiEvaluationController(new FakeAi())).build();
+  @Test
+  void contractReturnsEvaluationShape() throws Exception {
+    MockMvc mvc = MockMvcBuilders.standaloneSetup(new AiEvaluationController(new FakeAi())).build();
 
-        mvc.perform(get("/api/ai/evaluation/contract"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.status").value("evaluation_contract_ready"))
-            .andExpect(jsonPath("$.metrics[0].key").value("dice"))
-            .andExpect(jsonPath("$.metrics[0].category").value("segmentation"))
-            .andExpect(jsonPath("$.requiredEvidence[0]").value("trace_id"))
-            .andExpect(jsonPath("$.humanReviewRequired").value(true));
+    mvc.perform(get("/api/ai/evaluation/contract"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("evaluation_contract_ready"))
+        .andExpect(jsonPath("$.metrics[0].key").value("dice"))
+        .andExpect(jsonPath("$.metrics[0].category").value("segmentation"))
+        .andExpect(jsonPath("$.requiredEvidence[0]").value("trace_id"))
+        .andExpect(jsonPath("$.humanReviewRequired").value(true));
+  }
+
+  @Test
+  void summaryReturnsReportCount() throws Exception {
+    MockMvc mvc = MockMvcBuilders.standaloneSetup(new AiEvaluationController(new FakeAi())).build();
+
+    mvc.perform(get("/api/ai/evaluation/summary"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("evaluation_summary_ready"))
+        .andExpect(jsonPath("$.reportCount").value(1))
+        .andExpect(jsonPath("$.hasReports").value(true))
+        .andExpect(jsonPath("$.latestRunId").value("run-test"));
+  }
+
+  @Test
+  void fallbacksDoNotExposeInternalExceptionMessages() throws Exception {
+    MockMvc mvc =
+        MockMvcBuilders.standaloneSetup(new AiEvaluationController(new BrokenAi())).build();
+
+    mvc.perform(get("/api/ai/evaluation/contract"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.readiness.message").value("AI Module no disponible."))
+        .andExpect(
+            jsonPath("$.readiness.message")
+                .value(
+                    org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("ai-module.internal"))));
+
+    mvc.perform(get("/api/ai/evaluation/summary"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.reports.message").value("Reportes de evaluacion no disponibles."))
+        .andExpect(
+            jsonPath("$.reports.message")
+                .value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("C:\\"))));
+  }
+
+  static class FakeAi implements AiServiceOperations {
+    public Map<String, Object> health() {
+      return Map.of("status", "ok");
     }
 
-    @Test
-    void summaryReturnsReportCount() throws Exception {
-        MockMvc mvc = MockMvcBuilders.standaloneSetup(new AiEvaluationController(new FakeAi())).build();
-
-        mvc.perform(get("/api/ai/evaluation/summary"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.status").value("evaluation_summary_ready"))
-            .andExpect(jsonPath("$.reportCount").value(1))
-            .andExpect(jsonPath("$.hasReports").value(true))
-            .andExpect(jsonPath("$.latestRunId").value("run-test"));
+    public Map<String, Object> readiness() {
+      return Map.of("status", "contract_ready");
     }
 
-    @Test
-    void fallbacksDoNotExposeInternalExceptionMessages() throws Exception {
-        MockMvc mvc = MockMvcBuilders.standaloneSetup(new AiEvaluationController(new BrokenAi())).build();
-
-        mvc.perform(get("/api/ai/evaluation/contract"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.readiness.message").value("AI Module no disponible."))
-            .andExpect(jsonPath("$.readiness.message").value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("ai-module.internal"))));
-
-        mvc.perform(get("/api/ai/evaluation/summary"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.reports.message").value("Reportes de evaluacion no disponibles."))
-            .andExpect(jsonPath("$.reports.message").value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("C:\\"))));
+    public Object models() {
+      return Map.of("status", "ok");
     }
 
-    static class FakeAi implements AiServiceOperations {
-        public Map<String, Object> health() { return Map.of("status", "ok"); }
-        public Map<String, Object> readiness() { return Map.of("status", "contract_ready"); }
-        public Object models() { return Map.of("status", "ok"); }
-        public Map<String, Object> verifyModels() { return Map.of("status", "degraded_contract_mode"); }
-        public Map<String, Object> warmup() { return Map.of("status", "ok"); }
-        public Map<String, Object> runPipeline(ar.edu.uade.pfi.backend.dto.PipelineRunRequestDto request) { return Map.of("runId", "run-test"); }
-        public Map<String, Object> getAgentReport(String runId) { return Map.of("runId", runId); }
-        public Map<String, Object> getAgentReportSummary(String runId) { return Map.of("runId", runId); }
-        public Map<String, Object> getRecentAgentReports(int limit) { return Map.of("count", 1, "items", List.of(Map.of("runId", "run-test"))); }
+    public Map<String, Object> verifyModels() {
+      return Map.of("status", "degraded_contract_mode");
     }
 
-    static class BrokenAi extends FakeAi {
-        @Override public Map<String, Object> readiness() {
-            throw new RuntimeException("http://ai-module.internal:8000 refused C:\\secret\\stack");
-        }
-        @Override public Map<String, Object> getRecentAgentReports(int limit) {
-            throw new RuntimeException("http://ai-module.internal:8000 refused C:\\secret\\stack");
-        }
+    public Map<String, Object> warmup() {
+      return Map.of("status", "ok");
     }
+
+    public Map<String, Object> runPipeline(
+        ar.edu.uade.pfi.backend.dto.PipelineRunRequestDto request) {
+      return Map.of("runId", "run-test");
+    }
+
+    public Map<String, Object> getAgentReport(String runId) {
+      return Map.of("runId", runId);
+    }
+
+    public Map<String, Object> getAgentReportSummary(String runId) {
+      return Map.of("runId", runId);
+    }
+
+    public Map<String, Object> getRecentAgentReports(int limit) {
+      return Map.of("count", 1, "items", List.of(Map.of("runId", "run-test")));
+    }
+  }
+
+  static class BrokenAi extends FakeAi {
+    @Override
+    public Map<String, Object> readiness() {
+      throw new RuntimeException("http://ai-module.internal:8000 refused C:\\secret\\stack");
+    }
+
+    @Override
+    public Map<String, Object> getRecentAgentReports(int limit) {
+      throw new RuntimeException("http://ai-module.internal:8000 refused C:\\secret\\stack");
+    }
+  }
 }

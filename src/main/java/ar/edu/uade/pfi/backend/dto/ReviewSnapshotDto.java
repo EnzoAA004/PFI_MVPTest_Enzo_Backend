@@ -6,5 +6,4 @@ import java.util.Map;
 public record ReviewSnapshotDto(
     List<ReviewStatusDto> reviews,
     Map<String, List<MeasurementSaveDto>> measurementsByRunId,
-    List<AuditEventDto> auditTrail
-) {}
+    List<AuditEventDto> auditTrail) {}

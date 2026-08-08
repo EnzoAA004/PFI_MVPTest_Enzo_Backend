@@ -20,10 +20,8 @@ public record MultiplanarRunApiRequestDto(
     /**
      * Every series the uploaded study carried, as returned by the study upload.
      *
-     * <p>Optional: a run built from two per-plane uploads has no study behind it and
-     * sends nothing here. When present it is what lets the reading room show the
-     * series no model ran on.
+     * <p>Optional: a run built from two per-plane uploads has no study behind it and sends nothing
+     * here. When present it is what lets the reading room show the series no model ran on.
      */
     @Valid List<StudyUploadSeriesDto> studySeries,
-    Map<String, Object> metadata
-) {}
+    Map<String, Object> metadata) {}

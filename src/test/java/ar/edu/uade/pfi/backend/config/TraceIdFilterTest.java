@@ -24,143 +24,158 @@ import org.springframework.web.bind.annotation.RestController;
 
 class TraceIdFilterTest {
 
-    @Test
-    void keepsIncomingTraceIdAndReturnsItAsHeader() throws Exception {
-        MockMvc mockMvc = MockMvcBuilders
-            .standaloneSetup(new TestController())
+  @Test
+  void keepsIncomingTraceIdAndReturnsItAsHeader() throws Exception {
+    MockMvc mockMvc =
+        MockMvcBuilders.standaloneSetup(new TestController())
             .addFilters(new TraceIdFilter())
             .build();
 
-        mockMvc.perform(get("/test-trace").header(TraceIdFilter.TRACE_ID_HEADER, "demo-trace-123"))
-            .andExpect(status().isOk())
-            .andExpect(header().string(TraceIdFilter.TRACE_ID_HEADER, "demo-trace-123"));
-    }
+    mockMvc
+        .perform(get("/test-trace").header(TraceIdFilter.TRACE_ID_HEADER, "demo-trace-123"))
+        .andExpect(status().isOk())
+        .andExpect(header().string(TraceIdFilter.TRACE_ID_HEADER, "demo-trace-123"));
+  }
 
-    @Test
-    void generatesTraceIdWhenMissing() throws Exception {
-        MockMvc mockMvc = MockMvcBuilders
-            .standaloneSetup(new TestController())
+  @Test
+  void generatesTraceIdWhenMissing() throws Exception {
+    MockMvc mockMvc =
+        MockMvcBuilders.standaloneSetup(new TestController())
             .addFilters(new TraceIdFilter())
             .build();
 
-        mockMvc.perform(get("/test-trace"))
-            .andExpect(status().isOk())
-            .andExpect(result -> {
-                String traceId = result.getResponse().getHeader(TraceIdFilter.TRACE_ID_HEADER);
-                assertTrue(traceId != null && traceId.startsWith("trace-"));
+    mockMvc
+        .perform(get("/test-trace"))
+        .andExpect(status().isOk())
+        .andExpect(
+            result -> {
+              String traceId = result.getResponse().getHeader(TraceIdFilter.TRACE_ID_HEADER);
+              assertTrue(traceId != null && traceId.startsWith("trace-"));
             });
-    }
+  }
 
-    @Test
-    void invalidCharactersAreSanitizedNotRejected() throws Exception {
-        MockMvc mockMvc = MockMvcBuilders
-            .standaloneSetup(new TestController())
+  @Test
+  void invalidCharactersAreSanitizedNotRejected() throws Exception {
+    MockMvc mockMvc =
+        MockMvcBuilders.standaloneSetup(new TestController())
             .addFilters(new TraceIdFilter())
             .build();
 
-        mockMvc.perform(get("/test-trace").header(TraceIdFilter.TRACE_ID_HEADER, "trace with spaces/and*junk"))
-            .andExpect(status().isOk())
-            .andExpect(result -> {
-                String traceId = result.getResponse().getHeader(TraceIdFilter.TRACE_ID_HEADER);
-                assertTrue(traceId.matches("[a-zA-Z0-9._:-]+"));
+    mockMvc
+        .perform(
+            get("/test-trace").header(TraceIdFilter.TRACE_ID_HEADER, "trace with spaces/and*junk"))
+        .andExpect(status().isOk())
+        .andExpect(
+            result -> {
+              String traceId = result.getResponse().getHeader(TraceIdFilter.TRACE_ID_HEADER);
+              assertTrue(traceId.matches("[a-zA-Z0-9._:-]+"));
             });
-    }
+  }
 
-    @Test
-    void incomingTraceIdLongerThan96CharactersIsTruncated() throws Exception {
-        MockMvc mockMvc = MockMvcBuilders
-            .standaloneSetup(new TestController())
+  @Test
+  void incomingTraceIdLongerThan96CharactersIsTruncated() throws Exception {
+    MockMvc mockMvc =
+        MockMvcBuilders.standaloneSetup(new TestController())
             .addFilters(new TraceIdFilter())
             .build();
-        String tooLong = "a".repeat(200);
+    String tooLong = "a".repeat(200);
 
-        mockMvc.perform(get("/test-trace").header(TraceIdFilter.TRACE_ID_HEADER, tooLong))
-            .andExpect(status().isOk())
-            .andExpect(result -> {
-                String traceId = result.getResponse().getHeader(TraceIdFilter.TRACE_ID_HEADER);
-                assertEquals(96, traceId.length());
+    mockMvc
+        .perform(get("/test-trace").header(TraceIdFilter.TRACE_ID_HEADER, tooLong))
+        .andExpect(status().isOk())
+        .andExpect(
+            result -> {
+              String traceId = result.getResponse().getHeader(TraceIdFilter.TRACE_ID_HEADER);
+              assertEquals(96, traceId.length());
             });
-    }
+  }
 
-    @Test
-    void onlyWhitespaceOrPunctuationTraceIdFallsBackToGenerated() throws Exception {
-        MockMvc mockMvc = MockMvcBuilders
-            .standaloneSetup(new TestController())
-            .addFilters(new TraceIdFilter())
-            .build();
-
-        mockMvc.perform(get("/test-trace").header(TraceIdFilter.TRACE_ID_HEADER, "   "))
-            .andExpect(status().isOk())
-            .andExpect(result -> {
-                String traceId = result.getResponse().getHeader(TraceIdFilter.TRACE_ID_HEADER);
-                assertTrue(traceId.startsWith("trace-"));
-            });
-    }
-
-    @Test
-    void mdcIsClearedEvenWhenTheControllerThrows() throws Exception {
-        MockMvc mockMvc = MockMvcBuilders
-            .standaloneSetup(new TestController())
+  @Test
+  void onlyWhitespaceOrPunctuationTraceIdFallsBackToGenerated() throws Exception {
+    MockMvc mockMvc =
+        MockMvcBuilders.standaloneSetup(new TestController())
             .addFilters(new TraceIdFilter())
             .build();
 
-        try {
-            mockMvc.perform(get("/test-trace-throw").header(TraceIdFilter.TRACE_ID_HEADER, "trace-will-throw"));
-        } catch (Exception expected) {
-            // The controller deliberately throws; only the MDC-cleanup guarantee is under test here.
-        }
-
-        assertNull(MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY));
-    }
-
-    @Test
-    void concurrentRequestsDoNotContaminateEachOthersMdc() throws Exception {
-        TraceIdFilter filter = new TraceIdFilter();
-        int threadCount = 16;
-        ExecutorService pool = Executors.newFixedThreadPool(threadCount);
-        CountDownLatch ready = new CountDownLatch(threadCount);
-        CountDownLatch go = new CountDownLatch(1);
-        List<String> observed = new CopyOnWriteArrayList<>();
-
-        for (int i = 0; i < threadCount; i++) {
-            String expected = "trace-thread-" + i;
-            pool.submit(() -> {
-                try {
-                    ready.countDown();
-                    go.await();
-                    var request = new org.springframework.mock.web.MockHttpServletRequest("GET", "/x");
-                    request.addHeader(TraceIdFilter.TRACE_ID_HEADER, expected);
-                    var response = new org.springframework.mock.web.MockHttpServletResponse();
-                    filter.doFilter(request, response, (req, res) -> {
-                        observed.add(MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY));
-                    });
-                } catch (Exception ignored) {
-                    // best-effort concurrency probe
-                }
+    mockMvc
+        .perform(get("/test-trace").header(TraceIdFilter.TRACE_ID_HEADER, "   "))
+        .andExpect(status().isOk())
+        .andExpect(
+            result -> {
+              String traceId = result.getResponse().getHeader(TraceIdFilter.TRACE_ID_HEADER);
+              assertTrue(traceId.startsWith("trace-"));
             });
-        }
-        ready.await(5, TimeUnit.SECONDS);
-        go.countDown();
-        pool.shutdown();
-        pool.awaitTermination(10, TimeUnit.SECONDS);
+  }
 
-        assertEquals(threadCount, observed.size());
-        for (int i = 0; i < threadCount; i++) {
-            assertTrue(observed.contains("trace-thread-" + i));
-        }
-        assertNull(MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY));
+  @Test
+  void mdcIsClearedEvenWhenTheControllerThrows() throws Exception {
+    MockMvc mockMvc =
+        MockMvcBuilders.standaloneSetup(new TestController())
+            .addFilters(new TraceIdFilter())
+            .build();
+
+    try {
+      mockMvc.perform(
+          get("/test-trace-throw").header(TraceIdFilter.TRACE_ID_HEADER, "trace-will-throw"));
+    } catch (Exception expected) {
+      // The controller deliberately throws; only the MDC-cleanup guarantee is under test here.
     }
 
-    @RestController
-    static class TestController {
-        @GetMapping("/test-trace")
-        ResponseEntity<Map<String, Object>> testTrace() {
-            return ResponseEntity.ok(Map.of("status", "ok"));
-        }
+    assertNull(MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY));
+  }
 
-        @GetMapping("/test-trace-throw")
-        ResponseEntity<Map<String, Object>> testTraceThrow() {
-            throw new RuntimeException("boom");
-        }
+  @Test
+  void concurrentRequestsDoNotContaminateEachOthersMdc() throws Exception {
+    TraceIdFilter filter = new TraceIdFilter();
+    int threadCount = 16;
+    ExecutorService pool = Executors.newFixedThreadPool(threadCount);
+    CountDownLatch ready = new CountDownLatch(threadCount);
+    CountDownLatch go = new CountDownLatch(1);
+    List<String> observed = new CopyOnWriteArrayList<>();
+
+    for (int i = 0; i < threadCount; i++) {
+      String expected = "trace-thread-" + i;
+      pool.submit(
+          () -> {
+            try {
+              ready.countDown();
+              go.await();
+              var request = new org.springframework.mock.web.MockHttpServletRequest("GET", "/x");
+              request.addHeader(TraceIdFilter.TRACE_ID_HEADER, expected);
+              var response = new org.springframework.mock.web.MockHttpServletResponse();
+              filter.doFilter(
+                  request,
+                  response,
+                  (req, res) -> {
+                    observed.add(MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY));
+                  });
+            } catch (Exception ignored) {
+              // best-effort concurrency probe
+            }
+          });
     }
+    ready.await(5, TimeUnit.SECONDS);
+    go.countDown();
+    pool.shutdown();
+    pool.awaitTermination(10, TimeUnit.SECONDS);
+
+    assertEquals(threadCount, observed.size());
+    for (int i = 0; i < threadCount; i++) {
+      assertTrue(observed.contains("trace-thread-" + i));
+    }
+    assertNull(MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY));
+  }
+
+  @RestController
+  static class TestController {
+    @GetMapping("/test-trace")
+    ResponseEntity<Map<String, Object>> testTrace() {
+      return ResponseEntity.ok(Map.of("status", "ok"));
+    }
+
+    @GetMapping("/test-trace-throw")
+    ResponseEntity<Map<String, Object>> testTraceThrow() {
+      throw new RuntimeException("boom");
+    }
+  }
 }

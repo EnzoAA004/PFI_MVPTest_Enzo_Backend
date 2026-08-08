@@ -5,27 +5,27 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import java.util.Locale;
 
 public enum DegenerativeFindingSideV1 {
-    LEFT("left"),
-    RIGHT("right");
+  LEFT("left"),
+  RIGHT("right");
 
-    private final String wireValue;
+  private final String wireValue;
 
-    DegenerativeFindingSideV1(String wireValue) {
-        this.wireValue = wireValue;
+  DegenerativeFindingSideV1(String wireValue) {
+    this.wireValue = wireValue;
+  }
+
+  @JsonValue
+  public String wireValue() {
+    return wireValue;
+  }
+
+  @JsonCreator
+  public static DegenerativeFindingSideV1 fromJson(String value) {
+    if (value == null) return null;
+    String normalized = value.trim().toLowerCase(Locale.ROOT);
+    for (DegenerativeFindingSideV1 item : values()) {
+      if (item.wireValue.equals(normalized)) return item;
     }
-
-    @JsonValue
-    public String wireValue() {
-        return wireValue;
-    }
-
-    @JsonCreator
-    public static DegenerativeFindingSideV1 fromJson(String value) {
-        if (value == null) return null;
-        String normalized = value.trim().toLowerCase(Locale.ROOT);
-        for (DegenerativeFindingSideV1 item : values()) {
-            if (item.wireValue.equals(normalized)) return item;
-        }
-        throw new IllegalArgumentException("Unsupported degenerative finding side");
-    }
+    throw new IllegalArgumentException("Unsupported degenerative finding side");
+  }
 }

@@ -10,5 +10,4 @@ public record MeasurementSaveDto(
     String source,
     String status,
     Boolean outlier,
-    Boolean placeholder
-) {}
+    Boolean placeholder) {}

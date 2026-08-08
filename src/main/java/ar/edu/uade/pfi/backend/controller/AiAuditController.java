@@ -12,31 +12,30 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * System-wide audit trail search (arbitrary traceId/entityId lookups across all users
- * and cases) is an administrative capability, not a clinical/academic one, so it
- * requires ADMIN.
+ * System-wide audit trail search (arbitrary traceId/entityId lookups across all users and cases) is
+ * an administrative capability, not a clinical/academic one, so it requires ADMIN.
  */
 @RestController
 @RequestMapping("/api/ai/audit-events")
 public class AiAuditController {
-    private final AuditService auditService;
-    private final RoleAuthorizationService authorizationService;
+  private final AuditService auditService;
+  private final RoleAuthorizationService authorizationService;
 
-    @Autowired
-    public AiAuditController(AuditService auditService, RoleAuthorizationService authorizationService) {
-        this.auditService = auditService;
-        this.authorizationService = authorizationService;
-    }
+  @Autowired
+  public AiAuditController(
+      AuditService auditService, RoleAuthorizationService authorizationService) {
+    this.auditService = auditService;
+    this.authorizationService = authorizationService;
+  }
 
-    @GetMapping
-    public List<AuditEventResponseDto> findEvents(
-        @RequestParam(required = false) String traceId,
-        @RequestParam(required = false) String entityId,
-        HttpServletRequest request
-    ) {
-        authorizationService.requireAdmin(request, "audit.events");
-        if (traceId != null && !traceId.isBlank()) return auditService.findByTraceId(traceId);
-        if (entityId != null && !entityId.isBlank()) return auditService.findByEntityId(entityId);
-        return List.of();
-    }
+  @GetMapping
+  public List<AuditEventResponseDto> findEvents(
+      @RequestParam(required = false) String traceId,
+      @RequestParam(required = false) String entityId,
+      HttpServletRequest request) {
+    authorizationService.requireAdmin(request, "audit.events");
+    if (traceId != null && !traceId.isBlank()) return auditService.findByTraceId(traceId);
+    if (entityId != null && !entityId.isBlank()) return auditService.findByEntityId(entityId);
+    return List.of();
+  }
 }

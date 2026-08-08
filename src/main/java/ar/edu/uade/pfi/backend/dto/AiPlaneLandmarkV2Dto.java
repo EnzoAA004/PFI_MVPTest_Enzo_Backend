@@ -10,5 +10,4 @@ public record AiPlaneLandmarkV2Dto(
     Double y,
     Double confidence,
     String coordinateSpace,
-    String source
-) {}
+    String source) {}

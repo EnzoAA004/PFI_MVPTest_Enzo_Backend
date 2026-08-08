@@ -3,8 +3,8 @@ package ar.edu.uade.pfi.backend.repository;
 import ar.edu.uade.pfi.backend.domain.DomainAuditEvent;
 import ar.edu.uade.pfi.backend.domain.InputResource;
 import ar.edu.uade.pfi.backend.domain.MeasurementCorrection;
-import ar.edu.uade.pfi.backend.domain.RunArtifact;
 import ar.edu.uade.pfi.backend.domain.ReviewerAnnotation;
+import ar.edu.uade.pfi.backend.domain.RunArtifact;
 import ar.edu.uade.pfi.backend.domain.RunReview;
 import ar.edu.uade.pfi.backend.domain.Study;
 import ar.edu.uade.pfi.backend.domain.StudyRun;
@@ -22,172 +22,149 @@ import org.springframework.stereotype.Repository;
 @Repository
 @ConditionalOnProperty(name = "pfi.persistence.mode", havingValue = "memory", matchIfMissing = true)
 public class InMemoryStudyRepository implements StudyRepository {
-    private final ConcurrentMap<String, Study> studiesById = new ConcurrentHashMap<>();
-    private final ConcurrentMap<String, String> studyIdsByCaseId = new ConcurrentHashMap<>();
-    private final ConcurrentMap<String, InputResource> inputsById = new ConcurrentHashMap<>();
-    private final ConcurrentMap<String, StudyRun> runsById = new ConcurrentHashMap<>();
-    private final ConcurrentMap<String, String> runIdsByMultiplanarRunId = new ConcurrentHashMap<>();
-    private final ConcurrentMap<String, String> runIdsByTraceId = new ConcurrentHashMap<>();
-    private final ConcurrentMap<String, List<MeasurementCorrection>> correctionsByRunId = new ConcurrentHashMap<>();
-    private final ConcurrentMap<String, List<ReviewerAnnotation>> annotationsByRunId = new ConcurrentHashMap<>();
-    private final ConcurrentMap<String, DomainAuditEvent> auditEventsById = new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, Study> studiesById = new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, String> studyIdsByCaseId = new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, InputResource> inputsById = new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, StudyRun> runsById = new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, String> runIdsByMultiplanarRunId = new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, String> runIdsByTraceId = new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, List<MeasurementCorrection>> correctionsByRunId =
+      new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, List<ReviewerAnnotation>> annotationsByRunId =
+      new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, DomainAuditEvent> auditEventsById = new ConcurrentHashMap<>();
 
-    @Override
-    public Study saveStudy(Study study) {
-        studiesById.put(study.id(), study);
-        studyIdsByCaseId.put(study.caseId(), study.id());
-        return study;
-    }
+  @Override
+  public Study saveStudy(Study study) {
+    studiesById.put(study.id(), study);
+    studyIdsByCaseId.put(study.caseId(), study.id());
+    return study;
+  }
 
-    @Override
-    public InputResource saveInput(InputResource input) {
-        inputsById.put(input.id(), input);
-        return input;
-    }
+  @Override
+  public InputResource saveInput(InputResource input) {
+    inputsById.put(input.id(), input);
+    return input;
+  }
 
-    @Override
-    public StudyRun saveRun(StudyRun run) {
-        runsById.put(run.id(), run);
-        runIdsByMultiplanarRunId.put(run.multiplanarRunId(), run.id());
-        runIdsByTraceId.put(run.traceId(), run.id());
-        return run;
-    }
+  @Override
+  public StudyRun saveRun(StudyRun run) {
+    runsById.put(run.id(), run);
+    runIdsByMultiplanarRunId.put(run.multiplanarRunId(), run.id());
+    runIdsByTraceId.put(run.traceId(), run.id());
+    return run;
+  }
 
-    @Override
-    public List<Study> findAllStudies() {
-        return studiesById.values().stream()
-            .sorted(Comparator.comparing(Study::updatedAt).reversed())
-            .toList();
-    }
+  @Override
+  public List<Study> findAllStudies() {
+    return studiesById.values().stream()
+        .sorted(Comparator.comparing(Study::updatedAt).reversed())
+        .toList();
+  }
 
-    @Override
-    public Optional<Study> findStudyByCaseId(String caseId) {
-        return Optional.ofNullable(studyIdsByCaseId.get(caseId)).map(studiesById::get);
-    }
+  @Override
+  public Optional<Study> findStudyByCaseId(String caseId) {
+    return Optional.ofNullable(studyIdsByCaseId.get(caseId)).map(studiesById::get);
+  }
 
-    @Override
-    public List<Study> findStudiesBySubjectRef(String subjectRef) {
-        String normalized = subjectRef == null ? "" : subjectRef.trim();
-        return studiesById.values().stream()
-            .filter(study -> study.subjectRef() != null && study.subjectRef().equalsIgnoreCase(normalized))
-            .sorted(Comparator
-                .comparing((Study study) -> study.studyDate() == null)
+  @Override
+  public List<Study> findStudiesBySubjectRef(String subjectRef) {
+    String normalized = subjectRef == null ? "" : subjectRef.trim();
+    return studiesById.values().stream()
+        .filter(
+            study -> study.subjectRef() != null && study.subjectRef().equalsIgnoreCase(normalized))
+        .sorted(
+            Comparator.comparing((Study study) -> study.studyDate() == null)
                 .thenComparing(Study::studyDate, Comparator.nullsLast(Comparator.reverseOrder()))
                 .thenComparing(Study::createdAt, Comparator.reverseOrder()))
-            .toList();
-    }
+        .toList();
+  }
 
-    @Override
-    public List<InputResource> findInputsByStudyId(String studyId) {
-        List<InputResource> inputs = new ArrayList<>();
-        for (InputResource input : inputsById.values()) {
-            if (input.studyId().equals(studyId)) inputs.add(input);
+  @Override
+  public List<InputResource> findInputsByStudyId(String studyId) {
+    List<InputResource> inputs = new ArrayList<>();
+    for (InputResource input : inputsById.values()) {
+      if (input.studyId().equals(studyId)) inputs.add(input);
+    }
+    return inputs;
+  }
+
+  @Override
+  public List<StudyRun> findRunsByStudyId(String studyId) {
+    return runsById.values().stream()
+        .filter(run -> run.studyId().equals(studyId))
+        .sorted(Comparator.comparing(StudyRun::createdAt).reversed())
+        .toList();
+  }
+
+  @Override
+  public Optional<StudyRun> findLatestRunByStudyId(String studyId) {
+    return findRunsByStudyId(studyId).stream().findFirst();
+  }
+
+  @Override
+  public Optional<StudyRun> findRunByMultiplanarRunId(String multiplanarRunId) {
+    return Optional.ofNullable(runIdsByMultiplanarRunId.get(multiplanarRunId)).map(runsById::get);
+  }
+
+  @Override
+  public Optional<StudyRun> findRunByTraceId(String traceId) {
+    return Optional.ofNullable(runIdsByTraceId.get(traceId)).map(runsById::get);
+  }
+
+  @Override
+  public List<RunArtifact> findArtifactsByRunId(String studyRunId) {
+    return runsById.values().stream()
+        .filter(run -> run.id().equals(studyRunId))
+        .findFirst()
+        .map(StudyRun::artifacts)
+        .orElse(List.of());
+  }
+
+  @Override
+  public Optional<RunArtifact> findArtifactByRunPlaneAndName(
+      String runId, String plane, String assetName) {
+    return runsById.values().stream()
+        .flatMap(run -> run.artifacts().stream())
+        .filter(
+            artifact ->
+                artifact.runId().equals(runId)
+                    && artifact.plane().equals(plane)
+                    && artifact.assetName().equals(assetName))
+        .findFirst();
+  }
+
+  @Override
+  public RunArtifact updateArtifactStorage(
+      String artifactId, String storageStatus, String storageKind, Long sizeBytes, String sha256) {
+    for (StudyRun run : runsById.values()) {
+      List<RunArtifact> updatedArtifacts = new ArrayList<>();
+      RunArtifact updated = null;
+      for (RunArtifact artifact : run.artifacts()) {
+        if (artifact.id().equals(artifactId)) {
+          updated =
+              new RunArtifact(
+                  artifact.id(),
+                  artifact.studyRunId(),
+                  artifact.runId(),
+                  artifact.plane(),
+                  artifact.assetName(),
+                  artifact.contentType(),
+                  artifact.artifactRef(),
+                  artifact.createdAt(),
+                  storageStatus,
+                  storageKind,
+                  sizeBytes,
+                  sha256);
+          updatedArtifacts.add(updated);
+        } else {
+          updatedArtifacts.add(artifact);
         }
-        return inputs;
-    }
-
-    @Override
-    public List<StudyRun> findRunsByStudyId(String studyId) {
-        return runsById.values().stream()
-            .filter(run -> run.studyId().equals(studyId))
-            .sorted(Comparator.comparing(StudyRun::createdAt).reversed())
-            .toList();
-    }
-
-    @Override
-    public Optional<StudyRun> findLatestRunByStudyId(String studyId) {
-        return findRunsByStudyId(studyId).stream().findFirst();
-    }
-
-    @Override
-    public Optional<StudyRun> findRunByMultiplanarRunId(String multiplanarRunId) {
-        return Optional.ofNullable(runIdsByMultiplanarRunId.get(multiplanarRunId)).map(runsById::get);
-    }
-
-    @Override
-    public Optional<StudyRun> findRunByTraceId(String traceId) {
-        return Optional.ofNullable(runIdsByTraceId.get(traceId)).map(runsById::get);
-    }
-
-    @Override
-    public List<RunArtifact> findArtifactsByRunId(String studyRunId) {
-        return runsById.values().stream()
-            .filter(run -> run.id().equals(studyRunId))
-            .findFirst()
-            .map(StudyRun::artifacts)
-            .orElse(List.of());
-    }
-
-    @Override
-    public Optional<RunArtifact> findArtifactByRunPlaneAndName(String runId, String plane, String assetName) {
-        return runsById.values().stream()
-            .flatMap(run -> run.artifacts().stream())
-            .filter(artifact -> artifact.runId().equals(runId) && artifact.plane().equals(plane) && artifact.assetName().equals(assetName))
-            .findFirst();
-    }
-
-    @Override
-    public RunArtifact updateArtifactStorage(String artifactId, String storageStatus, String storageKind, Long sizeBytes, String sha256) {
-        for (StudyRun run : runsById.values()) {
-            List<RunArtifact> updatedArtifacts = new ArrayList<>();
-            RunArtifact updated = null;
-            for (RunArtifact artifact : run.artifacts()) {
-                if (artifact.id().equals(artifactId)) {
-                    updated = new RunArtifact(
-                        artifact.id(),
-                        artifact.studyRunId(),
-                        artifact.runId(),
-                        artifact.plane(),
-                        artifact.assetName(),
-                        artifact.contentType(),
-                        artifact.artifactRef(),
-                        artifact.createdAt(),
-                        storageStatus,
-                        storageKind,
-                        sizeBytes,
-                        sha256
-                    );
-                    updatedArtifacts.add(updated);
-                } else {
-                    updatedArtifacts.add(artifact);
-                }
-            }
-            if (updated != null) {
-                runsById.put(run.id(), new StudyRun(
-                    run.id(),
-                    run.studyId(),
-                    run.multiplanarRunId(),
-                    run.traceId(),
-                    run.requestedInferenceMode(),
-                    run.effectiveInferenceMode(),
-                    run.sagittalModelKey(),
-                    run.axialModelKey(),
-                    run.sagittalArtifactHash(),
-                    run.axialArtifactHash(),
-                    run.sagittalRunId(),
-                    run.axialRunId(),
-                    run.assets(),
-                    run.metricsSnapshot(),
-                    updatedArtifacts,
-                    run.status(),
-                    run.reviewStatus(),
-                    run.reviewer(),
-                    run.reviewedAt(),
-                    run.comments(),
-                    run.createdAt(),
-                    run.updatedAt()
-                ));
-                return updated;
-            }
-        }
-        throw new IllegalArgumentException("Artifact not found");
-    }
-
-    @Override
-    public StudyRun updateRunMetricsSnapshot(String multiplanarRunId, Map<String, Object> metricsSnapshot) {
-        for (StudyRun run : runsById.values()) {
-            if (!run.multiplanarRunId().equals(multiplanarRunId)) continue;
-            StudyRun updated = new StudyRun(
+      }
+      if (updated != null) {
+        runsById.put(
+            run.id(),
+            new StudyRun(
                 run.id(),
                 run.studyId(),
                 run.multiplanarRunId(),
@@ -201,32 +178,81 @@ public class InMemoryStudyRepository implements StudyRepository {
                 run.sagittalRunId(),
                 run.axialRunId(),
                 run.assets(),
-                metricsSnapshot,
-                run.artifacts(),
+                run.metricsSnapshot(),
+                updatedArtifacts,
                 run.status(),
                 run.reviewStatus(),
                 run.reviewer(),
                 run.reviewedAt(),
                 run.comments(),
                 run.createdAt(),
-                run.updatedAt()
-            );
-            runsById.put(run.id(), updated);
-            return updated;
-        }
-        throw new IllegalArgumentException("Run not found");
+                run.updatedAt()));
+        return updated;
+      }
     }
+    throw new IllegalArgumentException("Artifact not found");
+  }
 
-    @Override
-    public RunReview saveReview(String multiplanarRunId, String reviewStatus, String reviewer, Instant reviewedAt, String comments, List<MeasurementCorrection> corrections) {
-        return saveReview(multiplanarRunId, reviewStatus, reviewer, reviewedAt, comments, corrections, null);
+  @Override
+  public StudyRun updateRunMetricsSnapshot(
+      String multiplanarRunId, Map<String, Object> metricsSnapshot) {
+    for (StudyRun run : runsById.values()) {
+      if (!run.multiplanarRunId().equals(multiplanarRunId)) continue;
+      StudyRun updated =
+          new StudyRun(
+              run.id(),
+              run.studyId(),
+              run.multiplanarRunId(),
+              run.traceId(),
+              run.requestedInferenceMode(),
+              run.effectiveInferenceMode(),
+              run.sagittalModelKey(),
+              run.axialModelKey(),
+              run.sagittalArtifactHash(),
+              run.axialArtifactHash(),
+              run.sagittalRunId(),
+              run.axialRunId(),
+              run.assets(),
+              metricsSnapshot,
+              run.artifacts(),
+              run.status(),
+              run.reviewStatus(),
+              run.reviewer(),
+              run.reviewedAt(),
+              run.comments(),
+              run.createdAt(),
+              run.updatedAt());
+      runsById.put(run.id(), updated);
+      return updated;
     }
+    throw new IllegalArgumentException("Run not found");
+  }
 
-    @Override
-    public RunReview saveReview(String multiplanarRunId, String reviewStatus, String reviewer, Instant reviewedAt, String comments, List<MeasurementCorrection> corrections, DomainAuditEvent auditEvent) {
-        StudyRun existing = findRunByMultiplanarRunId(multiplanarRunId).orElseThrow();
-        Instant updatedAt = reviewedAt == null ? Instant.now() : reviewedAt;
-        StudyRun updated = new StudyRun(
+  @Override
+  public RunReview saveReview(
+      String multiplanarRunId,
+      String reviewStatus,
+      String reviewer,
+      Instant reviewedAt,
+      String comments,
+      List<MeasurementCorrection> corrections) {
+    return saveReview(
+        multiplanarRunId, reviewStatus, reviewer, reviewedAt, comments, corrections, null);
+  }
+
+  @Override
+  public RunReview saveReview(
+      String multiplanarRunId,
+      String reviewStatus,
+      String reviewer,
+      Instant reviewedAt,
+      String comments,
+      List<MeasurementCorrection> corrections,
+      DomainAuditEvent auditEvent) {
+    StudyRun existing = findRunByMultiplanarRunId(multiplanarRunId).orElseThrow();
+    Instant updatedAt = reviewedAt == null ? Instant.now() : reviewedAt;
+    StudyRun updated =
+        new StudyRun(
             existing.id(),
             existing.studyId(),
             existing.multiplanarRunId(),
@@ -248,73 +274,82 @@ public class InMemoryStudyRepository implements StudyRepository {
             reviewedAt,
             comments,
             existing.createdAt(),
-            updatedAt
-        );
-        saveRun(updated);
-        correctionsByRunId.put(existing.id(), List.copyOf(corrections));
-        if (auditEvent != null) saveAuditEvent(auditEvent);
-        return new RunReview(multiplanarRunId, existing.traceId(), reviewStatus, reviewer, reviewedAt, comments, corrections);
-    }
+            updatedAt);
+    saveRun(updated);
+    correctionsByRunId.put(existing.id(), List.copyOf(corrections));
+    if (auditEvent != null) saveAuditEvent(auditEvent);
+    return new RunReview(
+        multiplanarRunId,
+        existing.traceId(),
+        reviewStatus,
+        reviewer,
+        reviewedAt,
+        comments,
+        corrections);
+  }
 
-    @Override
-    public Optional<RunReview> findReviewByMultiplanarRunId(String multiplanarRunId) {
-        return findRunByMultiplanarRunId(multiplanarRunId)
-            .map(run -> new RunReview(
-                run.multiplanarRunId(),
-                run.traceId(),
-                run.reviewStatus(),
-                run.reviewer(),
-                run.reviewedAt(),
-                run.comments(),
-                correctionsByRunId.getOrDefault(run.id(), List.of())
-            ));
-    }
+  @Override
+  public Optional<RunReview> findReviewByMultiplanarRunId(String multiplanarRunId) {
+    return findRunByMultiplanarRunId(multiplanarRunId)
+        .map(
+            run ->
+                new RunReview(
+                    run.multiplanarRunId(),
+                    run.traceId(),
+                    run.reviewStatus(),
+                    run.reviewer(),
+                    run.reviewedAt(),
+                    run.comments(),
+                    correctionsByRunId.getOrDefault(run.id(), List.of())));
+  }
 
-    @Override
-    public List<MeasurementCorrection> findCorrectionsByStudyRunId(String studyRunId) {
-        return correctionsByRunId.getOrDefault(studyRunId, List.of());
-    }
+  @Override
+  public List<MeasurementCorrection> findCorrectionsByStudyRunId(String studyRunId) {
+    return correctionsByRunId.getOrDefault(studyRunId, List.of());
+  }
 
-    @Override
-    public List<ReviewerAnnotation> replaceAnnotations(String multiplanarRunId, List<ReviewerAnnotation> annotations) {
-        StudyRun run = findRunByMultiplanarRunId(multiplanarRunId).orElseThrow();
-        List<ReviewerAnnotation> stored = List.copyOf(annotations);
-        annotationsByRunId.put(run.id(), stored);
-        return stored;
-    }
+  @Override
+  public List<ReviewerAnnotation> replaceAnnotations(
+      String multiplanarRunId, List<ReviewerAnnotation> annotations) {
+    StudyRun run = findRunByMultiplanarRunId(multiplanarRunId).orElseThrow();
+    List<ReviewerAnnotation> stored = List.copyOf(annotations);
+    annotationsByRunId.put(run.id(), stored);
+    return stored;
+  }
 
-    @Override
-    public List<ReviewerAnnotation> findAnnotationsByRunId(String multiplanarRunId) {
-        return findRunByMultiplanarRunId(multiplanarRunId)
-            .map(run -> annotationsByRunId.getOrDefault(run.id(), List.<ReviewerAnnotation>of()))
-            .orElse(List.of());
-    }
+  @Override
+  public List<ReviewerAnnotation> findAnnotationsByRunId(String multiplanarRunId) {
+    return findRunByMultiplanarRunId(multiplanarRunId)
+        .map(run -> annotationsByRunId.getOrDefault(run.id(), List.<ReviewerAnnotation>of()))
+        .orElse(List.of());
+  }
 
-    @Override
-    public DomainAuditEvent saveAuditEvent(DomainAuditEvent event) {
-        auditEventsById.put(event.id(), event);
-        return event;
-    }
+  @Override
+  public DomainAuditEvent saveAuditEvent(DomainAuditEvent event) {
+    auditEventsById.put(event.id(), event);
+    return event;
+  }
 
-    @Override
-    public List<DomainAuditEvent> findAuditEventsByTraceId(String traceId) {
-        return auditEventsById.values().stream()
-            .filter(event -> event.traceId().equals(traceId))
-            .toList();
-    }
+  @Override
+  public List<DomainAuditEvent> findAuditEventsByTraceId(String traceId) {
+    return auditEventsById.values().stream()
+        .filter(event -> event.traceId().equals(traceId))
+        .toList();
+  }
 
-    @Override
-    public List<DomainAuditEvent> findAuditEventsByEntityId(String entityId) {
-        return auditEventsById.values().stream()
-            .filter(event -> event.entityId().equals(entityId))
-            .toList();
-    }
+  @Override
+  public List<DomainAuditEvent> findAuditEventsByEntityId(String entityId) {
+    return auditEventsById.values().stream()
+        .filter(event -> event.entityId().equals(entityId))
+        .toList();
+  }
 
-    @Override
-    public List<DomainAuditEvent> findAuditEventsByStudyId(String studyId) {
-        List<String> runIds = findRunsByStudyId(studyId).stream().map(StudyRun::multiplanarRunId).toList();
-        return auditEventsById.values().stream()
-            .filter(event -> runIds.contains(event.entityId()) || studyId.equals(event.entityId()))
-            .toList();
-    }
+  @Override
+  public List<DomainAuditEvent> findAuditEventsByStudyId(String studyId) {
+    List<String> runIds =
+        findRunsByStudyId(studyId).stream().map(StudyRun::multiplanarRunId).toList();
+    return auditEventsById.values().stream()
+        .filter(event -> runIds.contains(event.entityId()) || studyId.equals(event.entityId()))
+        .toList();
+  }
 }

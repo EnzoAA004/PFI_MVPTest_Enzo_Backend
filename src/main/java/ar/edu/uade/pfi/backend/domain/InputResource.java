@@ -22,28 +22,34 @@ public record InputResource(
     /**
      * Whether this series could be the input of an inference run.
      *
-     * <p>False covers three reasons that look the same on screen and are not: there is
-     * no model for its weighting (axial T1), it is not a single-plane volume (a
-     * localizer), or it is not acquired data (a console capture).
+     * <p>False covers three reasons that look the same on screen and are not: there is no model for
+     * its weighting (axial T1), it is not a single-plane volume (a localizer), or it is not
+     * acquired data (a console capture).
      */
     boolean analyzable,
-    Instant createdAt
-) {
-    /** Pre-BE-015 shape: the two analysed planes, before the study kept every series. */
-    public InputResource(String id, String studyId, String plane, String inputId, String format, long size, Instant createdAt) {
-        this(id, studyId, plane, inputId, format, size, "", "", 0, false, false, true, createdAt);
-    }
+    Instant createdAt) {
+  /** Pre-BE-015 shape: the two analysed planes, before the study kept every series. */
+  public InputResource(
+      String id,
+      String studyId,
+      String plane,
+      String inputId,
+      String format,
+      long size,
+      Instant createdAt) {
+    this(id, studyId, plane, inputId, format, size, "", "", 0, false, false, true, createdAt);
+  }
 
-    public InputResource {
-        Objects.requireNonNull(id, "id");
-        Objects.requireNonNull(studyId, "studyId");
-        Objects.requireNonNull(plane, "plane");
-        Objects.requireNonNull(inputId, "inputId");
-        Objects.requireNonNull(format, "format");
-        Objects.requireNonNull(createdAt, "createdAt");
-        if (description == null) description = "";
-        if (weighting == null) weighting = "";
-        if (size < 0) throw new IllegalArgumentException("size must be non-negative");
-        if (sliceCount < 0) throw new IllegalArgumentException("sliceCount must be non-negative");
-    }
+  public InputResource {
+    Objects.requireNonNull(id, "id");
+    Objects.requireNonNull(studyId, "studyId");
+    Objects.requireNonNull(plane, "plane");
+    Objects.requireNonNull(inputId, "inputId");
+    Objects.requireNonNull(format, "format");
+    Objects.requireNonNull(createdAt, "createdAt");
+    if (description == null) description = "";
+    if (weighting == null) weighting = "";
+    if (size < 0) throw new IllegalArgumentException("size must be non-negative");
+    if (sliceCount < 0) throw new IllegalArgumentException("sliceCount must be non-negative");
+  }
 }
