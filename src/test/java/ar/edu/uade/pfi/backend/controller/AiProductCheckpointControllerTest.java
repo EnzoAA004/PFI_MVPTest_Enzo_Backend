@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -22,72 +21,80 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 /**
- * P10.9 hardening: {@code classification.probabilities} is needed internally (upstream
- * contract validation, traceability, persistence, audit) but must never reach the public
- * POST response. {@code DiscDegenerativeFindingsPersistenceService} is mocked here, not
- * exercised, so this test only proves what the controller returns to a caller -- the
- * persistence contract itself is covered by DiscDegenerativeFindingsPersistenceServiceTest.
+ * P10.9 hardening: {@code classification.probabilities} is needed internally (upstream contract
+ * validation, traceability, persistence, audit) but must never reach the public POST response.
+ * {@code DiscDegenerativeFindingsPersistenceService} is mocked here, not exercised, so this test
+ * only proves what the controller returns to a caller -- the persistence contract itself is covered
+ * by DiscDegenerativeFindingsPersistenceServiceTest.
  */
 class AiProductCheckpointControllerTest {
-    private final ObjectMapper mapper = new ObjectMapper();
+  private final ObjectMapper mapper = new ObjectMapper();
 
-    @Test
-    void publicPredictDiscDegenerativeResponseNeverContainsProbabilitiesButKeepsLabelAndGovernance() throws Exception {
-        AiProductCheckpointClient client = mock(AiProductCheckpointClient.class);
-        DiscDegenerativeFindingsPersistenceService persistence = mock(DiscDegenerativeFindingsPersistenceService.class);
-        Map<String, Object> upstream = upstreamPredictionWithProbabilities();
-        when(client.predictDiscDegenerativeFromSegmentation(any())).thenReturn(upstream);
+  @Test
+  void publicPredictDiscDegenerativeResponseNeverContainsProbabilitiesButKeepsLabelAndGovernance()
+      throws Exception {
+    AiProductCheckpointClient client = mock(AiProductCheckpointClient.class);
+    DiscDegenerativeFindingsPersistenceService persistence =
+        mock(DiscDegenerativeFindingsPersistenceService.class);
+    Map<String, Object> upstream = upstreamPredictionWithProbabilities();
+    when(client.predictDiscDegenerativeFromSegmentation(any())).thenReturn(upstream);
 
-        AiProductCheckpointController controller = new AiProductCheckpointController(client, persistence);
-        DiscDegenerativeProductRequestDto request = new DiscDegenerativeProductRequestDto(
-            "multi-1", "CASE-1",
-            List.of(new DiscSegmentationSourceDto("sagittal_t2", "input-1", "seg-run-1"))
-        );
+    AiProductCheckpointController controller =
+        new AiProductCheckpointController(client, persistence);
+    DiscDegenerativeProductRequestDto request =
+        new DiscDegenerativeProductRequestDto(
+            "multi-1",
+            "CASE-1",
+            List.of(new DiscSegmentationSourceDto("sagittal_t2", "input-1", "seg-run-1")));
 
-        Map<String, Object> publicResponse = controller.predictDiscDegenerative(request);
+    Map<String, Object> publicResponse = controller.predictDiscDegenerative(request);
 
-        // Internal contract: persistence still receives the FULL upstream prediction,
-        // probabilities included -- persistImmutable's own validator requires them.
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<Map<String, Object>> persistedCaptor = ArgumentCaptor.forClass(Map.class);
-        verify(persistence).persistImmutable(eq("multi-1"), persistedCaptor.capture());
-        assertTrue(hasProbabilities(persistedCaptor.getValue()), "persistence must still receive probabilities");
+    // Internal contract: persistence still receives the FULL upstream prediction,
+    // probabilities included -- persistImmutable's own validator requires them.
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Map<String, Object>> persistedCaptor = ArgumentCaptor.forClass(Map.class);
+    verify(persistence).persistImmutable(eq("multi-1"), persistedCaptor.capture());
+    assertTrue(
+        hasProbabilities(persistedCaptor.getValue()),
+        "persistence must still receive probabilities");
 
-        // Public contract: the caller-facing response never carries probabilities.
-        assertFalse(hasProbabilities(publicResponse), "public POST response must not contain probabilities");
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> disc = (Map<String, Object>) publicResponse.get("discDegenerativeFindings");
-        @SuppressWarnings("unchecked")
-        Map<String, Object> finding = ((List<Map<String, Object>>) disc.get("findings")).get(0);
-        @SuppressWarnings("unchecked")
-        Map<String, Object> classification = (Map<String, Object>) finding.get("classification");
-        assertEquals("present", classification.get("label"));
-
-        assertEquals(true, publicResponse.get("humanReviewRequired"));
-        assertEquals(true, publicResponse.get("notClinicalDiagnosis"));
-        assertEquals(false, publicResponse.get("autonomousDiagnosis"));
-        @SuppressWarnings("unchecked")
-        Map<String, Object> persistenceStatus = (Map<String, Object>) publicResponse.get("persistence");
-        assertEquals("persisted_immutable", persistenceStatus.get("status"));
-    }
+    // Public contract: the caller-facing response never carries probabilities.
+    assertFalse(
+        hasProbabilities(publicResponse), "public POST response must not contain probabilities");
 
     @SuppressWarnings("unchecked")
-    private boolean hasProbabilities(Map<String, Object> response) {
-        Object disc = response.get("discDegenerativeFindings");
-        if (!(disc instanceof Map<?, ?> discMap)) return false;
-        Object findingsRaw = ((Map<String, Object>) discMap).get("findings");
-        if (!(findingsRaw instanceof List<?> findings)) return false;
-        for (Object item : findings) {
-            Map<String, Object> finding = (Map<String, Object>) item;
-            Object classification = finding.get("classification");
-            if (classification instanceof Map<?, ?> map && map.containsKey("probabilities")) return true;
-        }
-        return false;
-    }
+    Map<String, Object> disc = (Map<String, Object>) publicResponse.get("discDegenerativeFindings");
+    @SuppressWarnings("unchecked")
+    Map<String, Object> finding = ((List<Map<String, Object>>) disc.get("findings")).get(0);
+    @SuppressWarnings("unchecked")
+    Map<String, Object> classification = (Map<String, Object>) finding.get("classification");
+    assertEquals("present", classification.get("label"));
 
-    private Map<String, Object> upstreamPredictionWithProbabilities() throws Exception {
-        String json = """
+    assertEquals(true, publicResponse.get("humanReviewRequired"));
+    assertEquals(true, publicResponse.get("notClinicalDiagnosis"));
+    assertEquals(false, publicResponse.get("autonomousDiagnosis"));
+    @SuppressWarnings("unchecked")
+    Map<String, Object> persistenceStatus = (Map<String, Object>) publicResponse.get("persistence");
+    assertEquals("persisted_immutable", persistenceStatus.get("status"));
+  }
+
+  @SuppressWarnings("unchecked")
+  private boolean hasProbabilities(Map<String, Object> response) {
+    Object disc = response.get("discDegenerativeFindings");
+    if (!(disc instanceof Map<?, ?> discMap)) return false;
+    Object findingsRaw = ((Map<String, Object>) discMap).get("findings");
+    if (!(findingsRaw instanceof List<?> findings)) return false;
+    for (Object item : findings) {
+      Map<String, Object> finding = (Map<String, Object>) item;
+      Object classification = finding.get("classification");
+      if (classification instanceof Map<?, ?> map && map.containsKey("probabilities")) return true;
+    }
+    return false;
+  }
+
+  private Map<String, Object> upstreamPredictionWithProbabilities() throws Exception {
+    String json =
+        """
             {
               "discDegenerativeFindings": {
                 "schemaVersion": "pfi.disc-degenerative-findings.v1",
@@ -121,6 +128,6 @@ class AiProductCheckpointControllerTest {
               "autonomousDiagnosis": false
             }
             """;
-        return mapper.readValue(json, new TypeReference<Map<String, Object>>() {});
-    }
+    return mapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+  }
 }

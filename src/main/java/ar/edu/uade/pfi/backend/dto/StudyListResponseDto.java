@@ -10,5 +10,4 @@ public record StudyListResponseDto(
     List<StudyRowDto> items,
     Map<String, Object> summary,
     boolean humanReviewRequired,
-    boolean notClinicalDiagnosis
-) {}
+    boolean notClinicalDiagnosis) {}

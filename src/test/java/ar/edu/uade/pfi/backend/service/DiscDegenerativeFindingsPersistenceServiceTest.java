@@ -18,87 +18,91 @@ import org.junit.jupiter.api.Test;
 import org.springframework.web.server.ResponseStatusException;
 
 class DiscDegenerativeFindingsPersistenceServiceTest {
-    private final ObjectMapper mapper = new ObjectMapper();
+  private final ObjectMapper mapper = new ObjectMapper();
 
-    @Test
-    void persistsValidatedPredictionUnderDedicatedImmutableSnapshotKey() throws Exception {
-        StudyRunService runs = org.mockito.Mockito.mock(StudyRunService.class);
-        StudyRun run = run(Map.of("schemaVersion", "pfi.backend-run-snapshot.v2"));
-        when(runs.findRunByMultiplanarRunId("multi-1")).thenReturn(Optional.of(run));
-        when(runs.updateRunMetricsSnapshot(eq("multi-1"), org.mockito.ArgumentMatchers.anyMap()))
-            .thenAnswer(invocation -> run(invocation.getArgument(1)));
+  @Test
+  void persistsValidatedPredictionUnderDedicatedImmutableSnapshotKey() throws Exception {
+    StudyRunService runs = org.mockito.Mockito.mock(StudyRunService.class);
+    StudyRun run = run(Map.of("schemaVersion", "pfi.backend-run-snapshot.v2"));
+    when(runs.findRunByMultiplanarRunId("multi-1")).thenReturn(Optional.of(run));
+    when(runs.updateRunMetricsSnapshot(eq("multi-1"), org.mockito.ArgumentMatchers.anyMap()))
+        .thenAnswer(invocation -> run(invocation.getArgument(1)));
 
-        DiscDegenerativeFindingsPersistenceService service = new DiscDegenerativeFindingsPersistenceService(runs);
-        Map<String, Object> updated = service.persistImmutable("multi-1", validResponse());
+    DiscDegenerativeFindingsPersistenceService service =
+        new DiscDegenerativeFindingsPersistenceService(runs);
+    Map<String, Object> updated = service.persistImmutable("multi-1", validResponse());
 
-        assertEquals("pfi.backend-run-snapshot.v2", updated.get("schemaVersion"));
-        assertEquals(true, updated.containsKey("discDegenerativeFindings"));
-        assertEquals(true, updated.containsKey("discDegenerativeGovernance"));
-        verify(runs).updateRunMetricsSnapshot(eq("multi-1"), org.mockito.ArgumentMatchers.anyMap());
-    }
+    assertEquals("pfi.backend-run-snapshot.v2", updated.get("schemaVersion"));
+    assertEquals(true, updated.containsKey("discDegenerativeFindings"));
+    assertEquals(true, updated.containsKey("discDegenerativeGovernance"));
+    verify(runs).updateRunMetricsSnapshot(eq("multi-1"), org.mockito.ArgumentMatchers.anyMap());
+  }
 
-    @Test
-    void identicalRetryIsIdempotent() throws Exception {
-        StudyRunService runs = org.mockito.Mockito.mock(StudyRunService.class);
-        Map<String, Object> response = validResponse();
-        @SuppressWarnings("unchecked")
-        Map<String, Object> disc = (Map<String, Object>) response.get("discDegenerativeFindings");
-        StudyRun run = run(Map.of("discDegenerativeFindings", disc));
-        when(runs.findRunByMultiplanarRunId("multi-1")).thenReturn(Optional.of(run));
+  @Test
+  void identicalRetryIsIdempotent() throws Exception {
+    StudyRunService runs = org.mockito.Mockito.mock(StudyRunService.class);
+    Map<String, Object> response = validResponse();
+    @SuppressWarnings("unchecked")
+    Map<String, Object> disc = (Map<String, Object>) response.get("discDegenerativeFindings");
+    StudyRun run = run(Map.of("discDegenerativeFindings", disc));
+    when(runs.findRunByMultiplanarRunId("multi-1")).thenReturn(Optional.of(run));
 
-        DiscDegenerativeFindingsPersistenceService service = new DiscDegenerativeFindingsPersistenceService(runs);
-        service.persistImmutable("multi-1", response);
+    DiscDegenerativeFindingsPersistenceService service =
+        new DiscDegenerativeFindingsPersistenceService(runs);
+    service.persistImmutable("multi-1", response);
 
-        verify(runs, never()).updateRunMetricsSnapshot(eq("multi-1"), org.mockito.ArgumentMatchers.anyMap());
-    }
+    verify(runs, never())
+        .updateRunMetricsSnapshot(eq("multi-1"), org.mockito.ArgumentMatchers.anyMap());
+  }
 
-    @Test
-    void rejectsDifferentSecondPrediction() throws Exception {
-        StudyRunService runs = org.mockito.Mockito.mock(StudyRunService.class);
-        Map<String, Object> first = validResponse();
-        @SuppressWarnings("unchecked")
-        Map<String, Object> disc = (Map<String, Object>) first.get("discDegenerativeFindings");
-        StudyRun run = run(Map.of("discDegenerativeFindings", disc));
-        when(runs.findRunByMultiplanarRunId("multi-1")).thenReturn(Optional.of(run));
+  @Test
+  void rejectsDifferentSecondPrediction() throws Exception {
+    StudyRunService runs = org.mockito.Mockito.mock(StudyRunService.class);
+    Map<String, Object> first = validResponse();
+    @SuppressWarnings("unchecked")
+    Map<String, Object> disc = (Map<String, Object>) first.get("discDegenerativeFindings");
+    StudyRun run = run(Map.of("discDegenerativeFindings", disc));
+    when(runs.findRunByMultiplanarRunId("multi-1")).thenReturn(Optional.of(run));
 
-        Map<String, Object> second = validResponse();
-        @SuppressWarnings("unchecked")
-        Map<String, Object> secondDisc = (Map<String, Object>) second.get("discDegenerativeFindings");
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> findings = (List<Map<String, Object>>) secondDisc.get("findings");
-        findings.get(0).put("findingId", "different-id");
+    Map<String, Object> second = validResponse();
+    @SuppressWarnings("unchecked")
+    Map<String, Object> secondDisc = (Map<String, Object>) second.get("discDegenerativeFindings");
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> findings = (List<Map<String, Object>>) secondDisc.get("findings");
+    findings.get(0).put("findingId", "different-id");
 
-        DiscDegenerativeFindingsPersistenceService service = new DiscDegenerativeFindingsPersistenceService(runs);
-        ResponseStatusException error = assertThrows(
-            ResponseStatusException.class,
-            () -> service.persistImmutable("multi-1", second)
-        );
-        assertEquals(409, error.getStatusCode().value());
-    }
+    DiscDegenerativeFindingsPersistenceService service =
+        new DiscDegenerativeFindingsPersistenceService(runs);
+    ResponseStatusException error =
+        assertThrows(
+            ResponseStatusException.class, () -> service.persistImmutable("multi-1", second));
+    assertEquals(409, error.getStatusCode().value());
+  }
 
-    @Test
-    void rejectsUnexpectedCheckpointHashAsBadGateway() throws Exception {
-        StudyRunService runs = org.mockito.Mockito.mock(StudyRunService.class);
-        when(runs.findRunByMultiplanarRunId("multi-1")).thenReturn(Optional.of(run(Map.of())));
-        Map<String, Object> response = validResponse();
-        @SuppressWarnings("unchecked")
-        Map<String, Object> disc = (Map<String, Object>) response.get("discDegenerativeFindings");
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> findings = (List<Map<String, Object>>) disc.get("findings");
-        @SuppressWarnings("unchecked")
-        Map<String, Object> model = (Map<String, Object>) findings.get(0).get("model");
-        model.put("modelSha256", "0".repeat(64));
+  @Test
+  void rejectsUnexpectedCheckpointHashAsBadGateway() throws Exception {
+    StudyRunService runs = org.mockito.Mockito.mock(StudyRunService.class);
+    when(runs.findRunByMultiplanarRunId("multi-1")).thenReturn(Optional.of(run(Map.of())));
+    Map<String, Object> response = validResponse();
+    @SuppressWarnings("unchecked")
+    Map<String, Object> disc = (Map<String, Object>) response.get("discDegenerativeFindings");
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> findings = (List<Map<String, Object>>) disc.get("findings");
+    @SuppressWarnings("unchecked")
+    Map<String, Object> model = (Map<String, Object>) findings.get(0).get("model");
+    model.put("modelSha256", "0".repeat(64));
 
-        DiscDegenerativeFindingsPersistenceService service = new DiscDegenerativeFindingsPersistenceService(runs);
-        ResponseStatusException error = assertThrows(
-            ResponseStatusException.class,
-            () -> service.persistImmutable("multi-1", response)
-        );
-        assertEquals(502, error.getStatusCode().value());
-    }
+    DiscDegenerativeFindingsPersistenceService service =
+        new DiscDegenerativeFindingsPersistenceService(runs);
+    ResponseStatusException error =
+        assertThrows(
+            ResponseStatusException.class, () -> service.persistImmutable("multi-1", response));
+    assertEquals(502, error.getStatusCode().value());
+  }
 
-    private Map<String, Object> validResponse() throws Exception {
-        String json = """
+  private Map<String, Object> validResponse() throws Exception {
+    String json =
+        """
             {
               "discDegenerativeFindings": {
                 "schemaVersion": "pfi.disc-degenerative-findings.v1",
@@ -136,16 +140,33 @@ class DiscDegenerativeFindingsPersistenceServiceTest {
               "autonomousDiagnosis": false
             }
             """;
-        return mapper.readValue(json, new TypeReference<Map<String, Object>>() {});
-    }
+    return mapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+  }
 
-    private StudyRun run(Map<String, Object> snapshot) {
-        Instant now = Instant.parse("2026-08-07T00:00:00Z");
-        return new StudyRun(
-            "run-db-1", "study-1", "multi-1", "trace-1",
-            "real_baseline", "real_baseline", "sagittal_spider", "axial_t2_alkafri",
-            "", "", "sag-run", "ax-run", Map.of(), snapshot, List.of(),
-            "completed", "pending", "", null, "", now, now
-        );
-    }
+  private StudyRun run(Map<String, Object> snapshot) {
+    Instant now = Instant.parse("2026-08-07T00:00:00Z");
+    return new StudyRun(
+        "run-db-1",
+        "study-1",
+        "multi-1",
+        "trace-1",
+        "real_baseline",
+        "real_baseline",
+        "sagittal_spider",
+        "axial_t2_alkafri",
+        "",
+        "",
+        "sag-run",
+        "ax-run",
+        Map.of(),
+        snapshot,
+        List.of(),
+        "completed",
+        "pending",
+        "",
+        null,
+        "",
+        now,
+        now);
+  }
 }

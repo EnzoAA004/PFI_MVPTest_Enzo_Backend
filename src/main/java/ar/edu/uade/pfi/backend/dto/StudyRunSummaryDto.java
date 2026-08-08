@@ -1,7 +1,6 @@
 package ar.edu.uade.pfi.backend.dto;
 
 import java.util.List;
-import java.util.Map;
 
 public record StudyRunSummaryDto(
     String runId,
@@ -28,5 +27,4 @@ public record StudyRunSummaryDto(
     String updatedAt,
     boolean humanReviewRequired,
     boolean notClinicalDiagnosis,
-    String dataOrigin
-) {}
+    String dataOrigin) {}

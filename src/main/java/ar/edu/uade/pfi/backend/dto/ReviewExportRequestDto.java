@@ -14,5 +14,4 @@ public record ReviewExportRequestDto(
     String modelReadiness,
     String notes,
     String reviewer,
-    List<MeasurementSaveDto> measurements
-) {}
+    List<MeasurementSaveDto> measurements) {}

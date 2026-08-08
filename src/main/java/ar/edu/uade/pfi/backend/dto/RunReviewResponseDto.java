@@ -10,5 +10,4 @@ public record RunReviewResponseDto(
     String reviewer,
     Instant reviewedAt,
     String comments,
-    List<MeasurementCorrectionDto> corrections
-) {}
+    List<MeasurementCorrectionDto> corrections) {}

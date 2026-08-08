@@ -4,9 +4,4 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 @JsonIgnoreProperties(ignoreUnknown = false)
 public record AiPlaneAssetV2Dto(
-    String assetName,
-    String role,
-    String contentType,
-    Boolean generated,
-    String relativePath
-) {}
+    String assetName, String role, String contentType, Boolean generated, String relativePath) {}

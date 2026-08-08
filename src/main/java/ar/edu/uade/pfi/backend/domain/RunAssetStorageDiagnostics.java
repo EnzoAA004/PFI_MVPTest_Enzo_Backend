@@ -5,6 +5,4 @@ public record RunAssetStorageDiagnostics(
     boolean available,
     long storedAssetCount,
     long storedBytes,
-    long missingPayloadCount
-) {
-}
+    long missingPayloadCount) {}

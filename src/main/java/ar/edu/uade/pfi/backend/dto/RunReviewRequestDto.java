@@ -9,5 +9,4 @@ public record RunReviewRequestDto(
     @NotBlank String reviewStatus,
     String reviewer,
     String comments,
-    List<MeasurementCorrectionDto> corrections
-) {}
+    List<MeasurementCorrectionDto> corrections) {}

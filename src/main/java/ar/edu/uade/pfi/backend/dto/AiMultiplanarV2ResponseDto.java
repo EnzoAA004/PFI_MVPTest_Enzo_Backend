@@ -23,5 +23,4 @@ public record AiMultiplanarV2ResponseDto(
     DegenerativeFindingsV1Dto degenerativeFindings,
     AiReviewPolicyV2Dto review,
     AiGovernanceV2Dto governance,
-    AiReadinessV2Dto readiness
-) {}
+    AiReadinessV2Dto readiness) {}

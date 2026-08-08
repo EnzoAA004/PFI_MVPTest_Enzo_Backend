@@ -14,18 +14,17 @@ public record Study(
     String description,
     String reviewPriority,
     Instant createdAt,
-    Instant updatedAt
-) {
-    public Study(String id, String caseId, String status, Instant createdAt, Instant updatedAt) {
-        this(id, caseId, status, null, null, null, null, "medium", createdAt, updatedAt);
-    }
+    Instant updatedAt) {
+  public Study(String id, String caseId, String status, Instant createdAt, Instant updatedAt) {
+    this(id, caseId, status, null, null, null, null, "medium", createdAt, updatedAt);
+  }
 
-    public Study {
-        Objects.requireNonNull(id, "id");
-        Objects.requireNonNull(caseId, "caseId");
-        Objects.requireNonNull(status, "status");
-        if (reviewPriority == null || reviewPriority.isBlank()) reviewPriority = "medium";
-        Objects.requireNonNull(createdAt, "createdAt");
-        Objects.requireNonNull(updatedAt, "updatedAt");
-    }
+  public Study {
+    Objects.requireNonNull(id, "id");
+    Objects.requireNonNull(caseId, "caseId");
+    Objects.requireNonNull(status, "status");
+    if (reviewPriority == null || reviewPriority.isBlank()) reviewPriority = "medium";
+    Objects.requireNonNull(createdAt, "createdAt");
+    Objects.requireNonNull(updatedAt, "updatedAt");
+  }
 }

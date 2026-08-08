@@ -19,59 +19,67 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class PostgresAuthStoreService {
-    private final String jdbcUrl;
-    private final boolean enabled;
+  private final String jdbcUrl;
+  private final boolean enabled;
 
-    public PostgresAuthStoreService(
-        @Value("${pfi.persistence.mode:memory}") String persistenceMode,
-        @Value("${pfi.database.url:${DATABASE_URL:}}") String databaseUrl
-    ) {
-        this.jdbcUrl = toJdbcUrl(databaseUrl == null ? "" : databaseUrl.trim());
-        this.enabled = "postgres".equalsIgnoreCase(persistenceMode) && !this.jdbcUrl.isBlank();
-        if (enabled) migrate();
-    }
+  public PostgresAuthStoreService(
+      @Value("${pfi.persistence.mode:memory}") String persistenceMode,
+      @Value("${pfi.database.url:${DATABASE_URL:}}") String databaseUrl) {
+    this.jdbcUrl = toJdbcUrl(databaseUrl == null ? "" : databaseUrl.trim());
+    this.enabled = "postgres".equalsIgnoreCase(persistenceMode) && !this.jdbcUrl.isBlank();
+    if (enabled) migrate();
+  }
 
-    public boolean enabled() {
-        return enabled;
-    }
+  public boolean enabled() {
+    return enabled;
+  }
 
-    public Optional<DoctorAccount> findByEmail(String email) {
-        if (!enabled) return Optional.empty();
-        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+  public Optional<DoctorAccount> findByEmail(String email) {
+    if (!enabled) return Optional.empty();
+    try (Connection connection = connection();
+        PreparedStatement statement =
+            connection.prepareStatement(
+                """
             SELECT id, full_name, email, password_hash, license_number, specialty, institution, roles, created_at, verified, approved, two_factor_enabled, onboarding_completed
             FROM doctor_accounts
             WHERE email = ?
             """)) {
-            statement.setString(1, email);
-            try (ResultSet rs = statement.executeQuery()) {
-                if (!rs.next()) return Optional.empty();
-                return Optional.of(readAccount(rs));
-            }
-        } catch (Exception ignored) {
-            return Optional.empty();
-        }
+      statement.setString(1, email);
+      try (ResultSet rs = statement.executeQuery()) {
+        if (!rs.next()) return Optional.empty();
+        return Optional.of(readAccount(rs));
+      }
+    } catch (Exception ignored) {
+      return Optional.empty();
     }
+  }
 
-    public List<DoctorAccount> listAccounts() {
-        if (!enabled) return List.of();
-        List<DoctorAccount> accounts = new ArrayList<>();
-        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+  public List<DoctorAccount> listAccounts() {
+    if (!enabled) return List.of();
+    List<DoctorAccount> accounts = new ArrayList<>();
+    try (Connection connection = connection();
+        PreparedStatement statement =
+            connection.prepareStatement(
+                """
             SELECT id, full_name, email, password_hash, license_number, specialty, institution, roles, created_at, verified, approved, two_factor_enabled, onboarding_completed
             FROM doctor_accounts
             ORDER BY created_at DESC
             """)) {
-            try (ResultSet rs = statement.executeQuery()) {
-                while (rs.next()) accounts.add(readAccount(rs));
-            }
-        } catch (Exception ignored) {
-            return List.of();
-        }
-        return accounts;
+      try (ResultSet rs = statement.executeQuery()) {
+        while (rs.next()) accounts.add(readAccount(rs));
+      }
+    } catch (Exception ignored) {
+      return List.of();
     }
+    return accounts;
+  }
 
-    public DoctorAccount saveAccount(DoctorAccount account) {
-        if (!enabled) return account;
-        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+  public DoctorAccount saveAccount(DoctorAccount account) {
+    if (!enabled) return account;
+    try (Connection connection = connection();
+        PreparedStatement statement =
+            connection.prepareStatement(
+                """
             INSERT INTO doctor_accounts(id, full_name, email, password_hash, license_number, specialty, institution, roles, created_at, verified, approved, two_factor_enabled, onboarding_completed, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now())
             ON CONFLICT (email) DO UPDATE SET
@@ -87,79 +95,92 @@ public class PostgresAuthStoreService {
               onboarding_completed = EXCLUDED.onboarding_completed,
               updated_at = now()
             """)) {
-            statement.setString(1, account.id());
-            statement.setString(2, account.fullName());
-            statement.setString(3, account.email());
-            statement.setString(4, account.passwordHash());
-            statement.setString(5, account.licenseNumber());
-            statement.setString(6, account.specialty());
-            statement.setString(7, account.institution());
-            statement.setString(8, String.join(",", account.roles()));
-            statement.setTimestamp(9, Timestamp.from(account.createdAt()));
-            statement.setBoolean(10, account.verified());
-            statement.setBoolean(11, account.approved());
-            statement.setBoolean(12, account.twoFactorEnabled());
-            statement.setBoolean(13, account.onboardingCompleted());
-            statement.executeUpdate();
-        } catch (Exception ignored) {
-            // Auth remains available through in-memory fallback.
-        }
-        return account;
+      statement.setString(1, account.id());
+      statement.setString(2, account.fullName());
+      statement.setString(3, account.email());
+      statement.setString(4, account.passwordHash());
+      statement.setString(5, account.licenseNumber());
+      statement.setString(6, account.specialty());
+      statement.setString(7, account.institution());
+      statement.setString(8, String.join(",", account.roles()));
+      statement.setTimestamp(9, Timestamp.from(account.createdAt()));
+      statement.setBoolean(10, account.verified());
+      statement.setBoolean(11, account.approved());
+      statement.setBoolean(12, account.twoFactorEnabled());
+      statement.setBoolean(13, account.onboardingCompleted());
+      statement.executeUpdate();
+    } catch (Exception ignored) {
+      // Auth remains available through in-memory fallback.
     }
+    return account;
+  }
 
-    public void markVerified(String email) {
-        if (!enabled) return;
-        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+  public void markVerified(String email) {
+    if (!enabled) return;
+    try (Connection connection = connection();
+        PreparedStatement statement =
+            connection.prepareStatement(
+                """
             UPDATE doctor_accounts SET verified = TRUE, updated_at = now() WHERE email = ?
             """)) {
-            statement.setString(1, email);
-            statement.executeUpdate();
-        } catch (Exception ignored) {
-            // In-memory account is still verified by AuthService.
-        }
+      statement.setString(1, email);
+      statement.executeUpdate();
+    } catch (Exception ignored) {
+      // In-memory account is still verified by AuthService.
     }
+  }
 
-    public void updateApproval(String email, boolean approved, List<String> roles) {
-        if (!enabled) return;
-        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+  public void updateApproval(String email, boolean approved, List<String> roles) {
+    if (!enabled) return;
+    try (Connection connection = connection();
+        PreparedStatement statement =
+            connection.prepareStatement(
+                """
             UPDATE doctor_accounts
             SET approved = ?, roles = ?, updated_at = now()
             WHERE email = ?
             """)) {
-            statement.setBoolean(1, approved);
-            statement.setString(2, String.join(",", roles));
-            statement.setString(3, email);
-            statement.executeUpdate();
-        } catch (Exception ignored) {
-            // In-memory account remains authoritative for this request.
-        }
+      statement.setBoolean(1, approved);
+      statement.setString(2, String.join(",", roles));
+      statement.setString(3, email);
+      statement.executeUpdate();
+    } catch (Exception ignored) {
+      // In-memory account remains authoritative for this request.
     }
+  }
 
-    public void updateSettings(String email, Boolean twoFactorEnabled, Boolean onboardingCompleted) {
-        if (!enabled) return;
-        try (Connection connection = connection()) {
-            if (twoFactorEnabled != null) {
-                try (PreparedStatement statement = connection.prepareStatement("UPDATE doctor_accounts SET two_factor_enabled = ?, updated_at = now() WHERE email = ?")) {
-                    statement.setBoolean(1, twoFactorEnabled);
-                    statement.setString(2, email);
-                    statement.executeUpdate();
-                }
-            }
-            if (onboardingCompleted != null) {
-                try (PreparedStatement statement = connection.prepareStatement("UPDATE doctor_accounts SET onboarding_completed = ?, updated_at = now() WHERE email = ?")) {
-                    statement.setBoolean(1, onboardingCompleted);
-                    statement.setString(2, email);
-                    statement.executeUpdate();
-                }
-            }
-        } catch (Exception ignored) {
-            // In-memory update already happened in AuthService.
+  public void updateSettings(String email, Boolean twoFactorEnabled, Boolean onboardingCompleted) {
+    if (!enabled) return;
+    try (Connection connection = connection()) {
+      if (twoFactorEnabled != null) {
+        try (PreparedStatement statement =
+            connection.prepareStatement(
+                "UPDATE doctor_accounts SET two_factor_enabled = ?, updated_at = now() WHERE email = ?")) {
+          statement.setBoolean(1, twoFactorEnabled);
+          statement.setString(2, email);
+          statement.executeUpdate();
         }
+      }
+      if (onboardingCompleted != null) {
+        try (PreparedStatement statement =
+            connection.prepareStatement(
+                "UPDATE doctor_accounts SET onboarding_completed = ?, updated_at = now() WHERE email = ?")) {
+          statement.setBoolean(1, onboardingCompleted);
+          statement.setString(2, email);
+          statement.executeUpdate();
+        }
+      }
+    } catch (Exception ignored) {
+      // In-memory update already happened in AuthService.
     }
+  }
 
-    public void saveRefreshToken(String refreshToken, String email, Instant expiresAt) {
-        if (!enabled) return;
-        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+  public void saveRefreshToken(String refreshToken, String email, Instant expiresAt) {
+    if (!enabled) return;
+    try (Connection connection = connection();
+        PreparedStatement statement =
+            connection.prepareStatement(
+                """
             INSERT INTO auth_refresh_tokens(token_hash, email, issued_at, expires_at, revoked_at)
             VALUES (?, ?, now(), ?, NULL)
             ON CONFLICT (token_hash) DO UPDATE SET
@@ -167,329 +188,379 @@ public class PostgresAuthStoreService {
               expires_at = EXCLUDED.expires_at,
               revoked_at = NULL
             """)) {
-            statement.setString(1, tokenHash(refreshToken));
-            statement.setString(2, email);
-            statement.setTimestamp(3, Timestamp.from(expiresAt));
-            statement.executeUpdate();
-        } catch (Exception ignored) {
-            // In-memory refresh token fallback remains active.
-        }
+      statement.setString(1, tokenHash(refreshToken));
+      statement.setString(2, email);
+      statement.setTimestamp(3, Timestamp.from(expiresAt));
+      statement.executeUpdate();
+    } catch (Exception ignored) {
+      // In-memory refresh token fallback remains active.
     }
+  }
 
-    public Optional<String> findEmailByRefreshToken(String refreshToken) {
-        if (!enabled) return Optional.empty();
-        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+  public Optional<String> findEmailByRefreshToken(String refreshToken) {
+    if (!enabled) return Optional.empty();
+    try (Connection connection = connection();
+        PreparedStatement statement =
+            connection.prepareStatement(
+                """
             SELECT email FROM auth_refresh_tokens
             WHERE token_hash = ? AND revoked_at IS NULL AND expires_at > now()
             """)) {
-            statement.setString(1, tokenHash(refreshToken));
-            try (ResultSet rs = statement.executeQuery()) {
-                if (!rs.next()) return Optional.empty();
-                return Optional.ofNullable(rs.getString("email"));
-            }
-        } catch (Exception ignored) {
-            return Optional.empty();
-        }
+      statement.setString(1, tokenHash(refreshToken));
+      try (ResultSet rs = statement.executeQuery()) {
+        if (!rs.next()) return Optional.empty();
+        return Optional.ofNullable(rs.getString("email"));
+      }
+    } catch (Exception ignored) {
+      return Optional.empty();
     }
+  }
 
-    public void revokeRefreshToken(String refreshToken) {
-        if (!enabled) return;
-        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+  public void revokeRefreshToken(String refreshToken) {
+    if (!enabled) return;
+    try (Connection connection = connection();
+        PreparedStatement statement =
+            connection.prepareStatement(
+                """
             UPDATE auth_refresh_tokens SET revoked_at = now() WHERE token_hash = ?
             """)) {
-            statement.setString(1, tokenHash(refreshToken));
-            statement.executeUpdate();
-        } catch (Exception ignored) {
-            // Logout is best-effort for persistence fallback.
-        }
+      statement.setString(1, tokenHash(refreshToken));
+      statement.executeUpdate();
+    } catch (Exception ignored) {
+      // Logout is best-effort for persistence fallback.
     }
+  }
 
-    /**
-     * Strict, fail-closed check used exclusively by admin bootstrap/activation-lockout
-     * logic: unlike every other method in this class, it never swallows an exception —
-     * if Postgres isn't enabled or the query fails, the caller (AdminBootstrapService)
-     * must treat that as "cannot safely determine ADMIN state" and refuse to start,
-     * rather than silently falling back to an in-memory answer.
-     */
-    public boolean hasNonDemoAdmin(String excludedEmail) {
-        return findNonDemoAdmin(excludedEmail).isPresent();
+  /**
+   * Strict, fail-closed check used exclusively by admin bootstrap/activation-lockout logic: unlike
+   * every other method in this class, it never swallows an exception — if Postgres isn't enabled or
+   * the query fails, the caller (AdminBootstrapService) must treat that as "cannot safely determine
+   * ADMIN state" and refuse to start, rather than silently falling back to an in-memory answer.
+   */
+  public boolean hasNonDemoAdmin(String excludedEmail) {
+    return findNonDemoAdmin(excludedEmail).isPresent();
+  }
+
+  /**
+   * See {@link #hasNonDemoAdmin(String)} — same fail-closed contract. The `roles LIKE '%ADMIN%'`
+   * clause is only an index-friendly SQL pre-filter (it would also match a hypothetical future role
+   * like "SUPERADMIN"); every candidate row is still re-checked in Java against the exact,
+   * comma-split role list plus verified/approved, so only a genuinely active, exact ADMIN account
+   * is ever accepted for bootstrap-skip purposes.
+   */
+  public Optional<DoctorAccount> findNonDemoAdmin(String excludedEmail) {
+    if (!enabled) {
+      throw new IllegalStateException(
+          "Postgres auth persistence is not enabled (pfi.persistence.mode != postgres)");
     }
-
-    /**
-     * See {@link #hasNonDemoAdmin(String)} — same fail-closed contract. The
-     * `roles LIKE '%ADMIN%'` clause is only an index-friendly SQL pre-filter (it would
-     * also match a hypothetical future role like "SUPERADMIN"); every candidate row is
-     * still re-checked in Java against the exact, comma-split role list plus
-     * verified/approved, so only a genuinely active, exact ADMIN account is ever
-     * accepted for bootstrap-skip purposes.
-     */
-    public Optional<DoctorAccount> findNonDemoAdmin(String excludedEmail) {
-        if (!enabled) {
-            throw new IllegalStateException("Postgres auth persistence is not enabled (pfi.persistence.mode != postgres)");
-        }
-        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+    try (Connection connection = connection();
+        PreparedStatement statement =
+            connection.prepareStatement(
+                """
             SELECT id, full_name, email, password_hash, license_number, specialty, institution, roles, created_at, verified, approved, two_factor_enabled, onboarding_completed
             FROM doctor_accounts
             WHERE roles LIKE '%ADMIN%' AND verified = TRUE AND approved = TRUE AND email <> ?
             ORDER BY created_at ASC
             """)) {
-            statement.setString(1, excludedEmail == null ? "" : excludedEmail);
-            try (ResultSet rs = statement.executeQuery()) {
-                while (rs.next()) {
-                    DoctorAccount account = readAccount(rs);
-                    if (account.verified() && account.approved() && account.roles().contains("ADMIN")) {
-                        return Optional.of(account);
-                    }
-                }
-                return Optional.empty();
-            }
-        } catch (Exception ex) {
-            throw new IllegalStateException("Could not query for an existing production ADMIN account", ex);
+      statement.setString(1, excludedEmail == null ? "" : excludedEmail);
+      try (ResultSet rs = statement.executeQuery()) {
+        while (rs.next()) {
+          DoctorAccount account = readAccount(rs);
+          if (account.verified() && account.approved() && account.roles().contains("ADMIN")) {
+            return Optional.of(account);
+          }
         }
+        return Optional.empty();
+      }
+    } catch (Exception ex) {
+      throw new IllegalStateException(
+          "Could not query for an existing production ADMIN account", ex);
     }
+  }
 
-    /**
-     * Idempotent, race-safe creation of the bootstrap ADMIN. Concurrency strategy: the
-     * INSERT relies on the existing UNIQUE(email) constraint with ON CONFLICT DO NOTHING
-     * — if two instances start concurrently and both attempt to create the same
-     * bootstrap email, exactly one INSERT succeeds and the other becomes a no-op rather
-     * than an error or a duplicate row. Either way, the caller (AdminBootstrapService)
-     * always re-reads the row afterwards via findByEmail(...) to get the single
-     * canonical persisted identity — so both instances converge on the same account
-     * without needing a distributed lock.
-     */
-    public DoctorAccount createBootstrapAdmin(DoctorAccount account) {
-        if (!enabled) {
-            throw new IllegalStateException("Postgres auth persistence is not enabled (pfi.persistence.mode != postgres)");
-        }
-        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+  /**
+   * Idempotent, race-safe creation of the bootstrap ADMIN. Concurrency strategy: the INSERT relies
+   * on the existing UNIQUE(email) constraint with ON CONFLICT DO NOTHING — if two instances start
+   * concurrently and both attempt to create the same bootstrap email, exactly one INSERT succeeds
+   * and the other becomes a no-op rather than an error or a duplicate row. Either way, the caller
+   * (AdminBootstrapService) always re-reads the row afterwards via findByEmail(...) to get the
+   * single canonical persisted identity — so both instances converge on the same account without
+   * needing a distributed lock.
+   */
+  public DoctorAccount createBootstrapAdmin(DoctorAccount account) {
+    if (!enabled) {
+      throw new IllegalStateException(
+          "Postgres auth persistence is not enabled (pfi.persistence.mode != postgres)");
+    }
+    try (Connection connection = connection();
+        PreparedStatement statement =
+            connection.prepareStatement(
+                """
             INSERT INTO doctor_accounts(id, full_name, email, password_hash, license_number, specialty, institution, roles, created_at, verified, approved, two_factor_enabled, onboarding_completed, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now())
             ON CONFLICT (email) DO NOTHING
             """)) {
-            statement.setString(1, account.id());
-            statement.setString(2, account.fullName());
-            statement.setString(3, account.email());
-            statement.setString(4, account.passwordHash());
-            statement.setString(5, account.licenseNumber());
-            statement.setString(6, account.specialty());
-            statement.setString(7, account.institution());
-            statement.setString(8, String.join(",", account.roles()));
-            statement.setTimestamp(9, Timestamp.from(account.createdAt()));
-            statement.setBoolean(10, account.verified());
-            statement.setBoolean(11, account.approved());
-            statement.setBoolean(12, account.twoFactorEnabled());
-            statement.setBoolean(13, account.onboardingCompleted());
-            statement.executeUpdate();
-        } catch (Exception ex) {
-            throw new IllegalStateException("Could not persist the bootstrap ADMIN account", ex);
-        }
-        return findByEmailStrict(account.email());
+      statement.setString(1, account.id());
+      statement.setString(2, account.fullName());
+      statement.setString(3, account.email());
+      statement.setString(4, account.passwordHash());
+      statement.setString(5, account.licenseNumber());
+      statement.setString(6, account.specialty());
+      statement.setString(7, account.institution());
+      statement.setString(8, String.join(",", account.roles()));
+      statement.setTimestamp(9, Timestamp.from(account.createdAt()));
+      statement.setBoolean(10, account.verified());
+      statement.setBoolean(11, account.approved());
+      statement.setBoolean(12, account.twoFactorEnabled());
+      statement.setBoolean(13, account.onboardingCompleted());
+      statement.executeUpdate();
+    } catch (Exception ex) {
+      throw new IllegalStateException("Could not persist the bootstrap ADMIN account", ex);
     }
+    return findByEmailStrict(account.email());
+  }
 
-    /** Same read as findByEmail, but throws instead of returning empty on any failure — used only for bootstrap verification. */
-    private DoctorAccount findByEmailStrict(String email) {
-        if (!enabled) {
-            throw new IllegalStateException("Postgres auth persistence is not enabled (pfi.persistence.mode != postgres)");
-        }
-        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+  /**
+   * Same read as findByEmail, but throws instead of returning empty on any failure — used only for
+   * bootstrap verification.
+   */
+  private DoctorAccount findByEmailStrict(String email) {
+    if (!enabled) {
+      throw new IllegalStateException(
+          "Postgres auth persistence is not enabled (pfi.persistence.mode != postgres)");
+    }
+    try (Connection connection = connection();
+        PreparedStatement statement =
+            connection.prepareStatement(
+                """
             SELECT id, full_name, email, password_hash, license_number, specialty, institution, roles, created_at, verified, approved, two_factor_enabled, onboarding_completed
             FROM doctor_accounts
             WHERE email = ?
             """)) {
-            statement.setString(1, email);
-            try (ResultSet rs = statement.executeQuery()) {
-                if (!rs.next()) {
-                    throw new IllegalStateException("Bootstrap ADMIN account was not found after persistence");
-                }
-                return readAccount(rs);
-            }
-        } catch (IllegalStateException ex) {
-            throw ex;
-        } catch (Exception ex) {
-            throw new IllegalStateException("Could not verify the bootstrap ADMIN account was persisted", ex);
+      statement.setString(1, email);
+      try (ResultSet rs = statement.executeQuery()) {
+        if (!rs.next()) {
+          throw new IllegalStateException(
+              "Bootstrap ADMIN account was not found after persistence");
         }
+        return readAccount(rs);
+      }
+    } catch (IllegalStateException ex) {
+      throw ex;
+    } catch (Exception ex) {
+      throw new IllegalStateException(
+          "Could not verify the bootstrap ADMIN account was persisted", ex);
     }
+  }
 
-    /**
-     * Single atomic UPDATE for institutional activation/deactivation — verified,
-     * approved, and roles are always written together so a persisted account is never
-     * observed in a half-updated state. Fail-closed like the bootstrap methods above:
-     * an error here must surface as a real failure to the caller, not a silent no-op.
-     */
-    public ProfessionalActivationResult updateProfessionalActivation(String email, boolean verified, boolean approved, List<String> roles) {
-        if (!enabled) {
-            throw new IllegalStateException("Postgres auth persistence is not enabled (pfi.persistence.mode != postgres)");
-        }
-        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+  /**
+   * Single atomic UPDATE for institutional activation/deactivation — verified, approved, and roles
+   * are always written together so a persisted account is never observed in a half-updated state.
+   * Fail-closed like the bootstrap methods above: an error here must surface as a real failure to
+   * the caller, not a silent no-op.
+   */
+  public ProfessionalActivationResult updateProfessionalActivation(
+      String email, boolean verified, boolean approved, List<String> roles) {
+    if (!enabled) {
+      throw new IllegalStateException(
+          "Postgres auth persistence is not enabled (pfi.persistence.mode != postgres)");
+    }
+    try (Connection connection = connection();
+        PreparedStatement statement =
+            connection.prepareStatement(
+                """
             UPDATE doctor_accounts
             SET verified = ?, approved = ?, roles = ?, updated_at = now()
             WHERE email = ?
             """)) {
-            statement.setBoolean(1, verified);
-            statement.setBoolean(2, approved);
-            statement.setString(3, String.join(",", roles));
-            statement.setString(4, email);
-            int updated = statement.executeUpdate();
-            if (updated == 0) {
-                throw new IllegalStateException("No account was updated for the given email");
-            }
-        } catch (IllegalStateException ex) {
-            throw ex;
-        } catch (Exception ex) {
-            throw new IllegalStateException("Could not persist professional activation state", ex);
-        }
-        return new ProfessionalActivationResult(email, verified, approved, roles);
+      statement.setBoolean(1, verified);
+      statement.setBoolean(2, approved);
+      statement.setString(3, String.join(",", roles));
+      statement.setString(4, email);
+      int updated = statement.executeUpdate();
+      if (updated == 0) {
+        throw new IllegalStateException("No account was updated for the given email");
+      }
+    } catch (IllegalStateException ex) {
+      throw ex;
+    } catch (Exception ex) {
+      throw new IllegalStateException("Could not persist professional activation state", ex);
     }
+    return new ProfessionalActivationResult(email, verified, approved, roles);
+  }
 
-    public record ProfessionalActivationResult(String email, boolean verified, boolean approved, List<String> roles) {}
+  public record ProfessionalActivationResult(
+      String email, boolean verified, boolean approved, List<String> roles) {}
 
-    /**
-     * Fail-closed per-request account read used by AuthAccountStateService to
-     * revalidate a caller's persisted state on every protected request. Unlike
-     * findByEmail (which swallows errors and returns empty — fine for best-effort UI
-     * lookups), this throws on any infra failure; "account genuinely does not exist" is
-     * the only case that returns Optional.empty().
-     */
-    public Optional<DoctorAccount> findByEmailForAuthorization(String email) {
-        if (!enabled) {
-            throw new IllegalStateException("Postgres auth persistence is not enabled (pfi.persistence.mode != postgres)");
-        }
-        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+  /**
+   * Fail-closed per-request account read used by AuthAccountStateService to revalidate a caller's
+   * persisted state on every protected request. Unlike findByEmail (which swallows errors and
+   * returns empty — fine for best-effort UI lookups), this throws on any infra failure; "account
+   * genuinely does not exist" is the only case that returns Optional.empty().
+   */
+  public Optional<DoctorAccount> findByEmailForAuthorization(String email) {
+    if (!enabled) {
+      throw new IllegalStateException(
+          "Postgres auth persistence is not enabled (pfi.persistence.mode != postgres)");
+    }
+    try (Connection connection = connection();
+        PreparedStatement statement =
+            connection.prepareStatement(
+                """
             SELECT id, full_name, email, password_hash, license_number, specialty, institution, roles, created_at, verified, approved, two_factor_enabled, onboarding_completed
             FROM doctor_accounts
             WHERE email = ?
             """)) {
-            statement.setString(1, email);
-            try (ResultSet rs = statement.executeQuery()) {
-                if (!rs.next()) return Optional.empty();
-                return Optional.of(readAccount(rs));
-            }
-        } catch (Exception ex) {
-            throw new IllegalStateException("Could not validate the current session's account state", ex);
-        }
+      statement.setString(1, email);
+      try (ResultSet rs = statement.executeQuery()) {
+        if (!rs.next()) return Optional.empty();
+        return Optional.of(readAccount(rs));
+      }
+    } catch (Exception ex) {
+      throw new IllegalStateException("Could not validate the current session's account state", ex);
     }
+  }
 
-    /**
-     * Fail-closed, exact-role count used exclusively for the last-ADMIN lockout
-     * check. Deliberately does NOT rely on `roles LIKE '%ADMIN%'` alone — that SQL
-     * pre-filter is only used to keep the query index-friendly; the actual decision
-     * uses the exact, comma-split role list from readAccount() (List.contains("ADMIN")),
-     * so a hypothetical future role like "SUPERADMIN" could never be miscounted as
-     * "ADMIN". Only verified+approved+non-demo accounts with the exact ADMIN role count.
-     */
-    public long countActiveNonDemoAdminsExcluding(String excludedEmail) {
-        if (!enabled) {
-            throw new IllegalStateException("Postgres auth persistence is not enabled (pfi.persistence.mode != postgres)");
-        }
-        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+  /**
+   * Fail-closed, exact-role count used exclusively for the last-ADMIN lockout check. Deliberately
+   * does NOT rely on `roles LIKE '%ADMIN%'` alone — that SQL pre-filter is only used to keep the
+   * query index-friendly; the actual decision uses the exact, comma-split role list from
+   * readAccount() (List.contains("ADMIN")), so a hypothetical future role like "SUPERADMIN" could
+   * never be miscounted as "ADMIN". Only verified+approved+non-demo accounts with the exact ADMIN
+   * role count.
+   */
+  public long countActiveNonDemoAdminsExcluding(String excludedEmail) {
+    if (!enabled) {
+      throw new IllegalStateException(
+          "Postgres auth persistence is not enabled (pfi.persistence.mode != postgres)");
+    }
+    try (Connection connection = connection();
+        PreparedStatement statement =
+            connection.prepareStatement(
+                """
             SELECT id, full_name, email, password_hash, license_number, specialty, institution, roles, created_at, verified, approved, two_factor_enabled, onboarding_completed
             FROM doctor_accounts
             WHERE roles LIKE '%ADMIN%' AND verified = TRUE AND approved = TRUE AND email <> ?
             """)) {
-            statement.setString(1, excludedEmail == null ? "" : excludedEmail);
-            try (ResultSet rs = statement.executeQuery()) {
-                long count = 0;
-                while (rs.next()) {
-                    DoctorAccount account = readAccount(rs);
-                    if (!AuthService.DEMO_ACCOUNT_EMAIL.equals(account.email()) && account.roles().contains("ADMIN")) count++;
-                }
-                return count;
-            }
-        } catch (Exception ex) {
-            throw new IllegalStateException("Could not count active production ADMIN accounts", ex);
+      statement.setString(1, excludedEmail == null ? "" : excludedEmail);
+      try (ResultSet rs = statement.executeQuery()) {
+        long count = 0;
+        while (rs.next()) {
+          DoctorAccount account = readAccount(rs);
+          if (!AuthService.DEMO_ACCOUNT_EMAIL.equals(account.email())
+              && account.roles().contains("ADMIN")) count++;
         }
+        return count;
+      }
+    } catch (Exception ex) {
+      throw new IllegalStateException("Could not count active production ADMIN accounts", ex);
     }
+  }
 
-    /**
-     * Transactional deactivation: the account row and its refresh tokens are updated
-     * inside one connection/transaction (autoCommit=false, explicit commit, rollback on
-     * any error) so a caller can never observe "deactivated but sessions still valid" or
-     * vice versa — either both writes land, or neither does. The in-memory cache in
-     * AuthService is only updated by the caller after this method returns successfully.
-     */
-    public ProfessionalActivationResult deactivateProfessionalAndRevokeSessions(String email, boolean verified, List<String> roles) {
-        if (!enabled) {
-            throw new IllegalStateException("Postgres auth persistence is not enabled (pfi.persistence.mode != postgres)");
-        }
-        try (Connection connection = connection()) {
-            connection.setAutoCommit(false);
-            try {
-                try (PreparedStatement statement = connection.prepareStatement("""
+  /**
+   * Transactional deactivation: the account row and its refresh tokens are updated inside one
+   * connection/transaction (autoCommit=false, explicit commit, rollback on any error) so a caller
+   * can never observe "deactivated but sessions still valid" or vice versa — either both writes
+   * land, or neither does. The in-memory cache in AuthService is only updated by the caller after
+   * this method returns successfully.
+   */
+  public ProfessionalActivationResult deactivateProfessionalAndRevokeSessions(
+      String email, boolean verified, List<String> roles) {
+    if (!enabled) {
+      throw new IllegalStateException(
+          "Postgres auth persistence is not enabled (pfi.persistence.mode != postgres)");
+    }
+    try (Connection connection = connection()) {
+      connection.setAutoCommit(false);
+      try {
+        try (PreparedStatement statement =
+            connection.prepareStatement(
+                """
                     UPDATE doctor_accounts
                     SET verified = ?, approved = FALSE, roles = ?, updated_at = now()
                     WHERE email = ?
                     """)) {
-                    statement.setBoolean(1, verified);
-                    statement.setString(2, String.join(",", roles));
-                    statement.setString(3, email);
-                    int updated = statement.executeUpdate();
-                    if (updated == 0) {
-                        throw new IllegalStateException("No account was updated for the given email");
-                    }
-                }
-                try (PreparedStatement statement = connection.prepareStatement("""
+          statement.setBoolean(1, verified);
+          statement.setString(2, String.join(",", roles));
+          statement.setString(3, email);
+          int updated = statement.executeUpdate();
+          if (updated == 0) {
+            throw new IllegalStateException("No account was updated for the given email");
+          }
+        }
+        try (PreparedStatement statement =
+            connection.prepareStatement(
+                """
                     UPDATE auth_refresh_tokens SET revoked_at = now() WHERE email = ? AND revoked_at IS NULL
                     """)) {
-                    statement.setString(1, email);
-                    statement.executeUpdate();
-                }
-                connection.commit();
-            } catch (Exception ex) {
-                connection.rollback();
-                throw ex;
-            }
-        } catch (IllegalStateException ex) {
-            throw ex;
-        } catch (Exception ex) {
-            throw new IllegalStateException("Could not deactivate the account and revoke its sessions", ex);
+          statement.setString(1, email);
+          statement.executeUpdate();
         }
-        return new ProfessionalActivationResult(email, verified, false, roles);
+        connection.commit();
+      } catch (Exception ex) {
+        connection.rollback();
+        throw ex;
+      }
+    } catch (IllegalStateException ex) {
+      throw ex;
+    } catch (Exception ex) {
+      throw new IllegalStateException(
+          "Could not deactivate the account and revoke its sessions", ex);
     }
+    return new ProfessionalActivationResult(email, verified, false, roles);
+  }
 
-    /**
-     * Bulk-revokes every still-active refresh token for one email — used to close out
-     * lingering demo-account sessions from a previous rollout without touching any
-     * other account's tokens (no DELETE, no wildcard, single-email WHERE clause only).
-     */
-    public void revokeRefreshTokensForEmail(String email) {
-        if (!enabled) return;
-        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement("""
+  /**
+   * Bulk-revokes every still-active refresh token for one email — used to close out lingering
+   * demo-account sessions from a previous rollout without touching any other account's tokens (no
+   * DELETE, no wildcard, single-email WHERE clause only).
+   */
+  public void revokeRefreshTokensForEmail(String email) {
+    if (!enabled) return;
+    try (Connection connection = connection();
+        PreparedStatement statement =
+            connection.prepareStatement(
+                """
             UPDATE auth_refresh_tokens SET revoked_at = now() WHERE email = ? AND revoked_at IS NULL
             """)) {
-            statement.setString(1, email);
-            statement.executeUpdate();
-        } catch (Exception ignored) {
-            // Best-effort; in-memory fallback in AuthService also clears its own map.
-        }
+      statement.setString(1, email);
+      statement.executeUpdate();
+    } catch (Exception ignored) {
+      // Best-effort; in-memory fallback in AuthService also clears its own map.
     }
+  }
 
-    private DoctorAccount readAccount(ResultSet rs) throws Exception {
-        List<String> roles = Arrays.stream(rs.getString("roles").split(","))
+  private DoctorAccount readAccount(ResultSet rs) throws Exception {
+    List<String> roles =
+        Arrays.stream(rs.getString("roles").split(","))
             .map(String::trim)
             .filter(value -> !value.isBlank())
             .toList();
-        boolean approved = rs.getBoolean("approved");
-        return new DoctorAccount(
-            rs.getString("id"),
-            rs.getString("full_name"),
-            rs.getString("email"),
-            rs.getString("password_hash"),
-            rs.getString("license_number"),
-            rs.getString("specialty"),
-            rs.getString("institution"),
-            roles.isEmpty() ? (approved ? List.of("DOCTOR", "REVIEWER") : List.of("PENDING_APPROVAL")) : roles,
-            rs.getTimestamp("created_at").toInstant(),
-            rs.getBoolean("verified"),
-            approved,
-            rs.getBoolean("two_factor_enabled"),
-            rs.getBoolean("onboarding_completed")
-        );
-    }
+    boolean approved = rs.getBoolean("approved");
+    return new DoctorAccount(
+        rs.getString("id"),
+        rs.getString("full_name"),
+        rs.getString("email"),
+        rs.getString("password_hash"),
+        rs.getString("license_number"),
+        rs.getString("specialty"),
+        rs.getString("institution"),
+        roles.isEmpty()
+            ? (approved ? List.of("DOCTOR", "REVIEWER") : List.of("PENDING_APPROVAL"))
+            : roles,
+        rs.getTimestamp("created_at").toInstant(),
+        rs.getBoolean("verified"),
+        approved,
+        rs.getBoolean("two_factor_enabled"),
+        rs.getBoolean("onboarding_completed"));
+  }
 
-    private void migrate() {
-        try (Connection connection = connection()) {
-            connection.createStatement().execute("""
+  private void migrate() {
+    try (Connection connection = connection()) {
+      connection
+          .createStatement()
+          .execute(
+              """
                 CREATE TABLE IF NOT EXISTS doctor_accounts (
                     id TEXT PRIMARY KEY,
                     full_name TEXT NOT NULL,
@@ -507,12 +578,30 @@ public class PostgresAuthStoreService {
                     onboarding_completed BOOLEAN NOT NULL DEFAULT FALSE
                 )
                 """);
-            connection.createStatement().execute("ALTER TABLE doctor_accounts ADD COLUMN IF NOT EXISTS approved BOOLEAN NOT NULL DEFAULT FALSE");
-            connection.createStatement().execute("ALTER TABLE doctor_accounts ADD COLUMN IF NOT EXISTS two_factor_enabled BOOLEAN NOT NULL DEFAULT FALSE");
-            connection.createStatement().execute("ALTER TABLE doctor_accounts ADD COLUMN IF NOT EXISTS onboarding_completed BOOLEAN NOT NULL DEFAULT FALSE");
-            connection.createStatement().execute("UPDATE doctor_accounts SET approved = TRUE WHERE verified = TRUE AND approved = FALSE AND roles NOT LIKE '%PENDING_APPROVAL%'");
-            connection.createStatement().execute("UPDATE doctor_accounts SET roles = 'DOCTOR,REVIEWER' WHERE approved = TRUE AND roles = 'PENDING_APPROVAL'");
-            connection.createStatement().execute("""
+      connection
+          .createStatement()
+          .execute(
+              "ALTER TABLE doctor_accounts ADD COLUMN IF NOT EXISTS approved BOOLEAN NOT NULL DEFAULT FALSE");
+      connection
+          .createStatement()
+          .execute(
+              "ALTER TABLE doctor_accounts ADD COLUMN IF NOT EXISTS two_factor_enabled BOOLEAN NOT NULL DEFAULT FALSE");
+      connection
+          .createStatement()
+          .execute(
+              "ALTER TABLE doctor_accounts ADD COLUMN IF NOT EXISTS onboarding_completed BOOLEAN NOT NULL DEFAULT FALSE");
+      connection
+          .createStatement()
+          .execute(
+              "UPDATE doctor_accounts SET approved = TRUE WHERE verified = TRUE AND approved = FALSE AND roles NOT LIKE '%PENDING_APPROVAL%'");
+      connection
+          .createStatement()
+          .execute(
+              "UPDATE doctor_accounts SET roles = 'DOCTOR,REVIEWER' WHERE approved = TRUE AND roles = 'PENDING_APPROVAL'");
+      connection
+          .createStatement()
+          .execute(
+              """
                 CREATE TABLE IF NOT EXISTS auth_refresh_tokens (
                     token_hash TEXT PRIMARY KEY,
                     email TEXT NOT NULL REFERENCES doctor_accounts(email) ON DELETE CASCADE,
@@ -521,46 +610,52 @@ public class PostgresAuthStoreService {
                     revoked_at TIMESTAMPTZ NULL
                 )
                 """);
-            connection.createStatement().execute("""
+      connection
+          .createStatement()
+          .execute(
+              """
                 CREATE INDEX IF NOT EXISTS idx_auth_refresh_tokens_email ON auth_refresh_tokens(email)
                 """);
-        } catch (Exception ignored) {
-            // Service stays available with in-memory fallback.
-        }
+    } catch (Exception ignored) {
+      // Service stays available with in-memory fallback.
     }
+  }
 
-    private String tokenHash(String refreshToken) throws Exception {
-        byte[] digest = MessageDigest.getInstance("SHA-256").digest(refreshToken.getBytes(StandardCharsets.UTF_8));
-        StringBuilder builder = new StringBuilder();
-        for (byte b : digest) builder.append(String.format("%02x", b));
-        return builder.toString();
-    }
+  private String tokenHash(String refreshToken) throws Exception {
+    byte[] digest =
+        MessageDigest.getInstance("SHA-256").digest(refreshToken.getBytes(StandardCharsets.UTF_8));
+    StringBuilder builder = new StringBuilder();
+    for (byte b : digest) builder.append(String.format("%02x", b));
+    return builder.toString();
+  }
 
-    private Connection connection() throws Exception {
-        return DriverManager.getConnection(jdbcUrl);
-    }
+  private Connection connection() throws Exception {
+    return DriverManager.getConnection(jdbcUrl);
+  }
 
-    private String toJdbcUrl(String databaseUrl) {
-        if (databaseUrl.isBlank()) return "";
-        if (databaseUrl.startsWith("jdbc:postgresql://")) return databaseUrl;
-        if (!databaseUrl.startsWith("postgres://") && !databaseUrl.startsWith("postgresql://")) return databaseUrl;
-        try {
-            URI uri = URI.create(databaseUrl);
-            String userInfo = uri.getUserInfo();
-            String user = "";
-            String password = "";
-            if (userInfo != null) {
-                String[] parts = userInfo.split(":", 2);
-                user = parts.length > 0 ? parts[0] : "";
-                password = parts.length > 1 ? parts[1] : "";
-            }
-            String query = "sslmode=require";
-            if (!user.isBlank()) query += "&user=" + URLEncoder.encode(user, StandardCharsets.UTF_8);
-            if (!password.isBlank()) query += "&password=" + URLEncoder.encode(password, StandardCharsets.UTF_8);
-            int port = uri.getPort() > 0 ? uri.getPort() : 5432;
-            return "jdbc:postgresql://" + uri.getHost() + ":" + port + uri.getPath() + "?" + query;
-        } catch (Exception ex) {
-            return databaseUrl;
-        }
+  private String toJdbcUrl(String databaseUrl) {
+    if (databaseUrl.isBlank()) return "";
+    if (databaseUrl.startsWith("jdbc:postgresql://")) return databaseUrl;
+    if (!databaseUrl.startsWith("postgres://") && !databaseUrl.startsWith("postgresql://"))
+      return databaseUrl;
+    try {
+      URI uri = URI.create(databaseUrl);
+      String userInfo = uri.getUserInfo();
+      String user = "";
+      String password = "";
+      if (userInfo != null) {
+        String[] parts = userInfo.split(":", 2);
+        user = parts.length > 0 ? parts[0] : "";
+        password = parts.length > 1 ? parts[1] : "";
+      }
+      String query = "sslmode=require";
+      if (!user.isBlank()) query += "&user=" + URLEncoder.encode(user, StandardCharsets.UTF_8);
+      if (!password.isBlank())
+        query += "&password=" + URLEncoder.encode(password, StandardCharsets.UTF_8);
+      int port = uri.getPort() > 0 ? uri.getPort() : 5432;
+      return "jdbc:postgresql://" + uri.getHost() + ":" + port + uri.getPath() + "?" + query;
+    } catch (Exception ex) {
+      return databaseUrl;
     }
+  }
 }

@@ -13,14 +13,20 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
 class AiContractControllerTest {
-    private static final String POISON = "http://ai-module.internal:8000 refused C:\\secret\\stack /tmp/model token=abc";
+  private static final String POISON =
+      "http://ai-module.internal:8000 refused C:\\secret\\stack /tmp/model token=abc";
 
-    @Test
-    void pipelineSchemaProxiesAiModuleAndForcesGovernanceFlags() {
-        WebClient webClient = WebClient.builder()
-            .exchangeFunction(request -> Mono.just(ClientResponse.create(HttpStatus.OK)
-                .header("Content-Type", "application/json")
-                .body("""
+  @Test
+  void pipelineSchemaProxiesAiModuleAndForcesGovernanceFlags() {
+    WebClient webClient =
+        WebClient.builder()
+            .exchangeFunction(
+                request ->
+                    Mono.just(
+                        ClientResponse.create(HttpStatus.OK)
+                            .header("Content-Type", "application/json")
+                            .body(
+                                """
                     {
                       "schema_version": "visual-review-contract-v1",
                       "status": "stable",
@@ -29,52 +35,60 @@ class AiContractControllerTest {
                       "root_fields": {"series": "viewer series"}
                     }
                     """)
-                .build()))
+                            .build()))
             .build();
-        AiContractController controller = new AiContractController(webClient, new AiServiceProperties("http://ai-module", 1, "v1"));
+    AiContractController controller =
+        new AiContractController(webClient, new AiServiceProperties("http://ai-module", 1, "v1"));
 
-        Map<String, Object> response = controller.pipelineSchema();
+    Map<String, Object> response = controller.pipelineSchema();
 
-        assertEquals("visual-review-contract-v1", response.get("schemaVersion"));
-        assertEquals("stable", response.get("status"));
-        assertEquals(true, response.get("proxiedByBackend"));
-        assertEquals(true, response.get("aiModuleAvailable"));
-        assertEquals(true, response.get("humanReviewRequired"));
-        assertEquals(true, response.get("notClinicalDiagnosis"));
-        assertFalse(response.containsKey("schema_version"));
-        assertTrue(response.containsKey("rootFields"));
-    }
+    assertEquals("visual-review-contract-v1", response.get("schemaVersion"));
+    assertEquals("stable", response.get("status"));
+    assertEquals(true, response.get("proxiedByBackend"));
+    assertEquals(true, response.get("aiModuleAvailable"));
+    assertEquals(true, response.get("humanReviewRequired"));
+    assertEquals(true, response.get("notClinicalDiagnosis"));
+    assertFalse(response.containsKey("schema_version"));
+    assertTrue(response.containsKey("rootFields"));
+  }
 
-    @Test
-    void pipelineSchemaReturnsDegradedFallbackWhenAiModuleIsUnavailable() {
-        WebClient webClient = WebClient.builder()
+  @Test
+  void pipelineSchemaReturnsDegradedFallbackWhenAiModuleIsUnavailable() {
+    WebClient webClient =
+        WebClient.builder()
             .exchangeFunction(request -> Mono.error(new IllegalStateException(POISON)))
             .build();
-        AiContractController controller = new AiContractController(webClient, new AiServiceProperties("http://ai-module", 1, "v1"));
+    AiContractController controller =
+        new AiContractController(webClient, new AiServiceProperties("http://ai-module", 1, "v1"));
 
-        Map<String, Object> response = controller.pipelineSchema();
+    Map<String, Object> response = controller.pipelineSchema();
 
-        assertEquals("visual-review-contract-v1", response.get("schemaVersion"));
-        assertEquals("degraded_fallback", response.get("status"));
-        assertEquals("pfi-backend.ai-contract-fallback", response.get("generatedBy"));
-        assertEquals("backend-fallback-visual-review-contract-v1", response.get("schemaHash"));
-        assertEquals(true, response.get("proxiedByBackend"));
-        assertEquals(false, response.get("aiModuleAvailable"));
-        assertEquals(true, response.get("degradedMode"));
-        assertEquals(true, response.get("humanReviewRequired"));
-        assertEquals(true, response.get("notClinicalDiagnosis"));
-        assertEquals("AI Module no disponible.", response.get("message"));
-        assertNoPoison(response);
-        assertTrue(response.containsKey("rootFields"));
-        assertTrue(response.containsKey("guarantees"));
-    }
+    assertEquals("visual-review-contract-v1", response.get("schemaVersion"));
+    assertEquals("degraded_fallback", response.get("status"));
+    assertEquals("pfi-backend.ai-contract-fallback", response.get("generatedBy"));
+    assertEquals("backend-fallback-visual-review-contract-v1", response.get("schemaHash"));
+    assertEquals(true, response.get("proxiedByBackend"));
+    assertEquals(false, response.get("aiModuleAvailable"));
+    assertEquals(true, response.get("degradedMode"));
+    assertEquals(true, response.get("humanReviewRequired"));
+    assertEquals(true, response.get("notClinicalDiagnosis"));
+    assertEquals("AI Module no disponible.", response.get("message"));
+    assertNoPoison(response);
+    assertTrue(response.containsKey("rootFields"));
+    assertTrue(response.containsKey("guarantees"));
+  }
 
-    @Test
-    void pipelineSchemaVerificationProxiesAiModuleAndForcesGovernanceFlags() {
-        WebClient webClient = WebClient.builder()
-            .exchangeFunction(request -> Mono.just(ClientResponse.create(HttpStatus.OK)
-                .header("Content-Type", "application/json")
-                .body("""
+  @Test
+  void pipelineSchemaVerificationProxiesAiModuleAndForcesGovernanceFlags() {
+    WebClient webClient =
+        WebClient.builder()
+            .exchangeFunction(
+                request ->
+                    Mono.just(
+                        ClientResponse.create(HttpStatus.OK)
+                            .header("Content-Type", "application/json")
+                            .body(
+                                """
                     {
                       "schema_version": "visual-review-contract-v1",
                       "schema_hash": "abc123",
@@ -86,51 +100,54 @@ class AiContractControllerTest {
                       "not_clinical_diagnosis": false
                     }
                     """)
-                .build()))
+                            .build()))
             .build();
-        AiContractController controller = new AiContractController(webClient, new AiServiceProperties("http://ai-module", 1, "v1"));
+    AiContractController controller =
+        new AiContractController(webClient, new AiServiceProperties("http://ai-module", 1, "v1"));
 
-        Map<String, Object> response = controller.pipelineSchemaVerification();
+    Map<String, Object> response = controller.pipelineSchemaVerification();
 
-        assertEquals("visual-review-contract-v1", response.get("schemaVersion"));
-        assertEquals("abc123", response.get("schemaHash"));
-        assertEquals("abc123", response.get("recomputedHash"));
-        assertEquals(true, response.get("hashValid"));
-        assertEquals(true, response.get("governanceValid"));
-        assertEquals(true, response.get("valid"));
-        assertEquals(true, response.get("proxiedByBackend"));
-        assertEquals(true, response.get("aiModuleAvailable"));
-        assertEquals(true, response.get("humanReviewRequired"));
-        assertEquals(true, response.get("notClinicalDiagnosis"));
-        assertFalse(response.containsKey("schema_hash"));
-    }
+    assertEquals("visual-review-contract-v1", response.get("schemaVersion"));
+    assertEquals("abc123", response.get("schemaHash"));
+    assertEquals("abc123", response.get("recomputedHash"));
+    assertEquals(true, response.get("hashValid"));
+    assertEquals(true, response.get("governanceValid"));
+    assertEquals(true, response.get("valid"));
+    assertEquals(true, response.get("proxiedByBackend"));
+    assertEquals(true, response.get("aiModuleAvailable"));
+    assertEquals(true, response.get("humanReviewRequired"));
+    assertEquals(true, response.get("notClinicalDiagnosis"));
+    assertFalse(response.containsKey("schema_hash"));
+  }
 
-    @Test
-    void pipelineSchemaVerificationReturnsDegradedFallbackWhenAiModuleIsUnavailable() {
-        WebClient webClient = WebClient.builder()
+  @Test
+  void pipelineSchemaVerificationReturnsDegradedFallbackWhenAiModuleIsUnavailable() {
+    WebClient webClient =
+        WebClient.builder()
             .exchangeFunction(request -> Mono.error(new IllegalStateException(POISON)))
             .build();
-        AiContractController controller = new AiContractController(webClient, new AiServiceProperties("http://ai-module", 1, "v1"));
+    AiContractController controller =
+        new AiContractController(webClient, new AiServiceProperties("http://ai-module", 1, "v1"));
 
-        Map<String, Object> response = controller.pipelineSchemaVerification();
+    Map<String, Object> response = controller.pipelineSchemaVerification();
 
-        assertEquals("visual-review-contract-v1", response.get("schemaVersion"));
-        assertEquals("backend-fallback-visual-review-contract-v1", response.get("schemaHash"));
-        assertEquals("unavailable", response.get("recomputedHash"));
-        assertEquals(false, response.get("hashValid"));
-        assertEquals(true, response.get("governanceValid"));
-        assertEquals(false, response.get("valid"));
-        assertEquals(false, response.get("aiModuleAvailable"));
-        assertEquals(true, response.get("degradedMode"));
-        assertEquals("Verificacion de contrato no disponible.", response.get("message"));
-        assertNoPoison(response);
-    }
+    assertEquals("visual-review-contract-v1", response.get("schemaVersion"));
+    assertEquals("backend-fallback-visual-review-contract-v1", response.get("schemaHash"));
+    assertEquals("unavailable", response.get("recomputedHash"));
+    assertEquals(false, response.get("hashValid"));
+    assertEquals(true, response.get("governanceValid"));
+    assertEquals(false, response.get("valid"));
+    assertEquals(false, response.get("aiModuleAvailable"));
+    assertEquals(true, response.get("degradedMode"));
+    assertEquals("Verificacion de contrato no disponible.", response.get("message"));
+    assertNoPoison(response);
+  }
 
-    private void assertNoPoison(Map<String, Object> response) {
-        String serialized = response.toString();
-        assertFalse(serialized.contains("ai-module.internal"));
-        assertFalse(serialized.contains("C:\\"));
-        assertFalse(serialized.contains("/tmp/model"));
-        assertFalse(serialized.contains("token=abc"));
-    }
+  private void assertNoPoison(Map<String, Object> response) {
+    String serialized = response.toString();
+    assertFalse(serialized.contains("ai-module.internal"));
+    assertFalse(serialized.contains("C:\\"));
+    assertFalse(serialized.contains("/tmp/model"));
+    assertFalse(serialized.contains("token=abc"));
+  }
 }

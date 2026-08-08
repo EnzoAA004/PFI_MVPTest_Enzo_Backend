@@ -11,70 +11,78 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class DiscDegenerativeFindingsPublicProjectionTest {
-    private final ObjectMapper mapper = new ObjectMapper();
+  private final ObjectMapper mapper = new ObjectMapper();
 
-    @Test
-    void removesProbabilitiesFromEveryFindingWithoutMutatingTheSource() throws Exception {
-        Map<String, Object> source = envelope();
-        Map<String, Object> sanitized = DiscDegenerativeFindingsPublicProjection.sanitize(source);
+  @Test
+  void removesProbabilitiesFromEveryFindingWithoutMutatingTheSource() throws Exception {
+    Map<String, Object> source = envelope();
+    Map<String, Object> sanitized = DiscDegenerativeFindingsPublicProjection.sanitize(source);
 
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> sanitizedFindings = (List<Map<String, Object>>) sanitized.get("findings");
-        for (Map<String, Object> finding : sanitizedFindings) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> classification = (Map<String, Object>) finding.get("classification");
-            assertFalse(classification.containsKey("probabilities"), "sanitized output must not contain probabilities");
-        }
-
-        // The object passed in is untouched: this is a projection, not a redaction of the
-        // persisted/internal object. Internal callers (validation, persistence, audit)
-        // must still see the full prediction.
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> sourceFindings = (List<Map<String, Object>>) source.get("findings");
-        @SuppressWarnings("unchecked")
-        Map<String, Object> sourceClassification = (Map<String, Object>) sourceFindings.get(0).get("classification");
-        assertTrue(sourceClassification.containsKey("probabilities"), "source object must not be mutated");
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> sanitizedFindings =
+        (List<Map<String, Object>>) sanitized.get("findings");
+    for (Map<String, Object> finding : sanitizedFindings) {
+      @SuppressWarnings("unchecked")
+      Map<String, Object> classification = (Map<String, Object>) finding.get("classification");
+      assertFalse(
+          classification.containsKey("probabilities"),
+          "sanitized output must not contain probabilities");
     }
 
-    @Test
-    void preservesLabelAndGovernanceAndProvenanceFields() throws Exception {
-        Map<String, Object> sanitized = DiscDegenerativeFindingsPublicProjection.sanitize(envelope());
-        @SuppressWarnings("unchecked")
-        Map<String, Object> finding = ((List<Map<String, Object>>) sanitized.get("findings")).get(0);
+    // The object passed in is untouched: this is a projection, not a redaction of the
+    // persisted/internal object. Internal callers (validation, persistence, audit)
+    // must still see the full prediction.
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> sourceFindings = (List<Map<String, Object>>) source.get("findings");
+    @SuppressWarnings("unchecked")
+    Map<String, Object> sourceClassification =
+        (Map<String, Object>) sourceFindings.get(0).get("classification");
+    assertTrue(
+        sourceClassification.containsKey("probabilities"), "source object must not be mutated");
+  }
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> classification = (Map<String, Object>) finding.get("classification");
-        assertEquals("present", classification.get("label"));
-        assertEquals("binary", classification.get("kind"));
+  @Test
+  void preservesLabelAndGovernanceAndProvenanceFields() throws Exception {
+    Map<String, Object> sanitized = DiscDegenerativeFindingsPublicProjection.sanitize(envelope());
+    @SuppressWarnings("unchecked")
+    Map<String, Object> finding = ((List<Map<String, Object>>) sanitized.get("findings")).get(0);
 
-        assertEquals("finding-1", finding.get("findingId"));
-        assertEquals("disc_bulging", finding.get("findingType"));
-        assertEquals(true, finding.get("notClinicalDiagnosis"));
+    @SuppressWarnings("unchecked")
+    Map<String, Object> classification = (Map<String, Object>) finding.get("classification");
+    assertEquals("present", classification.get("label"));
+    assertEquals("binary", classification.get("kind"));
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> anatomy = (Map<String, Object>) finding.get("anatomy");
-        assertEquals("L4-L5", anatomy.get("level"));
+    assertEquals("finding-1", finding.get("findingId"));
+    assertEquals("disc_bulging", finding.get("findingType"));
+    assertEquals(true, finding.get("notClinicalDiagnosis"));
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> evidence = (Map<String, Object>) finding.get("evidence");
-        assertEquals("supported_internal", evidence.get("deploymentStatus"));
+    @SuppressWarnings("unchecked")
+    Map<String, Object> anatomy = (Map<String, Object>) finding.get("anatomy");
+    assertEquals("L4-L5", anatomy.get("level"));
 
-        assertTrue(finding.containsKey("evaluation"));
-        assertTrue(finding.containsKey("sourceSeries"));
-        assertTrue(finding.containsKey("localization"));
+    @SuppressWarnings("unchecked")
+    Map<String, Object> evidence = (Map<String, Object>) finding.get("evidence");
+    assertEquals("supported_internal", evidence.get("deploymentStatus"));
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> model = (Map<String, Object>) finding.get("model");
-        assertEquals("16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293", model.get("modelSha256"));
+    assertTrue(finding.containsKey("evaluation"));
+    assertTrue(finding.containsKey("sourceSeries"));
+    assertTrue(finding.containsKey("localization"));
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> review = (Map<String, Object>) finding.get("review");
-        assertEquals(true, review.get("required"));
-        assertEquals("pending", review.get("status"));
-    }
+    @SuppressWarnings("unchecked")
+    Map<String, Object> model = (Map<String, Object>) finding.get("model");
+    assertEquals(
+        "16eccff327e6794b127fe372ecd03ea619a0f69d939b84ae1aa2e904191c6293",
+        model.get("modelSha256"));
 
-    private Map<String, Object> envelope() throws Exception {
-        String json = """
+    @SuppressWarnings("unchecked")
+    Map<String, Object> review = (Map<String, Object>) finding.get("review");
+    assertEquals(true, review.get("required"));
+    assertEquals("pending", review.get("status"));
+  }
+
+  private Map<String, Object> envelope() throws Exception {
+    String json =
+        """
             {
               "schemaVersion": "pfi.disc-degenerative-findings.v1",
               "findings": [{
@@ -107,6 +115,6 @@ class DiscDegenerativeFindingsPublicProjectionTest {
               }]
             }
             """;
-        return mapper.readValue(json, new TypeReference<Map<String, Object>>() {});
-    }
+    return mapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+  }
 }

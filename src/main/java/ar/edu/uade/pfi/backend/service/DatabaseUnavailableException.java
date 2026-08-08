@@ -1,11 +1,11 @@
 package ar.edu.uade.pfi.backend.service;
 
 public class DatabaseUnavailableException extends RuntimeException {
-    public DatabaseUnavailableException(String message) {
-        super(message);
-    }
+  public DatabaseUnavailableException(String message) {
+    super(message);
+  }
 
-    public DatabaseUnavailableException(Throwable cause) {
-        super("Base de datos no disponible", cause);
-    }
+  public DatabaseUnavailableException(Throwable cause) {
+    super("Base de datos no disponible", cause);
+  }
 }

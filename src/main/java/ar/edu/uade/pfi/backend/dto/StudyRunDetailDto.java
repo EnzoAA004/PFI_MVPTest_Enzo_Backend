@@ -10,5 +10,4 @@ public record StudyRunDetailDto(
     Map<String, List<Map<String, Object>>> artifactsByPlane,
     List<MeasurementCorrection> corrections,
     Map<String, Object> metricsSnapshot,
-    Map<String, Object> canonicalRun
-) {}
+    Map<String, Object> canonicalRun) {}

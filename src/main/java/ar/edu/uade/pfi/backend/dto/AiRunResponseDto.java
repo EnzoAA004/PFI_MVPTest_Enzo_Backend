@@ -6,5 +6,4 @@ public record AiRunResponseDto(
     String runId,
     boolean humanReviewRequired,
     Map<String, Object> payload,
-    ReviewStatusDto review
-) {}
+    ReviewStatusDto review) {}

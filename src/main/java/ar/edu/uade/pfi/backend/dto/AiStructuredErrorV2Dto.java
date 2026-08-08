@@ -14,5 +14,4 @@ public record AiStructuredErrorV2Dto(
     String caseId,
     List<String> requestedPlanes,
     Map<String, Object> details,
-    AiGovernanceV2Dto governance
-) {}
+    AiGovernanceV2Dto governance) {}

@@ -9,5 +9,4 @@ public record MeasurementCorrectionDto(
     String label,
     Map<String, Object> beforeValue,
     Map<String, Object> afterValue,
-    String comment
-) {}
+    String comment) {}

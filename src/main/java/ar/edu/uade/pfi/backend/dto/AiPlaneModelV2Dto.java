@@ -12,5 +12,4 @@ public record AiPlaneModelV2Dto(
     Boolean baselineReady,
     Boolean availableForRealInference,
     String manifestStatus,
-    Boolean manifestValid
-) {}
+    Boolean manifestValid) {}

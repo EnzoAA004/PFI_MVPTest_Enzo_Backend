@@ -14,69 +14,77 @@ import org.springframework.web.reactive.function.client.WebClient;
 @RestController
 @RequestMapping("/api/ai/pipeline")
 public class AiContractController {
-    private static final ParameterizedTypeReference<Map<String, Object>> MAP_RESPONSE =
-        new ParameterizedTypeReference<>() {};
+  private static final ParameterizedTypeReference<Map<String, Object>> MAP_RESPONSE =
+      new ParameterizedTypeReference<>() {};
 
-    private final WebClient aiWebClient;
-    private final Duration timeout;
+  private final WebClient aiWebClient;
+  private final Duration timeout;
 
-    public AiContractController(WebClient aiWebClient, AiServiceProperties properties) {
-        this.aiWebClient = aiWebClient;
-        this.timeout = Duration.ofSeconds(properties.resolvedTimeoutSeconds());
+  public AiContractController(WebClient aiWebClient, AiServiceProperties properties) {
+    this.aiWebClient = aiWebClient;
+    this.timeout = Duration.ofSeconds(properties.resolvedTimeoutSeconds());
+  }
+
+  @GetMapping("/schema")
+  public Map<String, Object> pipelineSchema() {
+    try {
+      Map<String, Object> response =
+          aiWebClient
+              .get()
+              .uri("/pipeline/schema")
+              .retrieve()
+              .bodyToMono(MAP_RESPONSE)
+              .block(timeout);
+      Map<String, Object> normalized = ResponseNormalizer.normalizeMap(response);
+      normalized.put("proxiedByBackend", true);
+      normalized.put("aiModuleAvailable", true);
+      normalized.put("humanReviewRequired", true);
+      normalized.put("notClinicalDiagnosis", true);
+      return normalized;
+    } catch (RuntimeException ex) {
+      return fallbackSchema(ex);
     }
+  }
 
-    @GetMapping("/schema")
-    public Map<String, Object> pipelineSchema() {
-        try {
-            Map<String, Object> response = aiWebClient.get()
-                .uri("/pipeline/schema")
-                .retrieve()
-                .bodyToMono(MAP_RESPONSE)
-                .block(timeout);
-            Map<String, Object> normalized = ResponseNormalizer.normalizeMap(response);
-            normalized.put("proxiedByBackend", true);
-            normalized.put("aiModuleAvailable", true);
-            normalized.put("humanReviewRequired", true);
-            normalized.put("notClinicalDiagnosis", true);
-            return normalized;
-        } catch (RuntimeException ex) {
-            return fallbackSchema(ex);
-        }
+  @GetMapping("/schema/verify")
+  public Map<String, Object> pipelineSchemaVerification() {
+    try {
+      Map<String, Object> response =
+          aiWebClient
+              .get()
+              .uri("/pipeline/schema/verify")
+              .retrieve()
+              .bodyToMono(MAP_RESPONSE)
+              .block(timeout);
+      Map<String, Object> normalized = ResponseNormalizer.normalizeMap(response);
+      normalized.put("proxiedByBackend", true);
+      normalized.put("aiModuleAvailable", true);
+      normalized.put("humanReviewRequired", true);
+      normalized.put("notClinicalDiagnosis", true);
+      return normalized;
+    } catch (RuntimeException ex) {
+      return fallbackVerification(ex);
     }
+  }
 
-    @GetMapping("/schema/verify")
-    public Map<String, Object> pipelineSchemaVerification() {
-        try {
-            Map<String, Object> response = aiWebClient.get()
-                .uri("/pipeline/schema/verify")
-                .retrieve()
-                .bodyToMono(MAP_RESPONSE)
-                .block(timeout);
-            Map<String, Object> normalized = ResponseNormalizer.normalizeMap(response);
-            normalized.put("proxiedByBackend", true);
-            normalized.put("aiModuleAvailable", true);
-            normalized.put("humanReviewRequired", true);
-            normalized.put("notClinicalDiagnosis", true);
-            return normalized;
-        } catch (RuntimeException ex) {
-            return fallbackVerification(ex);
-        }
-    }
-
-    private Map<String, Object> fallbackSchema(RuntimeException ex) {
-        return Map.ofEntries(
-            Map.entry("schemaVersion", "visual-review-contract-v1"),
-            Map.entry("status", "degraded_fallback"),
-            Map.entry("purpose", "Contrato minimo servido por backend cuando el AI Module no esta disponible."),
-            Map.entry("generatedBy", "pfi-backend.ai-contract-fallback"),
-            Map.entry("schemaHash", "backend-fallback-visual-review-contract-v1"),
-            Map.entry("proxiedByBackend", true),
-            Map.entry("aiModuleAvailable", false),
-            Map.entry("degradedMode", true),
-            Map.entry("humanReviewRequired", true),
-            Map.entry("notClinicalDiagnosis", true),
-            Map.entry("message", "AI Module no disponible."),
-            Map.entry("rootFields", Map.ofEntries(
+  private Map<String, Object> fallbackSchema(RuntimeException ex) {
+    return Map.ofEntries(
+        Map.entry("schemaVersion", "visual-review-contract-v1"),
+        Map.entry("status", "degraded_fallback"),
+        Map.entry(
+            "purpose",
+            "Contrato minimo servido por backend cuando el AI Module no esta disponible."),
+        Map.entry("generatedBy", "pfi-backend.ai-contract-fallback"),
+        Map.entry("schemaHash", "backend-fallback-visual-review-contract-v1"),
+        Map.entry("proxiedByBackend", true),
+        Map.entry("aiModuleAvailable", false),
+        Map.entry("degradedMode", true),
+        Map.entry("humanReviewRequired", true),
+        Map.entry("notClinicalDiagnosis", true),
+        Map.entry("message", "AI Module no disponible."),
+        Map.entry(
+            "rootFields",
+            Map.ofEntries(
                 Map.entry("runId", "Identificador estable de la corrida tecnica."),
                 Map.entry("caseId", "Identificador de caso de-identificado."),
                 Map.entry("patientId", "Referencia de-identificada del sujeto."),
@@ -88,49 +96,54 @@ public class AiContractController {
                 Map.entry("landmarks", "Puntos de referencia derivados del contrato visual."),
                 Map.entry("measurementValues", "Mediciones normalizadas para IA vs Reviewer."),
                 Map.entry("aiOutput", "Estado explicable de la salida IA/contrato."),
-                Map.entry("modelArtifact", "Estado del artifact .pt esperado para inferencia real."),
+                Map.entry(
+                    "modelArtifact", "Estado del artifact .pt esperado para inferencia real."),
                 Map.entry("quality", "Resumen cuantitativo del contrato visual."),
                 Map.entry("metadata", "Trazabilidad extendida de frontend/backend/AI Module."),
-                Map.entry("review", "Estado de revision profesional cuando backend lo adjunta.")
-            )),
-            Map.entry("aiOutput", Map.of(
-                "status", "contract_ready|real_inference|degraded",
-                "inferenceMode", "contract|mock|real",
-                "humanReviewRequired", true,
-                "notClinicalDiagnosis", true
-            )),
-            Map.entry("quality", Map.of(
+                Map.entry("review", "Estado de revision profesional cuando backend lo adjunta."))),
+        Map.entry(
+            "aiOutput",
+            Map.of(
+                "status",
+                "contract_ready|real_inference|degraded",
+                "inferenceMode",
+                "contract|mock|real",
+                "humanReviewRequired",
+                true,
+                "notClinicalDiagnosis",
+                true)),
+        Map.entry(
+            "quality",
+            Map.of(
                 "maskCount", "number",
                 "landmarkCount", "number",
                 "measurementCount", "number",
-                "measurementsDerivedFromContours", "boolean"
-            )),
-            Map.entry("guarantees", List.of(
+                "measurementsDerivedFromContours", "boolean")),
+        Map.entry(
+            "guarantees",
+            List.of(
                 "El contrato siempre declara humanReviewRequired=true.",
                 "El contrato siempre declara notClinicalDiagnosis=true.",
                 "Las mediciones son editables por Reviewer.",
                 "La inferencia real no se declara disponible si falta el artifact .pt.",
-                "El fallback backend conserva la forma principal del contrato si el AI Module no responde."
-            ))
-        );
-    }
+                "El fallback backend conserva la forma principal del contrato si el AI Module no responde.")));
+  }
 
-    private Map<String, Object> fallbackVerification(RuntimeException ex) {
-        return Map.ofEntries(
-            Map.entry("schemaVersion", "visual-review-contract-v1"),
-            Map.entry("schemaHash", "backend-fallback-visual-review-contract-v1"),
-            Map.entry("recomputedHash", "unavailable"),
-            Map.entry("hashValid", false),
-            Map.entry("governanceValid", true),
-            Map.entry("valid", false),
-            Map.entry("generatedBy", "pfi-backend.ai-contract-fallback"),
-            Map.entry("proxiedByBackend", true),
-            Map.entry("aiModuleAvailable", false),
-            Map.entry("degradedMode", true),
-            Map.entry("humanReviewRequired", true),
-            Map.entry("notClinicalDiagnosis", true),
-            Map.entry("missingRootFields", List.of()),
-            Map.entry("message", "Verificacion de contrato no disponible.")
-        );
-    }
+  private Map<String, Object> fallbackVerification(RuntimeException ex) {
+    return Map.ofEntries(
+        Map.entry("schemaVersion", "visual-review-contract-v1"),
+        Map.entry("schemaHash", "backend-fallback-visual-review-contract-v1"),
+        Map.entry("recomputedHash", "unavailable"),
+        Map.entry("hashValid", false),
+        Map.entry("governanceValid", true),
+        Map.entry("valid", false),
+        Map.entry("generatedBy", "pfi-backend.ai-contract-fallback"),
+        Map.entry("proxiedByBackend", true),
+        Map.entry("aiModuleAvailable", false),
+        Map.entry("degradedMode", true),
+        Map.entry("humanReviewRequired", true),
+        Map.entry("notClinicalDiagnosis", true),
+        Map.entry("missingRootFields", List.of()),
+        Map.entry("message", "Verificacion de contrato no disponible."));
+  }
 }
