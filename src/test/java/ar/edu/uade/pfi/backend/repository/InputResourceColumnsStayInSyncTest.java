@@ -70,11 +70,39 @@ class InputResourceColumnsStayInSyncTest {
         return columns;
     }
 
+    /**
+     * Cuerpo del método, delimitado contando llaves balanceadas desde su firma.
+     *
+     * <p>Antes buscaba una llave de cierre precedida por cuatro espacios, es decir asumía
+     * esa indentación. Con un formateador que indenta a dos —google-java-format, el que
+     * trae el build— ese delimitador no aparece, el método se extiende hasta el final del
+     * archivo y {@link #columnsReadIn} termina levantando las columnas de {@code readRun},
+     * que es el método siguiente. El test fallaba entonces con una lista de columnas de
+     * runs ({@code reviewed_at}, {@code trace_id}, {@code multiplanar_run_id}…) señalando
+     * un bug de SQL que no existía. Las llaves no dependen de cómo esté indentado el
+     * código.
+     *
+     * <p>Si el cuerpo no se puede delimitar, devuelve vacío: el llamador ya exige un
+     * mínimo de columnas leídas y falla con un mensaje que dice justamente eso, en vez de
+     * dar por buena una comparación contra nada.
+     */
     private String methodBody(String source, String signature) {
         int start = source.indexOf(signature);
         if (start < 0) return "";
-        int end = source.indexOf("\n    }", start);
-        return end < 0 ? source.substring(start) : source.substring(start, end);
+        int open = source.indexOf('{', start);
+        if (open < 0) return "";
+
+        int depth = 0;
+        for (int i = open; i < source.length(); i++) {
+            char current = source.charAt(i);
+            if (current == '{') {
+                depth++;
+            } else if (current == '}') {
+                depth--;
+                if (depth == 0) return source.substring(open, i + 1);
+            }
+        }
+        return "";
     }
 
     /** Nombres pedidos al ResultSet: {@code rs.getString("plane")} y compañía. */
