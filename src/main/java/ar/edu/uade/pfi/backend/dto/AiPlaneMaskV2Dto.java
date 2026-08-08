@@ -16,5 +16,4 @@ public record AiPlaneMaskV2Dto(
     Boolean enabled,
     Boolean editable,
     String coordinateSpace,
-    Map<String, Object> geometry
-) {}
+    Map<String, Object> geometry) {}

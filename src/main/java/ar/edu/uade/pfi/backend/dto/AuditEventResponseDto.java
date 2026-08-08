@@ -10,5 +10,4 @@ public record AuditEventResponseDto(
     String entityId,
     String traceId,
     Instant timestamp,
-    Map<String, Object> metadata
-) {}
+    Map<String, Object> metadata) {}

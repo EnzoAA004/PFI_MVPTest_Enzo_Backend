@@ -7,5 +7,4 @@ public record AiGovernanceV2Dto(
     Boolean humanReviewRequired,
     Boolean notClinicalDiagnosis,
     Boolean deidentified,
-    Boolean diagnosisGenerated
-) {}
+    Boolean diagnosisGenerated) {}

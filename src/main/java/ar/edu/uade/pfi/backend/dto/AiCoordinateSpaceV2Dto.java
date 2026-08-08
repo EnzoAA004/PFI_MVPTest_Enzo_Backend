@@ -12,5 +12,4 @@ public record AiCoordinateSpaceV2Dto(
     String xDirection,
     String yDirection,
     Integer sourceSliceIndex,
-    Integer sourceAxis
-) {}
+    Integer sourceAxis) {}

@@ -11,67 +11,67 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class RoleAuthorizationService {
-    private final AuditService auditService;
+  private final AuditService auditService;
 
-    public RoleAuthorizationService(AuditService auditService) {
-        this.auditService = auditService;
-    }
+  public RoleAuthorizationService(AuditService auditService) {
+    this.auditService = auditService;
+  }
 
-    public void requireAdmin(HttpServletRequest request, String entityId) {
-        requireAnyRole(request, entityId, "ADMIN", List.of("ADMIN"));
-    }
+  public void requireAdmin(HttpServletRequest request, String entityId) {
+    requireAnyRole(request, entityId, "ADMIN", List.of("ADMIN"));
+  }
 
-    public void requireProfessional(HttpServletRequest request, String entityId) {
-        requireAnyRole(request, entityId, "PROFESSIONAL", List.of("REVIEWER", "DOCTOR", "ADMIN"));
-    }
+  public void requireProfessional(HttpServletRequest request, String entityId) {
+    requireAnyRole(request, entityId, "PROFESSIONAL", List.of("REVIEWER", "DOCTOR", "ADMIN"));
+  }
 
-    private void requireAnyRole(HttpServletRequest request, String entityId, String semanticRole, List<String> allowedRoles) {
-        TokenService.Claims claims = claims(request);
-        List<String> currentRoles = claims == null || claims.roles() == null ? List.of() : claims.roles();
-        boolean allowed = currentRoles.stream().anyMatch(allowedRoles::contains);
-        if (allowed) {
-            return;
-        }
-        auditDenied(request, claims, entityId, semanticRole, currentRoles);
-        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No tiene permisos para realizar esta operacion.");
+  private void requireAnyRole(
+      HttpServletRequest request, String entityId, String semanticRole, List<String> allowedRoles) {
+    TokenService.Claims claims = claims(request);
+    List<String> currentRoles =
+        claims == null || claims.roles() == null ? List.of() : claims.roles();
+    boolean allowed = currentRoles.stream().anyMatch(allowedRoles::contains);
+    if (allowed) {
+      return;
     }
+    auditDenied(request, claims, entityId, semanticRole, currentRoles);
+    throw new ResponseStatusException(
+        HttpStatus.FORBIDDEN, "No tiene permisos para realizar esta operacion.");
+  }
 
-    private TokenService.Claims claims(HttpServletRequest request) {
-        Object value = request.getAttribute(AuthFilter.AUTH_CLAIMS_ATTRIBUTE);
-        return value instanceof TokenService.Claims claims ? claims : null;
-    }
+  private TokenService.Claims claims(HttpServletRequest request) {
+    Object value = request.getAttribute(AuthFilter.AUTH_CLAIMS_ATTRIBUTE);
+    return value instanceof TokenService.Claims claims ? claims : null;
+  }
 
-    private void auditDenied(
-        HttpServletRequest request,
-        TokenService.Claims claims,
-        String entityId,
-        String semanticRole,
-        List<String> currentRoles
-    ) {
-        if (auditService == null) return;
-        try {
-            auditService.record(
-                claims == null || claims.subject().isBlank() ? "anonymous" : claims.subject(),
-                "access.denied",
-                entityId,
-                traceId(request),
-                Map.of(
-                    "requiredRole", semanticRole,
-                    "roles", currentRoles,
-                    "method", request.getMethod()
-                )
-            );
-        } catch (RuntimeException ignored) {
-            // Authorization result must not depend on audit persistence availability.
-        }
+  private void auditDenied(
+      HttpServletRequest request,
+      TokenService.Claims claims,
+      String entityId,
+      String semanticRole,
+      List<String> currentRoles) {
+    if (auditService == null) return;
+    try {
+      auditService.record(
+          claims == null || claims.subject().isBlank() ? "anonymous" : claims.subject(),
+          "access.denied",
+          entityId,
+          traceId(request),
+          Map.of(
+              "requiredRole", semanticRole,
+              "roles", currentRoles,
+              "method", request.getMethod()));
+    } catch (RuntimeException ignored) {
+      // Authorization result must not depend on audit persistence availability.
     }
+  }
 
-    private String traceId(HttpServletRequest request) {
-        Object attribute = request.getAttribute(TraceIdFilter.TRACE_ID_ATTRIBUTE);
-        if (attribute instanceof String value && !value.isBlank()) {
-            return value;
-        }
-        String header = request.getHeader(TraceIdFilter.TRACE_ID_HEADER);
-        return header == null || header.isBlank() ? "unavailable" : header;
+  private String traceId(HttpServletRequest request) {
+    Object attribute = request.getAttribute(TraceIdFilter.TRACE_ID_ATTRIBUTE);
+    if (attribute instanceof String value && !value.isBlank()) {
+      return value;
     }
+    String header = request.getHeader(TraceIdFilter.TRACE_ID_HEADER);
+    return header == null || header.isBlank() ? "unavailable" : header;
+  }
 }

@@ -9,14 +9,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/ai/studies")
 public class AiStudyController {
-    private final StudyController studyController;
+  private final StudyController studyController;
 
-    public AiStudyController(StudyController studyController) {
-        this.studyController = studyController;
-    }
+  public AiStudyController(StudyController studyController) {
+    this.studyController = studyController;
+  }
 
-    @GetMapping("/demo-review")
-    public StudyReviewResponseDto demoReview(HttpServletRequest request) {
-        return studyController.demoReview(request);
-    }
+  @GetMapping("/demo-review")
+  public StudyReviewResponseDto demoReview(HttpServletRequest request) {
+    return studyController.demoReview(request);
+  }
 }

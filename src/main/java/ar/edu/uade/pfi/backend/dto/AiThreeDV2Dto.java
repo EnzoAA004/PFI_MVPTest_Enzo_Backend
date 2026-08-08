@@ -12,5 +12,4 @@ public record AiThreeDV2Dto(
     List<String> requiredInputs,
     List<AiPlaneAssetV2Dto> assets,
     Map<String, Object> reconstruction,
-    List<String> warnings
-) {}
+    List<String> warnings) {}
