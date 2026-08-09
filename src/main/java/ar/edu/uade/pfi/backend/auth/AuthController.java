@@ -11,8 +11,14 @@ import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.SettingsRequest;
 import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.TokenResponse;
 import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.UserResponse;
 import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.VerifyRequest;
+import ar.edu.uade.pfi.backend.config.error.ApiErrorResponse;
 import ar.edu.uade.pfi.backend.service.AuditService;
 import com.fasterxml.jackson.databind.JsonNode;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.Iterator;
@@ -32,6 +38,9 @@ import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/auth")
+@Tag(
+    name = "Autenticacion",
+    description = "Alta, login en dos pasos y sesion. Es la puerta de entrada al resto de la API.")
 public class AuthController {
   private final AuthService authService;
   private final AuditService auditService;
@@ -46,16 +55,67 @@ public class AuthController {
     this.authorizationService = authorizationService;
   }
 
+  @Operation(
+      summary = "Registra un profesional y abre un desafio de verificacion",
+      description =
+          """
+          Da de alta la cuenta y devuelve un `challengeId`. **No devuelve token**: hay que
+          completar la verificacion con `POST /api/auth/verify-registration`.
+
+          La cuenta nace en `PENDING_APPROVAL`. Con ese estado se obtiene token, pero solo
+          habilita `/api/auth/me` y `/api/auth/settings`; el resto de la API responde 403
+          hasta que un ADMIN la aprueba.
+          """)
+  @ApiResponse(responseCode = "200", description = "Cuenta creada; devuelve `challengeId`.")
+  @ApiResponse(
+      responseCode = "400",
+      description = "`VALIDATION_ERROR`: email invalido, password debil o campos faltantes.",
+      content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "409",
+      description = "`CONFLICT`: ya existe una cuenta con ese email.",
+      content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
   @PostMapping("/register")
   public PendingAuthResponse register(@Valid @RequestBody RegisterRequest request) {
     return authService.register(request);
   }
 
+  @Operation(
+      summary = "Completa la verificacion del registro y emite el token",
+      description =
+          "Cierra el desafio abierto por `POST /api/auth/register` y devuelve el access token"
+              + " y el refresh token.")
+  @ApiResponse(responseCode = "200", description = "Verificado; devuelve los tokens.")
+  @ApiResponse(
+      responseCode = "400",
+      description = "Codigo invalido, vencido o `challengeId` desconocido.",
+      content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
   @PostMapping("/verify-registration")
   public TokenResponse verifyRegistration(@Valid @RequestBody VerifyRequest request) {
     return authService.verify(request.challengeId(), request.code());
   }
 
+  @Operation(
+      summary = "Inicia sesion",
+      description =
+          """
+          Devuelve **una de dos formas** segun la configuracion de la cuenta, y el cliente
+          tiene que distinguirlas:
+
+          - `PendingAuthResponse` con `challengeId`, cuando hace falta segundo factor. Hay
+            que seguir con `POST /api/auth/verify-login`.
+          - `TokenResponse` con `accessToken` y `refreshToken`, cuando no hace falta.
+
+          Un email inexistente y una password incorrecta devuelven lo mismo, a proposito: no
+          se filtra si la cuenta existe.
+          """)
+  @ApiResponse(
+      responseCode = "200",
+      description = "Login aceptado: token, o desafio pendiente de verificacion.")
+  @ApiResponse(
+      responseCode = "401",
+      description = "`AUTHENTICATION_REQUIRED`: credenciales invalidas.",
+      content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
   @PostMapping("/login")
   public Object login(@Valid @RequestBody LoginRequest request) {
     Object response = authService.login(request.email(), request.password());
@@ -70,16 +130,61 @@ public class AuthController {
     return response;
   }
 
+  @Operation(
+      summary = "Completa el segundo factor del login y emite el token",
+      description =
+          "Es el endpoint que produce el `accessToken` que usa el resto de la API en el header"
+              + " `Authorization: Bearer <token>`.")
+  @ApiResponse(responseCode = "200", description = "Verificado; devuelve los tokens.")
+  @ApiResponse(
+      responseCode = "400",
+      description = "Codigo invalido, vencido o `challengeId` desconocido.",
+      content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
   @PostMapping("/verify-login")
   public TokenResponse verifyLogin(@Valid @RequestBody VerifyRequest request) {
     return authService.verify(request.challengeId(), request.code());
   }
 
+  @Operation(
+      summary = "Renueva el access token",
+      description =
+          """
+          Devuelve un access token nuevo a partir de un refresh token vigente.
+
+          El refresh token deja de servir si la cuenta cambia de estado -aprobacion,
+          desactivacion, cambio de rol-: en ese caso este endpoint responde 401 y hay que
+          volver a iniciar sesion. Es deliberado, para que una cuenta desactivada no siga
+          operando con un token viejo.
+          """)
+  @ApiResponse(responseCode = "200", description = "Token renovado.")
+  @ApiResponse(
+      responseCode = "401",
+      description = "`AUTHENTICATION_REQUIRED`: refresh token invalido, vencido o revocado.",
+      content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
   @PostMapping("/refresh")
   public TokenResponse refresh(@Valid @RequestBody RefreshRequest request) {
     return authService.refresh(request.refreshToken());
   }
 
+  @Operation(
+      summary = "Emite un token de demo (solo entornos locales)",
+      description =
+          """
+          Devuelve un token con roles ADMIN/DOCTOR/REVIEWER sin registro ni verificacion, para
+          poder recorrer el sistema en local o en una demo.
+
+          **Solo existe si `PFI_AUTH_DEMO_ENABLED=true` y el perfil activo no es `prod` o
+          `production`.** Con la bandera apagada la ruta deja de ser publica y responde 401
+          como cualquier otra.
+
+          No habilitarlo en un entorno accesible desde afuera: cualquiera que llegue al puerto
+          obtiene un token de administrador.
+          """)
+  @ApiResponse(responseCode = "200", description = "Token de demo emitido.")
+  @ApiResponse(
+      responseCode = "401",
+      description = "El modo demo esta deshabilitado.",
+      content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
   @PostMapping("/demo-doctor")
   public TokenResponse demoDoctor() {
     return authService.seedDemoDoctor();
@@ -92,6 +197,16 @@ public class AuthController {
     return ResponseEntity.ok(Map.of("status", "ok", "refreshTokenRevoked", request != null));
   }
 
+  @Operation(
+      summary = "Devuelve el usuario de la sesion actual",
+      description =
+          "Perfil, roles efectivos y estado de aprobacion del portador del token. Es uno de los"
+              + " dos endpoints que una cuenta `PENDING_APPROVAL` puede llamar.")
+  @ApiResponse(responseCode = "200", description = "Usuario actual.")
+  @ApiResponse(
+      responseCode = "401",
+      description = "`AUTHENTICATION_REQUIRED`: sin token, token invalido o cuenta desactivada.",
+      content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
   @GetMapping("/me")
   public UserResponse me(HttpServletRequest request) {
     TokenService.Claims claims =

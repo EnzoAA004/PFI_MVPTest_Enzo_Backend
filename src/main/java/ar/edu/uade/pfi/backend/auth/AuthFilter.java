@@ -51,12 +51,27 @@ public class AuthFilter extends OncePerRequestFilter {
   /** Only a minimal, no-detail liveness endpoint is anonymously reachable — see P10-A.1 §7. */
   private static final Set<String> PUBLIC_LIVENESS_PATHS = Set.of("/api/system/health");
 
+  /**
+   * OpenAPI documentation, when it is enabled at all. These are prefixes and not exact paths
+   * because springdoc serves a small tree under each one (the grouped documents under {@code
+   * /v3/api-docs/**}, and the UI's own assets under {@code /swagger-ui/**}).
+   *
+   * <p>What they expose is the shape of the API — paths, schemas, status codes — never data and
+   * never a way to call anything: every documented operation still goes through this same filter.
+   * They are gated behind {@code springdoc.api-docs.enabled} so a deployment that does not want to
+   * publish its API reference turns off the docs and the exception at the same time, instead of
+   * leaving a public path pointing at something that no longer answers.
+   */
+  private static final List<String> OPENAPI_PATH_PREFIXES =
+      List.of("/v3/api-docs", "/swagger-ui", "/swagger-ui.html");
+
   private static final Set<String> PENDING_ALLOWED_PATHS =
       Set.of("/api/auth/me", "/api/auth/settings");
   private final TokenService tokenService;
   private final AuthAccountStateService accountStateService;
   private final boolean authEnabled;
   private final boolean demoEnabled;
+  private final boolean openApiEnabled;
   private final Environment environment;
   private final ApiErrorWriter apiErrorWriter;
   private final OperationalMetricsService metrics;
@@ -70,12 +85,32 @@ public class AuthFilter extends OncePerRequestFilter {
     this(tokenService, accountStateService, authEnabled, demoEnabled, environment, null, null);
   }
 
+  public AuthFilter(
+      TokenService tokenService,
+      AuthAccountStateService accountStateService,
+      boolean authEnabled,
+      boolean demoEnabled,
+      Environment environment,
+      @Nullable ApiErrorWriter apiErrorWriter,
+      @Nullable OperationalMetricsService metrics) {
+    this(
+        tokenService,
+        accountStateService,
+        authEnabled,
+        demoEnabled,
+        true,
+        environment,
+        apiErrorWriter,
+        metrics);
+  }
+
   @Autowired
   public AuthFilter(
       TokenService tokenService,
       AuthAccountStateService accountStateService,
       @Value("${pfi.auth.enabled:true}") boolean authEnabled,
       @Value("${pfi.auth.demo-enabled:false}") boolean demoEnabled,
+      @Value("${springdoc.api-docs.enabled:true}") boolean openApiEnabled,
       Environment environment,
       @Nullable ApiErrorWriter apiErrorWriter,
       @Nullable OperationalMetricsService metrics) {
@@ -83,6 +118,7 @@ public class AuthFilter extends OncePerRequestFilter {
     this.accountStateService = accountStateService;
     this.authEnabled = authEnabled;
     this.demoEnabled = demoEnabled;
+    this.openApiEnabled = openApiEnabled;
     this.environment = environment;
     this.apiErrorWriter =
         apiErrorWriter != null ? apiErrorWriter : new ApiErrorWriter(new ObjectMapper());
@@ -192,6 +228,19 @@ public class AuthFilter extends OncePerRequestFilter {
     if (PUBLIC_AUTH_PATHS.contains(path)) return true;
     if (PUBLIC_LIVENESS_PATHS.contains(path)) return true;
     if (DEMO_DOCTOR_PATH.equals(path)) return isDemoEffectivelyEnabled();
+    if (openApiEnabled && isOpenApiPath(path)) return true;
+    return false;
+  }
+
+  /**
+   * Prefix match, but only on a path boundary: {@code /v3/api-docs} and {@code /v3/api-docs/x} are
+   * documentation, {@code /v3/api-docsomething} is not. A bare {@code startsWith} would turn any
+   * future endpoint whose path happens to begin with one of these strings into a public one.
+   */
+  private boolean isOpenApiPath(String path) {
+    for (String prefix : OPENAPI_PATH_PREFIXES) {
+      if (path.equals(prefix) || path.startsWith(prefix + "/")) return true;
+    }
     return false;
   }
 
