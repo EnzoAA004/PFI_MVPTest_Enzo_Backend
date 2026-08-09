@@ -1,0 +1,135 @@
+# Stack PFI RM Lumbar - modo registry
+#
+# Levanta el sistema completo con imagenes ya publicadas en GHCR. No compila nada, no
+# necesita Java, Node ni Python, y no depende de tener los repositorios clonados: este
+# archivo mas un .env alcanzan.
+#
+#   mkdir lumbarai && cd lumbarai
+#   # copiar compose.yml y .env.registry.example como .env
+#   docker compose pull
+#   docker compose up
+#
+# Para desarrollar desde codigo fuente, el otro archivo: compose.local.yml.
+#
+# Las imagenes se pinean con PFI_IMAGE_TAG. `latest` sigue a main; para reproducir una
+# version exacta, usar el tag `sha-<commit>` que publica el CI.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pfi-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pfi_backend}
+      POSTGRES_USER: ${POSTGRES_USER:-pfi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-local-only}
+    ports:
+      - "${POSTGRES_PORT:-54329}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - pfi-registry
+
+  ai-module:
+    image: ghcr.io/enzoaa004/pfi-ai-module:${PFI_IMAGE_TAG:-latest}
+    container_name: pfi-ai-module
+    environment:
+      PORT: 8000
+      # Los dos checkpoints finales viajan dentro de la imagen: no hay que montar nada
+      # para que la inferencia sagital y axial funcionen.
+      PFI_MODEL_DIR: /app/models/final
+      PFI_ROOT: /app
+      PFI_OUTPUT_DIR: /app/outputs
+      PFI_UPLOAD_DIR: /app/uploads/inputs
+      PFI_MAX_UPLOAD_BYTES: ${PFI_AI_STUDY_UPLOAD_MAX_BYTES:-209715200}
+      # Los clasificadores de P10.6 (subarticular) y P10.7 (degenerativo discal) NO estan
+      # en la imagen: son artefactos de release que hoy no se publican. Quedan sin
+      # configurar a proposito. El servicio arranca igual, /health los reporta como
+      # `not_configured` y solo esos dos endpoints responden 503; todo lo demas funciona.
+      PFI_SUBARTICULAR_CHECKPOINT_PATH: ""
+      PFI_P10_7_CHECKPOINT_PATH: ""
+    volumes:
+      # Las series subidas viven aca. Sin volumen quedan en la capa efimera: al recrear
+      # el contenedor el visor sigue mostrando cortes -las previsualizaciones estan en
+      # outputs- pero cualquier inputId devuelve 404 porque el archivo ya no existe.
+      - ai-outputs:/app/outputs
+      - ai-uploads:/app/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/health >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - pfi-registry
+
+  backend:
+    image: ghcr.io/enzoaa004/pfi-backend:${PFI_IMAGE_TAG:-latest}
+    container_name: pfi-backend
+    environment:
+      PORT: 8080
+      PFI_PERSISTENCE_MODE: postgres
+      DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-pfi_backend}?user=${POSTGRES_USER:-pfi}&password=${POSTGRES_PASSWORD:-change-me-local-only}
+      # Nombre de servicio en la red de Compose: esto lo resuelve el backend, no el navegador.
+      PFI_AI_SERVICE_URL: http://ai-module:8000
+      PFI_AI_TIMEOUT_SECONDS: ${PFI_AI_TIMEOUT_SECONDS:-180}
+      PFI_AI_SERVICE_MULTIPLANAR_CONTRACT_VERSION: ${PFI_AI_SERVICE_MULTIPLANAR_CONTRACT_VERSION:-v2}
+      PFI_AI_STUDY_UPLOAD_MAX_BYTES: ${PFI_AI_STUDY_UPLOAD_MAX_BYTES:-209715200}
+      PFI_AUTH_JWT_SECRET: ${PFI_AUTH_JWT_SECRET:-change-me-local-jwt-secret}
+      # Fail-closed si la variable no esta. El .env.registry.example la enciende para que
+      # se pueda entrar al sistema sin registro previo; ver la advertencia de ese archivo.
+      PFI_AUTH_DEMO_ENABLED: ${PFI_AUTH_DEMO_ENABLED:-false}
+      PFI_CORS_ALLOWED_ORIGINS: ${PFI_CORS_ALLOWED_ORIGINS:-http://localhost:8088}
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ai-module:
+        condition: service_healthy
+    healthcheck:
+      # /api/system/health es el unico endpoint anonimo. Apuntarlo a /api/ai/health, que
+      # exige autenticacion, deja el contenedor unhealthy para siempre con un 401.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/api/system/health >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - pfi-registry
+
+  frontend:
+    image: ghcr.io/enzoaa004/pfi-frontend:${PFI_IMAGE_TAG:-latest}
+    container_name: pfi-frontend
+    environment:
+      # La imagen no se recompila: el entrypoint escribe esta URL en /env.js y el
+      # navegador la lee. Tiene que ser alcanzable desde el navegador, no desde la red
+      # interna de Docker.
+      BACKEND_URL: ${BACKEND_PUBLIC_URL:-http://localhost:8080}
+    ports:
+      - "${FRONTEND_PORT:-8088}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/env.js >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 10s
+    networks:
+      - pfi-registry
+
+networks:
+  pfi-registry:
+    name: pfi-registry
+
+volumes:
+  postgres-data:
+  ai-outputs:
+  ai-uploads:

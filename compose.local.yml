@@ -1,3 +1,17 @@
+# Stack PFI RM Lumbar - modo desarrollo local
+#
+# Construye las tres imagenes desde codigo fuente. Requiere tener los tres repositorios
+# clonados como carpetas hermanas, con estos nombres exactos:
+#
+#   tesis/
+#     PFI_MVPTest_Enzo_Backend/     <- aca vive este archivo
+#     PFI_MVPTest_Enzo_AImodule/
+#     PFI_MVPTest_Enzo_Frontend/
+#
+#   docker compose -f compose.local.yml up --build
+#
+# Para levantar el sistema sin clonar nada, con imagenes ya publicadas: compose.yml.
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -69,8 +83,14 @@ services:
       PFI_AI_STUDY_UPLOAD_MAX_BYTES: ${PFI_AI_STUDY_UPLOAD_MAX_BYTES:-209715200}
       PFI_AUTH_JWT_SECRET: ${PFI_AUTH_JWT_SECRET:-change-me-local-jwt-secret}
       # Local E2E only: when true, /api/auth/demo-doctor can mint a scoped
-      # ADMIN/DOCTOR/REVIEWER token. Default remains fail-closed.
-      PFI_AUTH_DEMO_ENABLED: ${PFI_AUTH_DEMO_ENABLED:-false}
+      # ADMIN/DOCTOR/REVIEWER token.
+      #
+      # Estos dos flags vivian en `docker-compose.override.yml`, que esta en .gitignore:
+      # el modo local solo era usable si cada uno se escribia a mano un archivo que no
+      # esta en el repositorio. Pasan aca, encendidos, porque este archivo **es** el modo
+      # de desarrollo. En compose.yml (registry) el default sigue siendo false.
+      PFI_AUTH_DEMO_ENABLED: ${PFI_AUTH_DEMO_ENABLED:-true}
+      PFI_AUTH_EXPOSE_DEV_CODES: ${PFI_AUTH_EXPOSE_DEV_CODES:-true}
       PFI_CORS_ALLOWED_ORIGINS: ${PFI_CORS_ALLOWED_ORIGINS:-http://localhost:8088}
     ports:
       - "${BACKEND_PORT:-8080}:8080"
