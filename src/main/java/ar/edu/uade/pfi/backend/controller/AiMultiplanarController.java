@@ -1,6 +1,7 @@
 package ar.edu.uade.pfi.backend.controller;
 
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
+import ar.edu.uade.pfi.backend.config.error.ApiErrorResponse;
 import ar.edu.uade.pfi.backend.domain.CanonicalMultiplanarRun;
 import ar.edu.uade.pfi.backend.domain.CanonicalPlaneRun;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunApiRequestDto;
@@ -12,6 +13,11 @@ import ar.edu.uade.pfi.backend.service.MultiplanarRealBaselineContractValidator;
 import ar.edu.uade.pfi.backend.service.MultiplanarRunPersistenceService;
 import ar.edu.uade.pfi.backend.service.MultiplanarRunResponsePresenter;
 import ar.edu.uade.pfi.backend.service.StudyRunService.PreparedStudyMetadata;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,6 +33,9 @@ import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/ai/multiplanar")
+@Tag(
+    name = "IA - corrida multiplanar",
+    description = "Analisis dual sagital/axial, el flujo principal del sistema.")
 public class AiMultiplanarController {
   private final AiServiceOperations aiServiceClient;
   private final MultiplanarRunPersistenceService persistenceService;
@@ -98,6 +107,68 @@ public class AiMultiplanarController {
     }
   }
 
+  @Operation(
+      summary = "Ejecuta una corrida dual sagital + axial",
+      description =
+          """
+          Es el endpoint principal del flujo clinico de la tesis: corre los dos planos en una
+          sola operacion y devuelve la corrida canonica con mascaras, landmarks, mediciones y
+          metadata volumetrica por plano.
+
+          Flujo recomendado:
+
+          1. `POST /api/ai/inputs` para cada plano, o `POST /api/ai/studies` con el estudio
+             completo.
+          2. `POST /api/ai/multiplanar/run` con `sagittalInputId`, `axialInputId`,
+             `sagittalModelKey=sagittal_spider`, `axialModelKey=axial_t2_alkafri` y
+             `metadata.inferenceMode=real_baseline` con `allowContractFallback=false`.
+          3. Leer `planes.sagittal.effectiveInferenceMode` y `planes.axial.effectiveInferenceMode`
+             antes de mostrar nada: son los que dicen si el resultado es real o degradado.
+          4. Abrir los assets solo por las URLs proxy del backend.
+          5. Registrar la revision con `PATCH /api/ai/review/{runId}`.
+
+          En modo estricto el sagital debe coincidir con el checkpoint final y su SHA-256
+          esperado; el axial se valida como real de forma independiente. Si una corrida
+          estricta queda mixed, contract, fallback o degradada, el backend devuelve
+          `AI_MULTIPLANAR_CONTRACT_VIOLATION`, **no persiste una corrida completada falsa** y
+          audita el fallo.
+
+          La respuesta publica elimina toda ruta interna (`inputPath`, `sourcePath`,
+          `outputFiles`, rutas de Colab o Drive) y publica solo `input.png`, `overlay.png` y
+          `mask-preview.png` como URLs relativas. `mask.npy` y `confidence.npy` no llegan al
+          navegador.
+          """)
+  @ApiResponse(
+      responseCode = "200",
+      description =
+          """
+          Corrida procesada. Requiere revision profesional.
+
+          **Un 200 no garantiza inferencia real.** Fuera del modo estricto, si el modulo de \
+          IA no esta disponible la respuesta sigue siendo 200 con \
+          `effectiveInferenceMode: "contract"`, que es un resultado de contrato y no una \
+          corrida del modelo. Hay que mirar `effectiveInferenceMode` por plano antes de \
+          presentar nada como resultado del sistema.\
+          """)
+  @ApiResponse(
+      responseCode = "400",
+      description = "`BAD_REQUEST`: no se pidio ningun plano, o el payload no es coherente.",
+      content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "502",
+      description =
+          "`AI_MULTIPLANAR_CONTRACT_VIOLATION`: solo en modo estricto. La respuesta del modulo"
+              + " de IA no cumple el contrato, o la corrida quedo mixed/fallback/degradada. No"
+              + " se persiste una corrida completada falsa y el fallo queda auditado.",
+      content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "503",
+      description = "`UPSTREAM_UNAVAILABLE`: solo en modo estricto. El modulo de IA no respondio.",
+      content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "504",
+      description = "`AI_TIMEOUT`: el modulo de IA excedio `PFI_AI_TIMEOUT_SECONDS`.",
+      content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
   @PostMapping("/run")
   public MultiplanarRunResponseDto run(@Valid @RequestBody MultiplanarRunApiRequestDto request) {
     PreparedStudyMetadata preparedMetadata =

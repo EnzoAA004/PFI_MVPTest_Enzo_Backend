@@ -1,6 +1,7 @@
 package ar.edu.uade.pfi.backend.controller;
 
 import ar.edu.uade.pfi.backend.auth.RoleAuthorizationService;
+import ar.edu.uade.pfi.backend.config.error.ApiErrorResponse;
 import ar.edu.uade.pfi.backend.domain.Study;
 import ar.edu.uade.pfi.backend.dto.StudyDetailResponseDto;
 import ar.edu.uade.pfi.backend.dto.StudyListResponseDto;
@@ -18,6 +19,11 @@ import ar.edu.uade.pfi.backend.service.ProfessionalAccessAuditService;
 import ar.edu.uade.pfi.backend.service.StudyNotFoundException;
 import ar.edu.uade.pfi.backend.service.StudyRunService;
 import ar.edu.uade.pfi.backend.service.StudyWorklistService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -32,6 +38,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/studies")
+@Tag(
+    name = "Estudios",
+    description = "Worklist y detalle de estudios de-identificados. Todo acceso queda auditado.")
 public class StudyController {
   private final StudyWorklistService studyWorklistService;
   private final StudyRunService studyRunService;
@@ -49,12 +58,41 @@ public class StudyController {
     this.authorizationService = authorizationService;
   }
 
+  @Operation(
+      summary = "Lista la worklist de estudios de-identificados",
+      description =
+          """
+          Devuelve los estudios con su estado de revision y un resumen por estado. Los datos
+          estan de-identificados: se publica un `subjectRef` opaco, nunca nombre ni documento.
+
+          `source` y `dataOrigin` indican de donde salieron los datos (`postgres-domain` /
+          `database` cuando hay persistencia real), asi que sirven para distinguir un sistema
+          conectado de uno en memoria.
+
+          Cada consulta deja un evento de acceso profesional en la auditoria: quien miro la
+          worklist y cuando.
+          """)
+  @ApiResponse(responseCode = "200", description = "Worklist con resumen por estado.")
+  @ApiResponse(
+      responseCode = "503",
+      description = "`DATABASE_UNAVAILABLE`: no se pudo consultar la base.",
+      content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
   @GetMapping
   public StudyListResponseDto listStudies(HttpServletRequest request) {
     accessAuditService.record(request, "access_worklist", "Worklist de-identificada consultada");
     return studyWorklistService.listStudies();
   }
 
+  @Operation(
+      summary = "Detalle de un estudio de-identificado",
+      description =
+          "Metadata del estudio y sus series de entrada. Tambien deja evento de acceso"
+              + " profesional en la auditoria.")
+  @ApiResponse(responseCode = "200", description = "Detalle del estudio.")
+  @ApiResponse(
+      responseCode = "404",
+      description = "`STUDY_NOT_FOUND`.",
+      content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
   @GetMapping("/{caseId}")
   public StudyDetailResponseDto getStudy(@PathVariable String caseId, HttpServletRequest request) {
     accessAuditService.record(

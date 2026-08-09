@@ -2,6 +2,7 @@ package ar.edu.uade.pfi.backend.controller;
 
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
 import ar.edu.uade.pfi.backend.config.error.ApiErrorCode;
+import ar.edu.uade.pfi.backend.config.error.ApiErrorResponse;
 import ar.edu.uade.pfi.backend.dto.AiSubarticularPredictRequestDto;
 import ar.edu.uade.pfi.backend.dto.DegenerativeFindingSideV1;
 import ar.edu.uade.pfi.backend.dto.DegenerativeFindingsV1Dto;
@@ -10,6 +11,11 @@ import ar.edu.uade.pfi.backend.dto.SubarticularPredictionResponseDto;
 import ar.edu.uade.pfi.backend.service.AuditService;
 import ar.edu.uade.pfi.backend.service.DegenerativeFindingsV1Validator;
 import com.fasterxml.jackson.databind.JsonNode;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -45,6 +51,9 @@ import org.springframework.web.server.ResponseStatusException;
  */
 @RestController
 @RequestMapping("/api/ai/degenerative-findings")
+@Tag(
+    name = "IA - hallazgos degenerativos",
+    description = "Clasificacion asistida sobre ROI marcada por el profesional. Research-only.")
 public class AiDegenerativeFindingsController {
   private final AiServiceOperations aiServiceClient;
   private final DegenerativeFindingsV1Validator validator;
@@ -80,6 +89,56 @@ public class AiDegenerativeFindingsController {
    * Un campo que el backend deja pasar vuelve como un rechazo aguas arriba, dos saltos despues y
    * con un codigo que no explica nada.
    */
+  @Operation(
+      summary = "Clasifica estenosis subarticular en una ROI marcada por el profesional",
+      description =
+          """
+          Clasifica un receso subarticular en `normal_mild`, `moderate` o `severe` a partir de
+          una coordenada que **marca el profesional** sobre un corte axial T2. El modelo no
+          detecta la ROI: recibe lado, nivel, corte y coordenada, y solo clasifica.
+
+          Es un resultado de investigacion (`researchOnly=true`), siempre con
+          `humanReviewRequired=true`. No es diagnostico ni recomendacion de tratamiento.
+
+          **No persiste como hallazgo del estudio**, pero si deja un evento de auditoria con
+          la clase elegida, sus probabilidades y el SHA-256 del checkpoint. Sin eso, cuando
+          despues el revisor acepta o corrige, lo unico auditable seria "el medico acepto
+          algo", que no permite reconstruir nada.
+
+          Requiere que el modulo de IA tenga el checkpoint congelado montado. Cuando no lo
+          tiene, este endpoint responde 503 y el resto del sistema sigue funcionando: el
+          estado real se consulta en `GET /api/ai/health`, en
+          `degenerativeFindingModels.subarticular.status`.
+          """)
+  @ApiResponse(responseCode = "200", description = "Clasificacion obtenida. Requiere revision.")
+  @ApiResponse(
+      responseCode = "400",
+      description =
+          """
+          `BAD_REQUEST`: la validacion local rechaza el payload -nivel fuera de \
+          L1-L2..L5-S1, lado distinto de `left`/`right`, coordenada no finita, o un campo \
+          desconocido, que se rechaza en vez de ignorarse.
+
+          `AI_SUBARTICULAR_INVALID_INPUT` es distinto: lo devuelve el modulo de IA cuando la \
+          ROI pasa la validacion local pero no se puede recortar contra el corte real.\
+          """,
+      content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "404",
+      description = "`AI_INPUT_NOT_FOUND`: el `inputId` no existe o ya no esta disponible.",
+      content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "503",
+      description =
+          "`AI_SUBARTICULAR_UNAVAILABLE`: el checkpoint no esta configurado o no esta"
+              + " presente. Es degradacion esperada, no una falla del sistema.",
+      content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "502",
+      description =
+          "`AI_SUBARTICULAR_CHECKPOINT_INVALID`: el archivo esta pero su SHA-256 no es el"
+              + " esperado. El runtime lo verifica antes de deserializar.",
+      content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
   @PostMapping("/subarticular")
   public SubarticularPredictionResponseDto predictSubarticular(@RequestBody JsonNode body) {
     SubarticularPredictionRequestDto request = strictRequest(body);
