@@ -20,8 +20,63 @@ jobs:
           java-version: "17"
           cache: maven
 
-      - name: Run tests
-        run: mvn test
+      # `verify` y no `test`: es la fase donde JaCoCo genera el reporte, una vez que
+      # surefire termino de escribir jacoco.exec. Ademas verifica que el jar se arme, que
+      # antes no se comprobaba en ningun lado aunque el Dockerfile dependa de eso.
+      - name: Run tests with coverage
+        run: mvn verify
+
+      # El porcentaje tiene que verse sin descargar nada: va al summary del job.
+      # Se lee el CSV de JaCoCo, que es la fuente de la verdad del mismo reporte HTML.
+      - name: Coverage summary
+        if: always()
+        run: |
+          CSV=target/site/jacoco/jacoco.csv
+          if [ ! -f "$CSV" ]; then
+            echo "No se genero $CSV" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          python3 - "$CSV" >> "$GITHUB_STEP_SUMMARY" <<'PY'
+          import csv, sys
+          from collections import defaultdict
+
+          pkgs, total = defaultdict(lambda: defaultdict(int)), defaultdict(int)
+          keys = ("INSTRUCTION_MISSED", "INSTRUCTION_COVERED", "BRANCH_MISSED",
+                  "BRANCH_COVERED", "LINE_MISSED", "LINE_COVERED")
+          with open(sys.argv[1], newline="", encoding="utf-8") as fh:
+              for row in csv.DictReader(fh):
+                  pkg = row["PACKAGE"].replace("ar.edu.uade.pfi.backend", "").lstrip(".") or "(raiz)"
+                  for k in keys:
+                      pkgs[pkg][k] += int(row[k]); total[k] += int(row[k])
+
+          def pct(c, m):
+              d = c + m
+              return f"{100.0 * c / d:.1f}%" if d else "n/a"
+
+          lt = total["LINE_COVERED"] + total["LINE_MISSED"]
+          bt = total["BRANCH_COVERED"] + total["BRANCH_MISSED"]
+          print("## Cobertura del backend\n")
+          print(f"**Lineas: {pct(total['LINE_COVERED'], total['LINE_MISSED'])}** "
+                f"({total['LINE_COVERED']}/{lt}) &nbsp;&nbsp; "
+                f"**Ramas: {pct(total['BRANCH_COVERED'], total['BRANCH_MISSED'])}** "
+                f"({total['BRANCH_COVERED']}/{bt})\n")
+          print("| Paquete | Lineas | Ramas | Cubiertas/Total |")
+          print("|---|---:|---:|---:|")
+          rows = sorted(pkgs.items(), key=lambda kv: -(kv[1]["LINE_COVERED"] + kv[1]["LINE_MISSED"]))
+          for pkg, m in rows:
+              n = m["LINE_COVERED"] + m["LINE_MISSED"]
+              print(f"| `{pkg}` | {pct(m['LINE_COVERED'], m['LINE_MISSED'])} "
+                    f"| {pct(m['BRANCH_COVERED'], m['BRANCH_MISSED'])} | {m['LINE_COVERED']}/{n} |")
+          print("\nReporte HTML completo: artifact `jacoco-report`.")
+          PY
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: target/site/jacoco
+          retention-days: 14
 
   # La imagen se construye siempre, tambien en un PR: un Dockerfile roto tiene que
   # aparecer antes del merge y no cuando alguien intenta desplegar. Publicar, en cambio,

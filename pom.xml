@@ -42,6 +42,7 @@
 
     <spotless-maven-plugin.version>2.43.0</spotless-maven-plugin.version>
     <maven-enforcer-plugin.version>3.4.1</maven-enforcer-plugin.version>
+    <jacoco-maven-plugin.version>0.8.12</jacoco-maven-plugin.version>
   </properties>
 
   <dependencies>
@@ -135,6 +136,42 @@
                 </requireMavenVersion>
               </rules>
             </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!--
+        Cobertura. Todavia sin `check`: primero se mide y despues se decide si conviene un
+        umbral y en que nivel. Poner un numero antes de conocer el baseline solo consigue que
+        el CI falle por una cifra elegida a dedo.
+
+        No hay exclusiones. Los DTOs son 70 clases y en su mayoria records, que aportan
+        metodos sinteticos (equals, hashCode, toString) que nadie testea a proposito; excluirlos
+        subiria el numero global sin que nadie escriba un test mas. Se prefiere leer la
+        cobertura por paquete, donde esa distorsion se ve en vez de esconderse.
+      -->
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>${jacoco-maven-plugin.version}</version>
+        <executions>
+          <execution>
+            <id>jacoco-instrument</id>
+            <goals>
+              <goal>prepare-agent</goal>
+            </goals>
+          </execution>
+          <!--
+            En `verify` y no en `test`: surefire tiene que haber terminado de escribir
+            jacoco.exec antes de que se genere el reporte. Atado a `test` el reporte sale
+            de la corrida anterior, que es peor que no tenerlo.
+          -->
+          <execution>
+            <id>jacoco-report</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>report</goal>
+            </goals>
           </execution>
         </executions>
       </plugin>
