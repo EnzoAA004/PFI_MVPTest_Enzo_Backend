@@ -28,6 +28,11 @@ PORT=8080
 
 ## Comandos Locales
 
+Requisitos: **Java 17** y Maven 3.8.3 o superior. El build los verifica con Maven Enforcer y
+falla en `validate` si el JDK no es 17.x, asi que no hace falta confiar en esta linea. Si tenes
+varios JDK instalados, apunta `JAVA_HOME` al 17 antes de compilar: Maven usa ese, no el `java`
+que este primero en el `PATH`.
+
 ```bash
 mvn test
 mvn spring-boot:run
