@@ -13,11 +13,17 @@
 #
 # Las imagenes se pinean con PFI_IMAGE_TAG. `latest` sigue a main; para reproducir una
 # version exacta, usar el tag `sha-<commit>` que publica el CI.
+#
+# Ningun servicio declara `container_name`. Los nombres de contenedor son globales al
+# demonio de Docker: con nombres fijos, este stack no puede levantarse en una maquina que
+# ya tenga corriendo el de compose.local.yml -falla con "container name is already in
+# use"-, que es exactamente la maquina de quien desarrolla. Compose los nombra solo a
+# partir del directorio, asi que los dos stacks conviven. Los puertos del host si pueden
+# chocar: para eso estan BACKEND_PORT, FRONTEND_PORT y POSTGRES_PORT.
 
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: pfi-postgres
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-pfi_backend}
       POSTGRES_USER: ${POSTGRES_USER:-pfi}
@@ -37,7 +43,6 @@ services:
 
   ai-module:
     image: ghcr.io/enzoaa004/pfi-ai-module:${PFI_IMAGE_TAG:-latest}
-    container_name: pfi-ai-module
     environment:
       PORT: 8000
       # Los dos checkpoints finales viajan dentro de la imagen: no hay que montar nada
@@ -70,7 +75,6 @@ services:
 
   backend:
     image: ghcr.io/enzoaa004/pfi-backend:${PFI_IMAGE_TAG:-latest}
-    container_name: pfi-backend
     environment:
       PORT: 8080
       PFI_PERSISTENCE_MODE: postgres
@@ -105,7 +109,6 @@ services:
 
   frontend:
     image: ghcr.io/enzoaa004/pfi-frontend:${PFI_IMAGE_TAG:-latest}
-    container_name: pfi-frontend
     environment:
       # La imagen no se recompila: el entrypoint escribe esta URL en /env.js y el
       # navegador la lee. Tiene que ser alcanzable desde el navegador, no desde la red
