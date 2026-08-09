@@ -6,8 +6,8 @@ Imagen Docker para el backend Spring Boot del PFI.
 
 El `Dockerfile` es multi-stage:
 
-- Build: `maven:3.9-eclipse-temurin-21`
-- Runtime: `eclipse-temurin:21-jre-alpine`
+- Build: `maven:3.9-eclipse-temurin-17`
+- Runtime: `eclipse-temurin:17-jre-alpine`
 - Jar: `/app/app.jar`
 - Puerto expuesto: `8080`
 

@@ -108,8 +108,15 @@
             <configuration>
               <rules>
                 <dependencyConvergence />
+                <!--
+                  Rango cerrado, no un numero suelto: para el enforcer "17" significa
+                  "17 o superior", asi que un JDK 21 o 25 pasaba la regla aunque el
+                  proyecto declare 17. El contrato del proyecto es Java 17, y con
+                  [17,18) un JDK distinto frena el build en la fase validate en vez de
+                  aparecer mas tarde como una diferencia de bytecode o de runtime.
+                -->
                 <requireJavaVersion>
-                  <version>${java.version}</version>
+                  <version>[${java.version},18)</version>
                 </requireJavaVersion>
                 <requireMavenVersion>
                   <version>${maven.version}</version>
