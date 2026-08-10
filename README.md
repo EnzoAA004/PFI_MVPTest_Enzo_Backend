@@ -1,158 +1,177 @@
-# PFI Backend
+# PFI RM Lumbar — Backend y stack del producto
 
-Backend Spring Boot independiente para el PFI. Este servicio expone una API REST para el frontend React, consume el AI Module FastAPI por HTTP y conserva la revision profesional local del resultado.
+Prototipo académico para análisis asistido de resonancias magnéticas lumbares. El sistema permite cargar estudios de-identificados, ejecutar procesamiento sagital y axial, consultar evidencia y mediciones, y registrar una revisión profesional. No emite diagnósticos ni reemplaza el criterio clínico.
+
+Este repositorio contiene el backend Spring Boot y los archivos Docker Compose que integran los tres componentes del producto:
 
 ```text
-Frontend React -> Spring Boot Backend -> Python FastAPI AI Module
+Frontend React → Backend Spring Boot → AI Module FastAPI
+                         ↓
+                    PostgreSQL
 ```
 
-El backend no ejecuta modelos de IA, no emite diagnostico clinico y no transforma la salida del AI Module en una decision medica. Toda respuesta de pipeline o reporte preserva `humanReviewRequired=true`: el profesional revisa, acepta, observa o descarta.
+El frontend consume exclusivamente este backend. La salida de IA es técnica, revisable y mantiene `humanReviewRequired=true`.
 
-## Variables
+## Arquitectura
 
-Copiar `.env.example` como referencia:
+El backend es la frontera HTTP del sistema: autentica usuarios, aplica permisos, valida contratos, coordina el AI Module, persiste estudios/corridas/revisiones y sirve los assets permitidos al navegador.
+
+- [Arquitectura actual](docs/architecture.md)
+- [Ejemplos prácticos de la API](docs/api-examples.md)
+- [Contrato formal OpenAPI](#documentación-de-la-api)
+
+Los documentos `P9_*`, `P10_*`, `*_EVIDENCE.md` y equivalentes dentro de `docs/` son evidencia histórica de iteraciones y decisiones. Se conservan para trazabilidad, pero no reemplazan esta guía operativa ni OpenAPI.
+
+## Requisitos
+
+Para el Quick Start con imágenes publicadas sólo se necesita:
+
+- Docker Engine o Docker Desktop;
+- Docker Compose v2 (`docker compose`).
+
+Para trabajar desde código fuente:
+
+- Java 17;
+- Maven 3.8.3 o superior;
+- Python 3.12 recomendado para el AI Module;
+- Node.js 22 y npm para el frontend;
+- los tres repositorios clonados como carpetas hermanas.
+
+Maven Enforcer rechaza un JDK distinto de Java 17.
+
+## Quick Start
+
+### Modo registry
+
+Este modo descarga las imágenes publicadas en GHCR y no requiere clonar los tres repositorios ni instalar Java, Python o Node.
 
 ```bash
-PFI_AI_SERVICE_URL=http://localhost:8000
-PFI_AI_TIMEOUT_SECONDS=60
-PFI_CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
-PFI_AUTH_ENABLED=true
-PFI_AUTH_JWT_SECRET=change-this-secret
-PFI_AUTH_ACCESS_TOKEN_SECONDS=3600
-PFI_AUTH_EXPOSE_DEV_CODES=true
-PFI_SAGITTAL_EXPECTED_MODEL_KEY=sagittal_spider
-PFI_SAGITTAL_EXPECTED_MODEL_VERSION=sagittal-spider-final-v1
-PFI_SAGITTAL_EXPECTED_MODEL_SHA256=cf11dcc0ad77a7c787e64a796a2fd7398ef906add461cef4b3d61f1a5238e944
-PORT=8080
+mkdir pfi-rm-lumbar
+cd pfi-rm-lumbar
+curl -LO https://raw.githubusercontent.com/EnzoAA004/PFI_MVPTest_Enzo_Backend/main/compose.yml
+curl -Lo .env https://raw.githubusercontent.com/EnzoAA004/PFI_MVPTest_Enzo_Backend/main/.env.registry.example
+docker compose pull
+docker compose up -d
+docker compose ps
 ```
 
-## Comandos Locales
+Servicios publicados:
 
-Requisitos: **Java 17** y Maven 3.8.3 o superior. El build los verifica con Maven Enforcer y
-falla en `validate` si el JDK no es 17.x, asi que no hace falta confiar en esta linea. Si tenes
-varios JDK instalados, apunta `JAVA_HOME` al 17 antes de compilar: Maven usa ese, no el `java`
-que este primero en el `PATH`.
+- frontend: <http://localhost:8088>
+- backend: <http://localhost:8080>
+- Swagger UI: <http://localhost:8080/swagger-ui/index.html>
+- PostgreSQL: `localhost:54329`
+
+Comprobar el backend:
 
 ```bash
-mvn test
+curl http://localhost:8080/api/system/health
+```
+
+La cuenta demo está habilitada por `.env.registry.example` para evaluación local. Debe deshabilitarse si el stack queda accesible desde otra máquina.
+
+### Desarrollo local desde source
+
+La estructura esperada es:
+
+```text
+tesis/
+├── PFI_MVPTest_Enzo_Backend/
+├── PFI_MVPTest_Enzo_AImodule/
+└── PFI_MVPTest_Enzo_Frontend/
+```
+
+Desde el repositorio backend:
+
+```bash
+cp .env.example .env
+docker compose --env-file .env -f compose.local.yml up --build
+```
+
+En PowerShell, el primer comando es `Copy-Item .env.example .env`.
+
+Este modo construye los tres servicios desde source y usa PostgreSQL. Los checkpoints externos de los clasificadores degenerativos son opcionales para levantar el stack; si no están presentes, sólo esas capacidades quedan no disponibles.
+
+Para ejecutar únicamente el backend:
+
+```bash
 mvn spring-boot:run
 ```
 
-Con Docker:
+Sin `PFI_PERSISTENCE_MODE=postgres`, el backend usa la implementación en memoria destinada a desarrollo y tests. Los modos Compose y producción configuran PostgreSQL.
+
+## Documentación de la API
+
+Con el backend levantado:
+
+- Swagger UI: <http://localhost:8080/swagger-ui/index.html>
+- OpenAPI JSON: <http://localhost:8080/v3/api-docs>
+
+OpenAPI es la referencia formal de endpoints, DTOs y respuestas. [docs/api-examples.md](docs/api-examples.md) es el recorrido práctico de autenticación, ingesta, inferencia, assets, revisión y exportación DICOM.
+
+## Configuración
+
+No se replica aquí el catálogo completo de variables:
+
+- `.env.registry.example`: stack con imágenes GHCR;
+- `.env.example`: desarrollo local desde source;
+- [docs/CLOUD_ENVIRONMENT_VARIABLES.md](docs/CLOUD_ENVIRONMENT_VARIABLES.md): despliegue del backend.
+
+Variables principales:
+
+| Variable | Uso |
+|---|---|
+| `PFI_IMAGE_TAG` | `latest` o `sha-<commit>` para las tres imágenes del stack registry. |
+| `PFI_AUTH_JWT_SECRET` | Firma de tokens. Debe reemplazarse fuera de una prueba local. |
+| `PFI_AUTH_DEMO_ENABLED` | Habilita el token demo; sólo debe usarse localmente. |
+| `PFI_AI_SERVICE_URL` | URL interna del AI Module cuando el backend se ejecuta fuera de Compose. |
+| `PFI_AI_SERVICE_MULTIPLANAR_CONTRACT_VERSION` | Contrato interno `v1` o `v2`; Compose usa `v2`. |
+| `BACKEND_PUBLIC_URL` | URL del backend accesible desde el navegador. |
+| `PFI_AI_STUDY_UPLOAD_MAX_BYTES` | Límite del ZIP de estudio completo. |
+
+## Tests
 
 ```bash
-docker build -t pfi-backend .
-docker run --rm -p 8080:8080 --env PFI_AI_SERVICE_URL=http://host.docker.internal:8000 pfi-backend
+mvn compile
+mvn verify
 ```
 
-## Endpoints principales
+`mvn verify` ejecuta la suite, construye el JAR y genera el reporte JaCoCo. Los tests de PostgreSQL usan Testcontainers y requieren un daemon Docker disponible.
 
-- `GET /api/ai/health`: consulta el health del AI Module.
-- `GET /api/ai/models`: lista modelos disponibles en el AI Module.
-- `POST /api/ai/inputs`: sube un archivo al AI Module y devuelve un `inputId` opaco, sin paths internos.
-- `POST /api/ai/studies`: sube un ZIP de estudio DICOM completo y devuelve solo `studyId`, series públicas e `inputId` opacos por plano.
-- `POST /api/ai/pipeline/run`: ejecuta el pipeline remoto y marca revision humana requerida.
-- `POST /api/ai/multiplanar/run`: ejecuta corrida dual sagital/axial usando `inputId` por plano.
-- `POST /api/ai/models/sync`: endpoint administrativo que valida el release sagital real antes de marcarlo listo.
-- `GET /api/ai/assets/{runId}/{plane}/{assetName}`: proxy unico para assets publicos del AI Module.
-- `GET /api/ai/agent/report/{runId}`: obtiene el reporte del agente y agrega revision local.
-- `GET /api/ai/studies/demo-review`: obtiene el contrato visual de estudio, series, mascaras, landmarks y mediciones.
-- `PATCH /api/ai/review/{runId}`: actualiza la revision profesional local.
-- `GET /api/ai/review/history`: devuelve snapshot de revisiones, mediciones editadas y auditoria.
-- `GET /api/ai/review/{runId}/measurements`: devuelve mediciones editadas para una corrida.
-- `PUT /api/ai/review/{runId}/measurements`: guarda mediciones editadas por el reviewer.
-- `POST /api/ai/audit`: agrega evento de auditoria.
-- `GET /api/ai/audit`: lista eventos recientes de auditoria.
+## Cobertura
 
-## Auth academico
+El reporte local se genera en `target/site/jacoco/index.html`. GitHub Actions publica el porcentaje de líneas y ramas en el summary de `Backend CI` y adjunta el artifact `jacoco-report`.
 
-El MVP incluye login/register de doctor con doble verificacion demo, password hasheado, access token JWT y refresh token en memoria. Para demo se puede usar `POST /api/auth/demo-doctor`.
+No hay un quality gate porcentual configurado: la cobertura se mide y publica, pero cualquier threshold futuro debe justificarse por separado.
 
-En produccion academica se recomienda configurar `PFI_AUTH_JWT_SECRET` con una clave privada larga y cambiar `PFI_AUTH_EXPOSE_DEV_CODES=false` cuando exista envio real por email.
+## Imágenes Docker
 
-## Ejemplos curl
+El workflow publica en GHCR:
 
-```bash
-curl http://localhost:8080/api/ai/health
-curl http://localhost:8080/api/ai/models
-```
+- `ghcr.io/enzoaa004/pfi-backend`
+- `ghcr.io/enzoaa004/pfi-ai-module`
+- `ghcr.io/enzoaa004/pfi-frontend`
 
-```bash
-curl -X POST http://localhost:8080/api/ai/inputs \
-  -H "Authorization: Bearer <token>" \
-  -F "file=@fixture.mha" \
-  -F "caseId=case-001" \
-  -F "plane=sagittal"
-```
+`latest` sigue a `main`. Para reproducibilidad, usar `PFI_IMAGE_TAG=sha-<commit-completo>` con un tag publicado por CI.
 
-```bash
-curl -X POST http://localhost:8080/api/ai/pipeline/run \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <token>" \
-  -d '{"caseId":"case-001","plane":"sagittal","modelKey":"sagittal_spider","inputId":"inp_case_001_sagittal","metadata":{"inferenceMode":"real_baseline","allowContractFallback":false}}'
-```
+## Limitaciones conocidas
 
-```bash
-curl http://localhost:8080/api/ai/agent/report/run-001 \
-  -H "Authorization: Bearer <token>"
-```
+- Los clasificadores subarticular y degenerativo multitarea requieren checkpoints externos que no se redistribuyen en Git ni en la imagen registry. Sus endpoints informan indisponibilidad sin impedir el resto del sistema.
+- La disponibilidad y los términos/licencia de redistribución de esos artifacts externos siguen pendientes de verificación documental.
+- Fuera del modo estricto, `pipeline/run` y `multiplanar/run` pueden responder HTTP 200 en modo degradado o contractual. Un 200 confirma que la petición fue procesada, no que hubo inferencia real. Hay que comprobar los campos descritos en [docs/api-examples.md](docs/api-examples.md#cómo-interpretar-la-inferencia).
+- Es un prototipo académico y no un dispositivo médico. Toda salida requiere revisión profesional.
 
-```bash
-curl -X PATCH http://localhost:8080/api/ai/review/run-001 \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <token>" \
-  -d '{"status":"observado","notes":"Revisar medicion L4-L5","reviewer":"dr-demo"}'
-```
+## Troubleshooting
 
-```bash
-curl -X PUT http://localhost:8080/api/ai/review/run-001/measurements \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <token>" \
-  -d '{"reviewer":"dr-demo","detail":"Ajuste de medicion","measurements":[]}'
-```
+- `401` en `/api/auth/demo-doctor`: comprobar `PFI_AUTH_DEMO_ENABLED=true` y recrear el backend.
+- Backend `unhealthy`: usar `/api/system/health`, revisar `docker compose logs backend` y el estado de PostgreSQL.
+- `aiModuleAvailable=false` o `degradedMode=true`: revisar `docker compose logs ai-module` y `/api/ai/health` con token.
+- `503` en clasificadores degenerativos: verificar el checkpoint externo y su variable; es el comportamiento esperado cuando no se distribuye el artifact.
+- Puertos ocupados: cambiar `BACKEND_PORT`, `FRONTEND_PORT` o `POSTGRES_PORT` en `.env`.
+- Para detener sin borrar datos: `docker compose down`. `docker compose down -v` también elimina los volúmenes de PostgreSQL, uploads y outputs.
 
-## Roadmap de persistencia
+## Repositorios
 
-La persistencia activa del MVP sigue siendo in-memory para no bloquear despliegues en Render Free y validar el flujo funcional. El esquema SQL preparado para Postgres esta en:
-
-```text
-docs/postgres_schema.sql
-```
-
-Ese esquema contempla:
-
-- doctores;
-- pacientes de-identificados;
-- estudios;
-- corridas de pipeline;
-- estados de revision;
-- mediciones corregidas;
-- eventos de auditoria.
-
-## Relacion con otros modulos
-
-El frontend React consume solamente este backend. El backend delega inferencia, modelos y reportes al AI Module FastAPI configurado con `PFI_AI_SERVICE_URL`. El contrato de estudio permite evolucionar hacia overlays reales, contornos de mascaras, landmarks y mediciones derivadas cuando se conecte la inferencia real.
-
-## Contrato sagital real_baseline
-
-Para `POST /api/ai/pipeline/run`, una request es estricta cuando `metadata.inferenceMode=real_baseline` y `metadata.allowContractFallback=false`. Si `allowContractFallback` falta en una request `real_baseline`, el backend agrega `false`. En modo estricto se exige `plane=sagittal`, `inputId` o `inputPath`, y `modelKey=sagittal_spider`; no se genera fallback demo ni `degraded-*` ante errores.
-
-El flujo recomendado es subir primero el archivo con `POST /api/ai/inputs`, recibir el `inputId` opaco del AI Module y usarlo como campo top-level en `POST /api/ai/pipeline/run`. En modo estricto se acepta `inputId` o `inputPath`, pero no ambos; `inputId` es preferido y su ciclo de vida pertenece al AI Module.
-
-El backend valida que la respuesta del AI Module preserve `modelVersion`, `artifactHash`, orientacion del volumen, measurements revisables, flags de seguridad y assets registrados. Las rutas internas del AI Module no se exponen: no se devuelve `inputPath` ni `metadata.sourcePath`, y el frontend recibe URLs relativas `/api/ai/assets/{runId}/{plane}/{assetName}`. El endpoint sigue siendo soporte tecnico revisable, no validacion clinica.
-
-Para una prueba local real, usar `scripts/run_sagittal_real_backend_e2e.ps1` con `RUN_BACKEND_REAL_E2E=1`, `PFI_E2E_INPUT_PATH` y `PFI_BACKEND_BEARER_TOKEN`. El script llama solamente al backend, nunca directo al AI Module.
-
-## Contrato multiplanar real
-
-El flujo recomendado para analisis dual es:
-
-1. Subir input sagital y axial por `POST /api/ai/inputs`.
-2. Enviar `POST /api/ai/multiplanar/run` con `sagittalInputId`, `axialInputId`, `sagittalModelKey=sagittal_spider`, `axialModelKey=axial_t2_alkafri`, `metadata.inferenceMode=real_baseline` y `allowContractFallback=false`.
-3. Consumir `planes.sagittal.effectiveInferenceMode` y `planes.axial.effectiveInferenceMode`.
-4. Abrir assets solo por URLs proxy del backend.
-5. Registrar revision profesional.
-
-El AI Module puede informar por plano `inferenceMode`; el backend conserva ese campo y completa `effectiveInferenceMode` cuando falta usando `effectiveInferenceMode`, `inferenceMode`, `aiOutput.inferenceMode` o `metadata.inferenceMode`, en ese orden. En modo estricto, sagital debe coincidir con el checkpoint final `sagittal-spider-final-v1` y hash `cf11dcc0ad77a7c787e64a796a2fd7398ef906add461cef4b3d61f1a5238e944`; axial se valida como real independiente sin exigir SHA sagital.
-
-La respuesta publica elimina rutas internas (`inputPath`, `sourcePath`, `outputFiles`, cualquier `path`, `/tmp`, `/content`, rutas Windows, Colab, Google Drive, `models/final`) y publica solo `input.png`, `overlay.png`, `mask-preview.png` como `/api/ai/assets/{planeRunId}/{plane}/{assetName}`. `mask.npy` y `confidence.npy` no llegan al navegador. Si una corrida strict queda mixed/contract/fallback o degradada, el backend devuelve error `AI_MULTIPLANAR_CONTRACT_VIOLATION`, no persiste un completed falso y audita el fallo.
+- [Backend](https://github.com/EnzoAA004/PFI_MVPTest_Enzo_Backend)
+- [AI Module](https://github.com/EnzoAA004/PFI_MVPTest_Enzo_AImodule)
+- [Frontend](https://github.com/EnzoAA004/PFI_MVPTest_Enzo_Frontend)
