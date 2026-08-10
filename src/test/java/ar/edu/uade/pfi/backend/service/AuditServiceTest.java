@@ -11,8 +11,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
-import ar.edu.uade.pfi.backend.config.ApiExceptionHandler;
-import ar.edu.uade.pfi.backend.controller.AiBackendController;
+import ar.edu.uade.pfi.backend.controller.AiInputController;
 import ar.edu.uade.pfi.backend.controller.AiMultiplanarController;
 import ar.edu.uade.pfi.backend.controller.AiRunReviewController;
 import ar.edu.uade.pfi.backend.domain.CanonicalMultiplanarRun;
@@ -21,6 +20,7 @@ import ar.edu.uade.pfi.backend.domain.DomainAuditEvent;
 import ar.edu.uade.pfi.backend.domain.Study;
 import ar.edu.uade.pfi.backend.dto.AiInputResponseDto;
 import ar.edu.uade.pfi.backend.repository.PostgresStudyRepository;
+import ar.edu.uade.pfi.backend.web.error.ApiExceptionHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -70,11 +70,9 @@ class AuditServiceTest {
 
     MockMvc uploadMvc =
         MockMvcBuilders.standaloneSetup(
-                new AiBackendController(
+                new AiInputController(
                     new AiBackendService(
-                        ai, org.mockito.Mockito.mock(ReviewStoreService.class), auditService),
-                    org.mockito.Mockito.mock(
-                        ar.edu.uade.pfi.backend.auth.RoleAuthorizationService.class)))
+                        ai, org.mockito.Mockito.mock(ReviewStoreService.class), auditService)))
             .setControllerAdvice(new ApiExceptionHandler(auditService))
             .build();
     MockMultipartFile file =

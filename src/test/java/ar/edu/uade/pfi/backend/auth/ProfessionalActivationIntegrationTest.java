@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 
 import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.ProfessionalActivationResponse;
 import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.TokenResponse;
+import ar.edu.uade.pfi.backend.auth.exception.AdminAccountProtectedException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.List;

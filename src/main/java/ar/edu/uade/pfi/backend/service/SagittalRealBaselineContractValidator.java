@@ -2,6 +2,7 @@ package ar.edu.uade.pfi.backend.service;
 
 import ar.edu.uade.pfi.backend.config.SagittalRealBaselineProperties;
 import ar.edu.uade.pfi.backend.dto.PipelineRunRequestDto;
+import ar.edu.uade.pfi.backend.service.exception.AiContractViolationException;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;

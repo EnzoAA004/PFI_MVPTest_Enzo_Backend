@@ -7,10 +7,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import ar.edu.uade.pfi.backend.config.AiServiceProperties;
-import ar.edu.uade.pfi.backend.config.TraceIdFilter;
 import ar.edu.uade.pfi.backend.dto.DiscDegenerativeProductRequestDto;
 import ar.edu.uade.pfi.backend.dto.DiscSegmentationSourceDto;
 import ar.edu.uade.pfi.backend.dto.FullSeriesSegmentationRequestDto;
+import ar.edu.uade.pfi.backend.web.filter.TraceIdFilter;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;

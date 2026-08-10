@@ -18,10 +18,10 @@ import ar.edu.uade.pfi.backend.auth.AuthService;
 import ar.edu.uade.pfi.backend.auth.RoleAuthorizationService;
 import ar.edu.uade.pfi.backend.auth.TokenService;
 import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.ProfessionalActivationResponse;
-import ar.edu.uade.pfi.backend.config.ApiExceptionHandler;
-import ar.edu.uade.pfi.backend.config.CorsResponseFilter;
 import ar.edu.uade.pfi.backend.repository.InMemoryStudyRepository;
 import ar.edu.uade.pfi.backend.service.AuditService;
+import ar.edu.uade.pfi.backend.web.error.ApiExceptionHandler;
+import ar.edu.uade.pfi.backend.web.filter.CorsResponseFilter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -162,7 +162,7 @@ class ProfessionalActivationControllerTest {
   @Test
   void activatingAnAdminAccountReturnsAdminAccountProtected() throws Exception {
     when(authService.activateProfessional(any(), eq("admin@hospital.example"), eq(true)))
-        .thenThrow(new ar.edu.uade.pfi.backend.auth.AdminAccountProtectedException());
+        .thenThrow(new ar.edu.uade.pfi.backend.auth.exception.AdminAccountProtectedException());
 
     mockMvc
         .perform(
@@ -177,7 +177,7 @@ class ProfessionalActivationControllerTest {
   @Test
   void deactivatingAnAdminAccountReturnsAdminAccountProtected() throws Exception {
     when(authService.activateProfessional(any(), eq("admin@hospital.example"), eq(false)))
-        .thenThrow(new ar.edu.uade.pfi.backend.auth.AdminAccountProtectedException());
+        .thenThrow(new ar.edu.uade.pfi.backend.auth.exception.AdminAccountProtectedException());
 
     mockMvc
         .perform(

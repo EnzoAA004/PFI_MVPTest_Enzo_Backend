@@ -8,13 +8,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
-import ar.edu.uade.pfi.backend.config.ApiExceptionHandler;
 import ar.edu.uade.pfi.backend.domain.Study;
 import ar.edu.uade.pfi.backend.repository.InMemoryStudyRepository;
 import ar.edu.uade.pfi.backend.service.AiBackendService;
 import ar.edu.uade.pfi.backend.service.ReviewStoreService;
 import ar.edu.uade.pfi.backend.service.RunReviewService;
 import ar.edu.uade.pfi.backend.service.StudyRunService;
+import ar.edu.uade.pfi.backend.web.error.ApiExceptionHandler;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -64,9 +64,7 @@ class LegacyReviewAdapterControllerTest {
             null,
             new RunReviewService(repository));
     MockMvc mockMvc =
-        MockMvcBuilders.standaloneSetup(
-                new AiBackendController(
-                    service, mock(ar.edu.uade.pfi.backend.auth.RoleAuthorizationService.class)))
+        MockMvcBuilders.standaloneSetup(new AiLegacyReviewController(service))
             .setControllerAdvice(new ApiExceptionHandler())
             .build();
 

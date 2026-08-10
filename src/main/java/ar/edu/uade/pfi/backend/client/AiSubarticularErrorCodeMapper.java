@@ -1,6 +1,6 @@
 package ar.edu.uade.pfi.backend.client;
 
-import ar.edu.uade.pfi.backend.config.error.ApiErrorCode;
+import ar.edu.uade.pfi.backend.web.error.ApiErrorCode;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
 

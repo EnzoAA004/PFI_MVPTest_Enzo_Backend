@@ -1,8 +1,6 @@
 package ar.edu.uade.pfi.backend.controller;
 
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
-import ar.edu.uade.pfi.backend.config.error.ApiErrorCode;
-import ar.edu.uade.pfi.backend.config.error.ApiErrorResponse;
 import ar.edu.uade.pfi.backend.dto.AiSubarticularPredictRequestDto;
 import ar.edu.uade.pfi.backend.dto.DegenerativeFindingSideV1;
 import ar.edu.uade.pfi.backend.dto.DegenerativeFindingsV1Dto;
@@ -10,6 +8,8 @@ import ar.edu.uade.pfi.backend.dto.SubarticularPredictionRequestDto;
 import ar.edu.uade.pfi.backend.dto.SubarticularPredictionResponseDto;
 import ar.edu.uade.pfi.backend.service.AuditService;
 import ar.edu.uade.pfi.backend.service.DegenerativeFindingsV1Validator;
+import ar.edu.uade.pfi.backend.web.error.ApiErrorCode;
+import ar.edu.uade.pfi.backend.web.error.ApiErrorResponse;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;

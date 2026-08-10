@@ -5,13 +5,13 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import ar.edu.uade.pfi.backend.client.exception.AiMultiplanarUpstreamException;
 import ar.edu.uade.pfi.backend.config.AiServiceProperties;
-import ar.edu.uade.pfi.backend.config.TraceIdFilter;
 import ar.edu.uade.pfi.backend.domain.CanonicalMultiplanarRun;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunRequestDto;
-import ar.edu.uade.pfi.backend.service.AiMultiplanarUpstreamException;
 import ar.edu.uade.pfi.backend.service.MultiplanarRealBaselineContractValidator;
 import ar.edu.uade.pfi.backend.service.MultiplanarV2RealBaselineValidator;
+import ar.edu.uade.pfi.backend.web.filter.TraceIdFilter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.file.Files;
 import java.nio.file.Path;

@@ -1,5 +1,6 @@
 package ar.edu.uade.pfi.backend.service;
 
+import ar.edu.uade.pfi.backend.client.exception.AiMultiplanarContractViolationException;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunRequestDto;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunResponseDto;
 import java.util.List;

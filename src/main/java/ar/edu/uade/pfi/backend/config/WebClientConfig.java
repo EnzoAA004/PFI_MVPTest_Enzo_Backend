@@ -1,5 +1,6 @@
 package ar.edu.uade.pfi.backend.config;
 
+import ar.edu.uade.pfi.backend.web.filter.TraceIdFilter;
 import io.netty.channel.ChannelOption;
 import java.time.Duration;
 import org.slf4j.MDC;

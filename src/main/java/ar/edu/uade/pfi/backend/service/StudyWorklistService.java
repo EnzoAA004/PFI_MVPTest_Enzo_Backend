@@ -13,6 +13,8 @@ import ar.edu.uade.pfi.backend.dto.StudyRunDetailDto;
 import ar.edu.uade.pfi.backend.dto.StudyRunSummaryDto;
 import ar.edu.uade.pfi.backend.dto.StudyRunsResponseDto;
 import ar.edu.uade.pfi.backend.repository.StudyRepository;
+import ar.edu.uade.pfi.backend.service.exception.DatabaseUnavailableException;
+import ar.edu.uade.pfi.backend.service.exception.StudyNotFoundException;
 import ar.edu.uade.pfi.backend.util.DiscDegenerativeFindingsPublicProjection;
 import java.time.Instant;
 import java.util.ArrayList;

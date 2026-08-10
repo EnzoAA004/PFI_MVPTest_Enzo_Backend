@@ -9,6 +9,7 @@ import ar.edu.uade.pfi.backend.domain.Study;
 import ar.edu.uade.pfi.backend.dto.MeasurementCorrectionDto;
 import ar.edu.uade.pfi.backend.dto.RunReviewRequestDto;
 import ar.edu.uade.pfi.backend.repository.InMemoryStudyRepository;
+import ar.edu.uade.pfi.backend.service.exception.RunReviewException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;

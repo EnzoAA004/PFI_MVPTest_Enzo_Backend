@@ -1,7 +1,7 @@
 package ar.edu.uade.pfi.backend.auth;
 
-import ar.edu.uade.pfi.backend.config.TraceIdFilter;
 import ar.edu.uade.pfi.backend.service.AuditService;
+import ar.edu.uade.pfi.backend.web.filter.TraceIdFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import java.util.Map;

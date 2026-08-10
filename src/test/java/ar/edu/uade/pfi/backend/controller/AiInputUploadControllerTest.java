@@ -12,10 +12,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
-import ar.edu.uade.pfi.backend.config.ApiExceptionHandler;
 import ar.edu.uade.pfi.backend.dto.AiInputResponseDto;
 import ar.edu.uade.pfi.backend.service.AiBackendService;
 import ar.edu.uade.pfi.backend.service.ReviewStoreService;
+import ar.edu.uade.pfi.backend.web.error.ApiExceptionHandler;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -37,11 +37,7 @@ class AiInputUploadControllerTest {
     AiBackendService service =
         new AiBackendService(aiServiceClient, org.mockito.Mockito.mock(ReviewStoreService.class));
     mockMvc =
-        MockMvcBuilders.standaloneSetup(
-                new AiBackendController(
-                    service,
-                    org.mockito.Mockito.mock(
-                        ar.edu.uade.pfi.backend.auth.RoleAuthorizationService.class)))
+        MockMvcBuilders.standaloneSetup(new AiInputController(service))
             .setControllerAdvice(new ApiExceptionHandler())
             .build();
   }

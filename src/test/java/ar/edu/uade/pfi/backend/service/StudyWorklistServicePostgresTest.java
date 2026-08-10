@@ -21,6 +21,8 @@ import ar.edu.uade.pfi.backend.dto.StudyRunDetailDto;
 import ar.edu.uade.pfi.backend.dto.StudyRunsResponseDto;
 import ar.edu.uade.pfi.backend.repository.PostgresStudyRepository;
 import ar.edu.uade.pfi.backend.repository.StudyRepository;
+import ar.edu.uade.pfi.backend.service.exception.DatabaseUnavailableException;
+import ar.edu.uade.pfi.backend.service.exception.StudyNotFoundException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.DriverManager;
 import java.time.Instant;

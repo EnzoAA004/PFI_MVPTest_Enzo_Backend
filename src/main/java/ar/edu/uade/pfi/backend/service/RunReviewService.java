@@ -7,6 +7,8 @@ import ar.edu.uade.pfi.backend.dto.MeasurementCorrectionDto;
 import ar.edu.uade.pfi.backend.dto.RunReviewRequestDto;
 import ar.edu.uade.pfi.backend.dto.RunReviewResponseDto;
 import ar.edu.uade.pfi.backend.repository.StudyRepository;
+import ar.edu.uade.pfi.backend.service.exception.DatabaseUnavailableException;
+import ar.edu.uade.pfi.backend.service.exception.RunReviewException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;

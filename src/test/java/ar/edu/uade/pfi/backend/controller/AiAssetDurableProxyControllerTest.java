@@ -9,7 +9,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
-import ar.edu.uade.pfi.backend.config.ApiExceptionHandler;
 import ar.edu.uade.pfi.backend.domain.RunArtifact;
 import ar.edu.uade.pfi.backend.domain.RunAssetContent;
 import ar.edu.uade.pfi.backend.domain.RunAssetStorageDiagnostics;
@@ -20,6 +19,7 @@ import ar.edu.uade.pfi.backend.service.AiBackendService;
 import ar.edu.uade.pfi.backend.service.ReviewStoreService;
 import ar.edu.uade.pfi.backend.service.RunAssetContentStorage;
 import ar.edu.uade.pfi.backend.service.RunAssetSnapshotService;
+import ar.edu.uade.pfi.backend.web.error.ApiExceptionHandler;
 import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.HexFormat;
@@ -167,9 +167,7 @@ class AiAssetDurableProxyControllerTest {
             storage,
             snapshotService,
             null);
-    return MockMvcBuilders.standaloneSetup(
-            new AiBackendController(
-                service, Mockito.mock(ar.edu.uade.pfi.backend.auth.RoleAuthorizationService.class)))
+    return MockMvcBuilders.standaloneSetup(new AiAssetController(service))
         .setControllerAdvice(new ApiExceptionHandler())
         .build();
   }
