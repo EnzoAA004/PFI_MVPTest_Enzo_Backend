@@ -14,7 +14,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import ar.edu.uade.pfi.backend.client.AiMultiplanarV1ResponseAdapter;
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
-import ar.edu.uade.pfi.backend.config.ApiExceptionHandler;
 import ar.edu.uade.pfi.backend.domain.CanonicalMultiplanarRun;
 import ar.edu.uade.pfi.backend.domain.CanonicalPlaneRun;
 import ar.edu.uade.pfi.backend.domain.DomainAuditEvent;
@@ -32,6 +31,7 @@ import ar.edu.uade.pfi.backend.repository.InMemoryStudyRepository;
 import ar.edu.uade.pfi.backend.repository.StudyRepository;
 import ar.edu.uade.pfi.backend.service.MultiplanarRunPersistenceService;
 import ar.edu.uade.pfi.backend.service.StudyRunService;
+import ar.edu.uade.pfi.backend.web.error.ApiExceptionHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -181,7 +181,7 @@ class AiMultiplanarRunTest {
     AiServiceOperations ai = org.mockito.Mockito.mock(AiServiceOperations.class);
     when(ai.runMultiplanar(any()))
         .thenThrow(
-            new ar.edu.uade.pfi.backend.service.AiMultiplanarContractViolationException(
+            new ar.edu.uade.pfi.backend.client.exception.AiMultiplanarContractViolationException(
                 "synthetic root debe ser false"));
     InMemoryStudyRepository repository = new InMemoryStudyRepository();
     MockMvc mockMvc =

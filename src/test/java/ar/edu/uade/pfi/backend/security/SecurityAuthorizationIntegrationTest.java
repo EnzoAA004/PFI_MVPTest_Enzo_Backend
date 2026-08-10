@@ -15,9 +15,9 @@ import ar.edu.uade.pfi.backend.auth.AuthFilter;
 import ar.edu.uade.pfi.backend.auth.RoleAuthorizationService;
 import ar.edu.uade.pfi.backend.auth.TokenService;
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
-import ar.edu.uade.pfi.backend.config.ApiExceptionHandler;
-import ar.edu.uade.pfi.backend.config.CorsResponseFilter;
+import ar.edu.uade.pfi.backend.controller.AiAssetController;
 import ar.edu.uade.pfi.backend.controller.AiBackendController;
+import ar.edu.uade.pfi.backend.controller.AiInputController;
 import ar.edu.uade.pfi.backend.controller.AiMultiplanarController;
 import ar.edu.uade.pfi.backend.controller.StudyController;
 import ar.edu.uade.pfi.backend.controller.SystemController;
@@ -30,6 +30,8 @@ import ar.edu.uade.pfi.backend.service.ProfessionalAccessAuditService;
 import ar.edu.uade.pfi.backend.service.StudyRunService;
 import ar.edu.uade.pfi.backend.service.StudyWorklistService;
 import ar.edu.uade.pfi.backend.service.SystemDiagnosticsService;
+import ar.edu.uade.pfi.backend.web.error.ApiExceptionHandler;
+import ar.edu.uade.pfi.backend.web.filter.CorsResponseFilter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -84,12 +86,19 @@ class SecurityAuthorizationIntegrationTest {
     AiMultiplanarController multiplanarController = new AiMultiplanarController(aiServiceClient);
     AiBackendController backendController =
         new AiBackendController(aiBackendService, authorizationService);
+    AiInputController inputController = new AiInputController(aiBackendService);
+    AiAssetController assetController = new AiAssetController(aiBackendService);
     SystemController systemController =
         new SystemController(systemDiagnosticsService, authorizationService);
 
     mockMvc =
         MockMvcBuilders.standaloneSetup(
-                studyController, multiplanarController, backendController, systemController)
+                studyController,
+                multiplanarController,
+                backendController,
+                inputController,
+                assetController,
+                systemController)
             .addFilter(
                 new AuthFilter(
                     tokenService,

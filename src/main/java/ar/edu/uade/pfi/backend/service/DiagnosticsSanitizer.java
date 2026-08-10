@@ -1,6 +1,6 @@
 package ar.edu.uade.pfi.backend.service;
 
-import ar.edu.uade.pfi.backend.config.SafeLogSanitizer;
+import ar.edu.uade.pfi.backend.util.SafeLogSanitizer;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;

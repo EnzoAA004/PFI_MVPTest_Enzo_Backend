@@ -1,10 +1,9 @@
 package ar.edu.uade.pfi.backend.client;
 
+import ar.edu.uade.pfi.backend.client.exception.AiMultiplanarContractViolationException;
+import ar.edu.uade.pfi.backend.client.exception.AiMultiplanarUpstreamException;
 import ar.edu.uade.pfi.backend.config.AiMultiplanarContractVersion;
 import ar.edu.uade.pfi.backend.config.AiServiceProperties;
-import ar.edu.uade.pfi.backend.config.SafeLogSanitizer;
-import ar.edu.uade.pfi.backend.config.TraceIdFilter;
-import ar.edu.uade.pfi.backend.config.error.ApiErrorCode;
 import ar.edu.uade.pfi.backend.domain.CanonicalMultiplanarRun;
 import ar.edu.uade.pfi.backend.dto.AiInputResponseDto;
 import ar.edu.uade.pfi.backend.dto.AiMultiplanarV2RequestDto;
@@ -15,11 +14,12 @@ import ar.edu.uade.pfi.backend.dto.MultiplanarRunRequestDto;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunResponseDto;
 import ar.edu.uade.pfi.backend.dto.PipelineRunRequestDto;
 import ar.edu.uade.pfi.backend.dto.SubarticularPredictionResponseDto;
-import ar.edu.uade.pfi.backend.service.AiMultiplanarContractViolationException;
-import ar.edu.uade.pfi.backend.service.AiMultiplanarUpstreamException;
 import ar.edu.uade.pfi.backend.service.MultiplanarRealBaselineContractValidator;
 import ar.edu.uade.pfi.backend.service.MultiplanarV2RealBaselineValidator;
 import ar.edu.uade.pfi.backend.service.OperationalMetricsService;
+import ar.edu.uade.pfi.backend.util.SafeLogSanitizer;
+import ar.edu.uade.pfi.backend.web.error.ApiErrorCode;
+import ar.edu.uade.pfi.backend.web.filter.TraceIdFilter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.util.LinkedHashMap;

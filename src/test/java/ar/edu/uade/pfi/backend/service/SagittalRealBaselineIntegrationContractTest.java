@@ -15,13 +15,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
-import ar.edu.uade.pfi.backend.config.ApiExceptionHandler;
 import ar.edu.uade.pfi.backend.config.SagittalRealBaselineProperties;
 import ar.edu.uade.pfi.backend.controller.AiBackendController;
 import ar.edu.uade.pfi.backend.controller.AiModelSyncController;
 import ar.edu.uade.pfi.backend.dto.AiInputResponseDto;
 import ar.edu.uade.pfi.backend.dto.PipelineRunRequestDto;
 import ar.edu.uade.pfi.backend.dto.ReviewStatusDto;
+import ar.edu.uade.pfi.backend.service.exception.AiContractViolationException;
+import ar.edu.uade.pfi.backend.web.error.ApiExceptionHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -646,7 +647,9 @@ class SagittalRealBaselineIntegrationContractTest {
             ai, reviews, null, normalizer, validator, presenter, readinessResolver);
     return MockMvcBuilders.standaloneSetup(
             new AiBackendController(
-                service, mock(ar.edu.uade.pfi.backend.auth.RoleAuthorizationService.class)))
+                service, mock(ar.edu.uade.pfi.backend.auth.RoleAuthorizationService.class)),
+            new ar.edu.uade.pfi.backend.controller.AiPipelineController(service),
+            new ar.edu.uade.pfi.backend.controller.AiAssetController(service))
         .setControllerAdvice(new ApiExceptionHandler())
         .build();
   }

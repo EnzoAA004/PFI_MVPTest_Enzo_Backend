@@ -18,8 +18,9 @@ import ar.edu.uade.pfi.backend.auth.PostgresAuthStoreService;
 import ar.edu.uade.pfi.backend.auth.RoleAuthorizationService;
 import ar.edu.uade.pfi.backend.auth.TokenService;
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
-import ar.edu.uade.pfi.backend.config.ApiExceptionHandler;
+import ar.edu.uade.pfi.backend.controller.AiAssetController;
 import ar.edu.uade.pfi.backend.controller.AiBackendController;
+import ar.edu.uade.pfi.backend.controller.AiInputController;
 import ar.edu.uade.pfi.backend.controller.AiMultiplanarController;
 import ar.edu.uade.pfi.backend.controller.AiRunReviewController;
 import ar.edu.uade.pfi.backend.controller.StudyController;
@@ -36,6 +37,7 @@ import ar.edu.uade.pfi.backend.service.RunReviewService;
 import ar.edu.uade.pfi.backend.service.StudyRunService;
 import ar.edu.uade.pfi.backend.service.StudyWorklistService;
 import ar.edu.uade.pfi.backend.service.SystemDiagnosticsService;
+import ar.edu.uade.pfi.backend.web.error.ApiExceptionHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.DriverManager;
 import java.util.List;
@@ -124,6 +126,8 @@ class AccountStateImmediateInvalidationIntegrationTest {
     AiMultiplanarController multiplanarController = new AiMultiplanarController(aiServiceClient);
     AiBackendController backendController =
         new AiBackendController(aiBackendService, authorizationService);
+    AiInputController inputController = new AiInputController(aiBackendService);
+    AiAssetController assetController = new AiAssetController(aiBackendService);
     AiRunReviewController runReviewController =
         new AiRunReviewController(
             runReviewService,
@@ -139,6 +143,8 @@ class AccountStateImmediateInvalidationIntegrationTest {
                 studyController,
                 multiplanarController,
                 backendController,
+                inputController,
+                assetController,
                 runReviewController,
                 systemController)
             .addFilter(authFilter)

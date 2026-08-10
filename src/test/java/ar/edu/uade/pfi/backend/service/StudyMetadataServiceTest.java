@@ -10,6 +10,7 @@ import ar.edu.uade.pfi.backend.domain.Study;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunRequestDto;
 import ar.edu.uade.pfi.backend.dto.StudyMetadataDto;
 import ar.edu.uade.pfi.backend.repository.InMemoryStudyRepository;
+import ar.edu.uade.pfi.backend.service.exception.StudyMetadataException;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;

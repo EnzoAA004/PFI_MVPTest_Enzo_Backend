@@ -3,7 +3,7 @@ package ar.edu.uade.pfi.backend.client;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-import ar.edu.uade.pfi.backend.config.error.ApiErrorCode;
+import ar.edu.uade.pfi.backend.web.error.ApiErrorCode;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 

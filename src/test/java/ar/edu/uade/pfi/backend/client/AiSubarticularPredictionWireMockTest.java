@@ -9,15 +9,15 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import ar.edu.uade.pfi.backend.client.exception.AiMultiplanarUpstreamException;
 import ar.edu.uade.pfi.backend.config.AiServiceProperties;
-import ar.edu.uade.pfi.backend.config.TraceIdFilter;
 import ar.edu.uade.pfi.backend.dto.AiSubarticularPredictRequestDto;
 import ar.edu.uade.pfi.backend.dto.DegenerativeFindingSeverityV1;
 import ar.edu.uade.pfi.backend.dto.DegenerativeFindingSideV1;
 import ar.edu.uade.pfi.backend.dto.SubarticularPredictionResponseDto;
-import ar.edu.uade.pfi.backend.service.AiMultiplanarUpstreamException;
 import ar.edu.uade.pfi.backend.service.MultiplanarRealBaselineContractValidator;
 import ar.edu.uade.pfi.backend.service.MultiplanarV2RealBaselineValidator;
+import ar.edu.uade.pfi.backend.web.filter.TraceIdFilter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
 import org.junit.jupiter.api.AfterEach;

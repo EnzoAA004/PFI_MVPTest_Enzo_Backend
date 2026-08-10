@@ -1,7 +1,6 @@
 package ar.edu.uade.pfi.backend.controller;
 
 import ar.edu.uade.pfi.backend.auth.RoleAuthorizationService;
-import ar.edu.uade.pfi.backend.config.error.ApiErrorResponse;
 import ar.edu.uade.pfi.backend.domain.Study;
 import ar.edu.uade.pfi.backend.dto.StudyDetailResponseDto;
 import ar.edu.uade.pfi.backend.dto.StudyListResponseDto;
@@ -16,9 +15,10 @@ import ar.edu.uade.pfi.backend.dto.StudyReviewResponseDto.PointDto;
 import ar.edu.uade.pfi.backend.dto.StudyReviewResponseDto.SeriesDto;
 import ar.edu.uade.pfi.backend.dto.StudyRunsResponseDto;
 import ar.edu.uade.pfi.backend.service.ProfessionalAccessAuditService;
-import ar.edu.uade.pfi.backend.service.StudyNotFoundException;
 import ar.edu.uade.pfi.backend.service.StudyRunService;
 import ar.edu.uade.pfi.backend.service.StudyWorklistService;
+import ar.edu.uade.pfi.backend.service.exception.StudyNotFoundException;
+import ar.edu.uade.pfi.backend.web.error.ApiErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;

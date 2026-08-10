@@ -1,6 +1,6 @@
 package ar.edu.uade.pfi.backend.client;
 
-import ar.edu.uade.pfi.backend.service.AiMultiplanarContractViolationException;
+import ar.edu.uade.pfi.backend.client.exception.AiMultiplanarContractViolationException;
 
 /**
  * Guards against the v2 request's body.traceId ever drifting from the X-Trace-Id header sent to the

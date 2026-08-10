@@ -5,12 +5,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import ar.edu.uade.pfi.backend.auth.RoleAuthorizationService;
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
-import ar.edu.uade.pfi.backend.config.ApiExceptionHandler;
 import ar.edu.uade.pfi.backend.repository.InMemoryStudyRepository;
 import ar.edu.uade.pfi.backend.service.AiBackendService;
 import ar.edu.uade.pfi.backend.service.ReviewStoreService;
+import ar.edu.uade.pfi.backend.web.error.ApiExceptionHandler;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.http.HttpHeaders;
@@ -46,8 +45,7 @@ class AiDicomExportControllerTest {
             null,
             null,
             null);
-    return MockMvcBuilders.standaloneSetup(
-            new AiBackendController(service, Mockito.mock(RoleAuthorizationService.class)))
+    return MockMvcBuilders.standaloneSetup(new AiAssetController(service))
         .setControllerAdvice(new ApiExceptionHandler())
         .build();
   }

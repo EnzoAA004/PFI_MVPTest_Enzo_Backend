@@ -3,7 +3,7 @@ package ar.edu.uade.pfi.backend.client;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import ar.edu.uade.pfi.backend.service.AiMultiplanarContractViolationException;
+import ar.edu.uade.pfi.backend.client.exception.AiMultiplanarContractViolationException;
 import org.junit.jupiter.api.Test;
 
 class TraceIdConsistencyGuardTest {

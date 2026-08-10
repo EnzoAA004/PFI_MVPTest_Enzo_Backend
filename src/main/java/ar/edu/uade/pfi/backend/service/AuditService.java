@@ -1,9 +1,9 @@
 package ar.edu.uade.pfi.backend.service;
 
-import ar.edu.uade.pfi.backend.config.SafeLogSanitizer;
 import ar.edu.uade.pfi.backend.domain.DomainAuditEvent;
 import ar.edu.uade.pfi.backend.dto.AuditEventResponseDto;
 import ar.edu.uade.pfi.backend.repository.StudyRepository;
+import ar.edu.uade.pfi.backend.util.SafeLogSanitizer;
 import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.List;

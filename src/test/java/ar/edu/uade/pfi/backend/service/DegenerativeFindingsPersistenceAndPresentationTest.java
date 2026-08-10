@@ -11,13 +11,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
-import ar.edu.uade.pfi.backend.config.ApiExceptionHandler;
 import ar.edu.uade.pfi.backend.controller.AiMultiplanarController;
 import ar.edu.uade.pfi.backend.domain.CanonicalMultiplanarRun;
 import ar.edu.uade.pfi.backend.domain.CanonicalPlaneRun;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunRequestDto;
 import ar.edu.uade.pfi.backend.dto.StudyRunDetailDto;
 import ar.edu.uade.pfi.backend.repository.InMemoryStudyRepository;
+import ar.edu.uade.pfi.backend.web.error.ApiExceptionHandler;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;

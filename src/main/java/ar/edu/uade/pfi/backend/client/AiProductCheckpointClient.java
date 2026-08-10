@@ -1,11 +1,11 @@
 package ar.edu.uade.pfi.backend.client;
 
 import ar.edu.uade.pfi.backend.config.AiServiceProperties;
-import ar.edu.uade.pfi.backend.config.TraceIdFilter;
-import ar.edu.uade.pfi.backend.config.error.ApiErrorCode;
 import ar.edu.uade.pfi.backend.dto.DiscDegenerativeProductRequestDto;
 import ar.edu.uade.pfi.backend.dto.DiscSegmentationSourceDto;
 import ar.edu.uade.pfi.backend.dto.FullSeriesSegmentationRequestDto;
+import ar.edu.uade.pfi.backend.web.error.ApiErrorCode;
+import ar.edu.uade.pfi.backend.web.filter.TraceIdFilter;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;

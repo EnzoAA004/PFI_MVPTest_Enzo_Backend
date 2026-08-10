@@ -18,9 +18,9 @@ import ar.edu.uade.pfi.backend.auth.AuthService;
 import ar.edu.uade.pfi.backend.auth.RoleAuthorizationService;
 import ar.edu.uade.pfi.backend.auth.TokenService;
 import ar.edu.uade.pfi.backend.auth.dto.AuthDtos.UserResponse;
-import ar.edu.uade.pfi.backend.config.ApiExceptionHandler;
 import ar.edu.uade.pfi.backend.repository.InMemoryStudyRepository;
 import ar.edu.uade.pfi.backend.service.AuditService;
+import ar.edu.uade.pfi.backend.web.error.ApiExceptionHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -145,7 +145,7 @@ class ApprovalEndpointControllerTest {
   @Test
   void approvingTrueOnAnAdminAccountReturnsAdminAccountProtected() throws Exception {
     when(authService.approveProfessional(any(), eq("admin@hospital.example"), eq(true)))
-        .thenThrow(new ar.edu.uade.pfi.backend.auth.AdminAccountProtectedException());
+        .thenThrow(new ar.edu.uade.pfi.backend.auth.exception.AdminAccountProtectedException());
 
     mockMvc
         .perform(
@@ -160,7 +160,7 @@ class ApprovalEndpointControllerTest {
   @Test
   void approvingFalseOnAnAdminAccountReturnsAdminAccountProtected() throws Exception {
     when(authService.approveProfessional(any(), eq("admin@hospital.example"), eq(false)))
-        .thenThrow(new ar.edu.uade.pfi.backend.auth.AdminAccountProtectedException());
+        .thenThrow(new ar.edu.uade.pfi.backend.auth.exception.AdminAccountProtectedException());
 
     mockMvc
         .perform(

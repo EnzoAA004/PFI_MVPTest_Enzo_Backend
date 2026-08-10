@@ -3,6 +3,7 @@ package ar.edu.uade.pfi.backend.service;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import ar.edu.uade.pfi.backend.client.exception.AiMultiplanarContractViolationException;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunRequestDto;
 import ar.edu.uade.pfi.backend.dto.MultiplanarRunResponseDto;
 import com.fasterxml.jackson.databind.ObjectMapper;

@@ -5,11 +5,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import ar.edu.uade.pfi.backend.client.AiServiceOperations;
-import ar.edu.uade.pfi.backend.config.ApiExceptionHandler;
+import ar.edu.uade.pfi.backend.client.exception.AiMultiplanarUpstreamException;
 import ar.edu.uade.pfi.backend.dto.AiSubarticularPredictRequestDto;
 import ar.edu.uade.pfi.backend.dto.SubarticularPredictionResponseDto;
-import ar.edu.uade.pfi.backend.service.AiMultiplanarUpstreamException;
 import ar.edu.uade.pfi.backend.service.DegenerativeFindingsV1Validator;
+import ar.edu.uade.pfi.backend.web.error.ApiExceptionHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
