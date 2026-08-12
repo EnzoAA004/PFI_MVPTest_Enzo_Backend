@@ -126,6 +126,7 @@ public class StudyRunService {
                 current.id(),
                 current.caseId(),
                 current.status(),
+                current.patientId(),
                 subjectRef,
                 studyDate,
                 modality,
