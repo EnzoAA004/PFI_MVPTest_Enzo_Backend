@@ -67,11 +67,12 @@ public class PostgresStudyRepository implements StudyRepository {
             connection.prepareStatement(
                 """
             INSERT INTO domain_studies(
-                id, case_id, status, subject_ref, study_date, modality, description, review_priority, created_at, updated_at
+                id, case_id, status, patient_id, subject_ref, study_date, modality, description, review_priority, created_at, updated_at
             )
-            VALUES (?::uuid, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?::uuid, ?, ?, ?::uuid, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (case_id) DO UPDATE SET
               status = EXCLUDED.status,
+              patient_id = COALESCE(EXCLUDED.patient_id, domain_studies.patient_id),
               subject_ref = EXCLUDED.subject_ref,
               study_date = EXCLUDED.study_date,
               modality = EXCLUDED.modality,
@@ -82,13 +83,14 @@ public class PostgresStudyRepository implements StudyRepository {
       statement.setString(1, study.id());
       statement.setString(2, study.caseId());
       statement.setString(3, study.status());
-      statement.setString(4, study.subjectRef());
-      statement.setDate(5, study.studyDate() == null ? null : Date.valueOf(study.studyDate()));
-      statement.setString(6, study.modality());
-      statement.setString(7, study.description());
-      statement.setString(8, study.reviewPriority());
-      statement.setTimestamp(9, Timestamp.from(study.createdAt()));
-      statement.setTimestamp(10, Timestamp.from(study.updatedAt()));
+      statement.setString(4, study.patientId());
+      statement.setString(5, study.subjectRef());
+      statement.setDate(6, study.studyDate() == null ? null : Date.valueOf(study.studyDate()));
+      statement.setString(7, study.modality());
+      statement.setString(8, study.description());
+      statement.setString(9, study.reviewPriority());
+      statement.setTimestamp(10, Timestamp.from(study.createdAt()));
+      statement.setTimestamp(11, Timestamp.from(study.updatedAt()));
       statement.executeUpdate();
       return study;
     } catch (Exception ex) {
@@ -283,7 +285,7 @@ public class PostgresStudyRepository implements StudyRepository {
         PreparedStatement statement =
             connection.prepareStatement(
                 """
-            SELECT id, case_id, status, subject_ref, study_date, modality, description, review_priority, created_at, updated_at
+            SELECT id, case_id, status, patient_id, subject_ref, study_date, modality, description, review_priority, created_at, updated_at
             FROM domain_studies
             ORDER BY updated_at DESC, created_at DESC
             """)) {
@@ -303,7 +305,7 @@ public class PostgresStudyRepository implements StudyRepository {
         PreparedStatement statement =
             connection.prepareStatement(
                 """
-            SELECT id, case_id, status, subject_ref, study_date, modality, description, review_priority, created_at, updated_at
+            SELECT id, case_id, status, patient_id, subject_ref, study_date, modality, description, review_priority, created_at, updated_at
             FROM domain_studies
             WHERE case_id = ?
             """)) {
@@ -323,7 +325,7 @@ public class PostgresStudyRepository implements StudyRepository {
         PreparedStatement statement =
             connection.prepareStatement(
                 """
-            SELECT id, case_id, status, subject_ref, study_date, modality, description, review_priority, created_at, updated_at
+            SELECT id, case_id, status, patient_id, subject_ref, study_date, modality, description, review_priority, created_at, updated_at
             FROM domain_studies
             WHERE subject_ref IS NOT NULL AND lower(subject_ref) = lower(?)
             ORDER BY study_date DESC NULLS LAST, created_at DESC
@@ -916,10 +918,12 @@ public class PostgresStudyRepository implements StudyRepository {
 
   private Study readStudy(ResultSet rs) throws Exception {
     Date studyDate = rs.getDate("study_date");
+    UUID patientId = rs.getObject("patient_id", UUID.class);
     return new Study(
         rs.getObject("id", UUID.class).toString(),
         rs.getString("case_id"),
         rs.getString("status"),
+        patientId == null ? null : patientId.toString(),
         rs.getString("subject_ref"),
         studyDate == null ? null : studyDate.toLocalDate(),
         rs.getString("modality"),
