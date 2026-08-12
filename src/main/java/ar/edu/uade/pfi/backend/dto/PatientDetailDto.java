@@ -1,0 +1,6 @@
+package ar.edu.uade.pfi.backend.dto;
+
+import java.time.Instant;
+
+public record PatientDetailDto(
+    String id, String patientReference, Instant createdAt, Instant updatedAt) {}

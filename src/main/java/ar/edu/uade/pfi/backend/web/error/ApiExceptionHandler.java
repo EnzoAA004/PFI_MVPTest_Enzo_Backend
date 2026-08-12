@@ -9,6 +9,7 @@ import ar.edu.uade.pfi.backend.service.OperationalMetricsService;
 import ar.edu.uade.pfi.backend.service.exception.AiContractViolationException;
 import ar.edu.uade.pfi.backend.service.exception.AssetContentUnavailableException;
 import ar.edu.uade.pfi.backend.service.exception.DatabaseUnavailableException;
+import ar.edu.uade.pfi.backend.service.exception.PatientDomainException;
 import ar.edu.uade.pfi.backend.service.exception.RunReviewException;
 import ar.edu.uade.pfi.backend.service.exception.StudyMetadataException;
 import ar.edu.uade.pfi.backend.service.exception.StudyNotFoundException;
@@ -129,6 +130,12 @@ public class ApiExceptionHandler {
       StudyNotFoundException ex, HttpServletRequest request) {
     return buildError(
         HttpStatus.NOT_FOUND, "STUDY_NOT_FOUND", "Estudio no encontrado", request, ex);
+  }
+
+  @ExceptionHandler(PatientDomainException.class)
+  public ResponseEntity<Map<String, Object>> handlePatientDomain(
+      PatientDomainException ex, HttpServletRequest request) {
+    return buildError(ex.status(), ex.code(), ex.getMessage(), request, ex);
   }
 
   @ExceptionHandler(AssetContentUnavailableException.class)

@@ -81,6 +81,42 @@ public class InMemoryStudyRepository implements StudyRepository {
   }
 
   @Override
+  public List<Study> findStudiesByPatientId(String patientId) {
+    return studiesById.values().stream()
+        .filter(study -> patientId.equals(study.patientId()))
+        .sorted(
+            Comparator.comparing((Study study) -> study.studyDate() == null)
+                .thenComparing(Study::studyDate, Comparator.nullsLast(Comparator.reverseOrder()))
+                .thenComparing(Study::createdAt, Comparator.reverseOrder())
+                .thenComparing(Study::id))
+        .toList();
+  }
+
+  @Override
+  public synchronized Optional<Study> updatePatientIfExpected(
+      String caseId, String targetPatientId, String expectedPatientId) {
+    Study current = findStudyByCaseId(caseId).orElse(null);
+    if (current == null || !java.util.Objects.equals(current.patientId(), expectedPatientId)) {
+      return Optional.empty();
+    }
+    Study updated =
+        new Study(
+            current.id(),
+            current.caseId(),
+            current.status(),
+            targetPatientId,
+            current.subjectRef(),
+            current.studyDate(),
+            current.modality(),
+            current.description(),
+            current.reviewPriority(),
+            current.createdAt(),
+            current.updatedAt());
+    studiesById.put(updated.id(), updated);
+    return Optional.of(updated);
+  }
+
+  @Override
   public List<InputResource> findInputsByStudyId(String studyId) {
     List<InputResource> inputs = new ArrayList<>();
     for (InputResource input : inputsById.values()) {
