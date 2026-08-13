@@ -9,6 +9,7 @@ import ar.edu.uade.pfi.backend.dto.PatientStudySummaryDto;
 import ar.edu.uade.pfi.backend.dto.PatientSummaryDto;
 import ar.edu.uade.pfi.backend.dto.UpdatePatientRequestDto;
 import ar.edu.uade.pfi.backend.service.PatientService;
+import ar.edu.uade.pfi.backend.service.ProfessionalAccessAuditService;
 import ar.edu.uade.pfi.backend.web.error.ApiErrorResponse;
 import ar.edu.uade.pfi.backend.web.filter.TraceIdFilter;
 import io.swagger.v3.oas.annotations.Operation;
@@ -34,11 +35,15 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Pacientes", description = "Identidades longitudinales de-identificadas.")
 public class PatientController {
   private final PatientService patientService;
+  private final ProfessionalAccessAuditService accessAuditService;
   private final RoleAuthorizationService authorizationService;
 
   public PatientController(
-      PatientService patientService, RoleAuthorizationService authorizationService) {
+      PatientService patientService,
+      ProfessionalAccessAuditService accessAuditService,
+      RoleAuthorizationService authorizationService) {
     this.patientService = patientService;
+    this.accessAuditService = accessAuditService;
     this.authorizationService = authorizationService;
   }
 
@@ -71,7 +76,10 @@ public class PatientController {
   @GetMapping
   public List<PatientSummaryDto> search(
       @RequestParam(required = false, defaultValue = "") String query,
-      @RequestParam(required = false) Integer limit) {
+      @RequestParam(required = false) Integer limit,
+      HttpServletRequest request) {
+    accessAuditService.record(
+        request, "access_patient_worklist", "Lista de pacientes de-identificados consultada");
     return patientService.search(query, limit);
   }
 
@@ -86,7 +94,11 @@ public class PatientController {
       description = "Paciente inexistente.",
       content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
   @GetMapping("/{patientId}")
-  public PatientDetailDto get(@PathVariable String patientId) {
+  public PatientDetailDto get(@PathVariable String patientId, HttpServletRequest request) {
+    accessAuditService.record(
+        request,
+        "access_patient_detail",
+        "Detalle de paciente de-identificado consultado patientId=" + patientId);
     return patientService.get(patientId);
   }
 
@@ -124,7 +136,12 @@ public class PatientController {
       description = "Paciente inexistente.",
       content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
   @GetMapping("/{patientId}/studies")
-  public List<PatientStudySummaryDto> studies(@PathVariable String patientId) {
+  public List<PatientStudySummaryDto> studies(
+      @PathVariable String patientId, HttpServletRequest request) {
+    accessAuditService.record(
+        request,
+        "access_patient_studies",
+        "Estudios de paciente de-identificado consultados patientId=" + patientId);
     return patientService.studies(patientId);
   }
 

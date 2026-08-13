@@ -18,6 +18,7 @@ import ar.edu.uade.pfi.backend.repository.InMemoryPatientRepository;
 import ar.edu.uade.pfi.backend.repository.InMemoryStudyRepository;
 import ar.edu.uade.pfi.backend.service.AuditService;
 import ar.edu.uade.pfi.backend.service.PatientService;
+import ar.edu.uade.pfi.backend.service.ProfessionalAccessAuditService;
 import ar.edu.uade.pfi.backend.web.error.ApiExceptionHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
@@ -50,7 +51,10 @@ class StudyPatientControllerTest {
     mockMvc =
         MockMvcBuilders.standaloneSetup(
                 new StudyPatientController(service, authorization),
-                new PatientController(service, authorization))
+                new PatientController(
+                    service,
+                    org.mockito.Mockito.mock(ProfessionalAccessAuditService.class),
+                    authorization))
             .setControllerAdvice(new ApiExceptionHandler(audit))
             .build();
   }

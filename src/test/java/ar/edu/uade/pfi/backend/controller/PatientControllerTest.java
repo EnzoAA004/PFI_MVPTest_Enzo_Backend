@@ -2,6 +2,9 @@ package ar.edu.uade.pfi.backend.controller;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -16,6 +19,7 @@ import ar.edu.uade.pfi.backend.repository.InMemoryPatientRepository;
 import ar.edu.uade.pfi.backend.repository.InMemoryStudyRepository;
 import ar.edu.uade.pfi.backend.service.AuditService;
 import ar.edu.uade.pfi.backend.service.PatientService;
+import ar.edu.uade.pfi.backend.service.ProfessionalAccessAuditService;
 import ar.edu.uade.pfi.backend.web.error.ApiExceptionHandler;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -34,6 +38,7 @@ class PatientControllerTest {
   private InMemoryPatientRepository patients;
   private InMemoryStudyRepository studies;
   private AuditService audit;
+  private ProfessionalAccessAuditService accessAudit;
   private PatientService service;
   private MockMvc mockMvc;
 
@@ -42,10 +47,11 @@ class PatientControllerTest {
     patients = new InMemoryPatientRepository();
     studies = new InMemoryStudyRepository();
     audit = new AuditService(studies);
+    accessAudit = mock(ProfessionalAccessAuditService.class);
     service = new PatientService(patients, studies, audit);
     mockMvc =
         MockMvcBuilders.standaloneSetup(
-                new PatientController(service, new RoleAuthorizationService(audit)))
+                new PatientController(service, accessAudit, new RoleAuthorizationService(audit)))
             .setControllerAdvice(new ApiExceptionHandler(audit))
             .build();
   }
@@ -136,6 +142,33 @@ class PatientControllerTest {
         .andExpect(jsonPath("$.length()").value(2))
         .andExpect(jsonPath("$[0].patientReference").value("PAC-001"))
         .andExpect(jsonPath("$[1].patientReference").value("pac-002"));
+  }
+
+  @Test
+  void readEndpointsRecordDeidentifiedProfessionalAccess() throws Exception {
+    Patient patient = create("PAC-ACCESS-AUDIT");
+
+    mockMvc.perform(get("/api/patients?query=PAC-SECRET")).andExpect(status().isOk());
+    mockMvc.perform(get("/api/patients/{id}", patient.id())).andExpect(status().isOk());
+    mockMvc.perform(get("/api/patients/{id}/studies", patient.id())).andExpect(status().isOk());
+
+    verify(accessAudit)
+        .record(
+            any(),
+            org.mockito.ArgumentMatchers.eq("access_patient_worklist"),
+            org.mockito.ArgumentMatchers.eq("Lista de pacientes de-identificados consultada"));
+    verify(accessAudit)
+        .record(
+            any(),
+            org.mockito.ArgumentMatchers.eq("access_patient_detail"),
+            org.mockito.ArgumentMatchers.eq(
+                "Detalle de paciente de-identificado consultado patientId=" + patient.id()));
+    verify(accessAudit)
+        .record(
+            any(),
+            org.mockito.ArgumentMatchers.eq("access_patient_studies"),
+            org.mockito.ArgumentMatchers.eq(
+                "Estudios de paciente de-identificado consultados patientId=" + patient.id()));
   }
 
   @Test
