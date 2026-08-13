@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -39,6 +40,7 @@ public class PatientService {
   private final AuditService auditService;
   private final Clock clock;
 
+  @Autowired
   public PatientService(
       PatientRepository patientRepository,
       StudyRepository studyRepository,
