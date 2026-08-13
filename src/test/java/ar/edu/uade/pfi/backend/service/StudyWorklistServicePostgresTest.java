@@ -584,6 +584,17 @@ class StudyWorklistServicePostgresTest {
     }
 
     @Override
+    public List<Study> findStudiesByPatientId(String patientId) {
+      throw new IllegalStateException("postgres down");
+    }
+
+    @Override
+    public Optional<Study> updatePatientIfExpected(
+        String caseId, String targetPatientId, String expectedPatientId) {
+      throw new IllegalStateException("postgres down");
+    }
+
+    @Override
     public List<InputResource> findInputsByStudyId(String studyId) {
       throw new UnsupportedOperationException();
     }

@@ -45,6 +45,15 @@ public enum ApiErrorCode {
   BAD_REQUEST(ApiErrorCategory.VALIDATION, false, "Solicitud invalida."),
   NOT_FOUND(ApiErrorCategory.RESOURCE, false, "Recurso no encontrado."),
   STUDY_NOT_FOUND(ApiErrorCategory.RESOURCE, false, "Estudio no encontrado."),
+  PATIENT_NOT_FOUND(ApiErrorCategory.RESOURCE, false, "Paciente no encontrado."),
+  INVALID_PATIENT_ID(ApiErrorCategory.VALIDATION, false, "Patient UUID invalido."),
+  INVALID_PATIENT_REFERENCE(ApiErrorCategory.VALIDATION, false, "Referencia de paciente invalida."),
+  INVALID_PATIENT_LIMIT(ApiErrorCategory.VALIDATION, false, "Limite de busqueda invalido."),
+  INVALID_REASON_CODE(ApiErrorCategory.VALIDATION, false, "Motivo de asociacion invalido."),
+  DUPLICATE_PATIENT_REFERENCE(
+      ApiErrorCategory.RESOURCE, false, "Ya existe un paciente con esa referencia."),
+  PATIENT_ASSIGNMENT_CONFLICT(
+      ApiErrorCategory.RESOURCE, false, "La asociacion del estudio cambio."),
   ASSET_CONTENT_UNAVAILABLE(ApiErrorCategory.RESOURCE, false, "Contenido del asset no disponible."),
   /** Generic 409, e.g. duplicate registration — not a more specific domain code. */
   CONFLICT(ApiErrorCategory.RESOURCE, false, "Conflicto de estado."),

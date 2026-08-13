@@ -342,6 +342,54 @@ public class PostgresStudyRepository implements StudyRepository {
   }
 
   @Override
+  public List<Study> findStudiesByPatientId(String patientId) {
+    try (Connection connection = connection();
+        PreparedStatement statement =
+            connection.prepareStatement(
+                """
+                SELECT id, case_id, status, patient_id, subject_ref, study_date, modality, description, review_priority, created_at, updated_at
+                FROM domain_studies
+                WHERE patient_id = ?::uuid
+                ORDER BY study_date DESC NULLS LAST, created_at DESC, id
+                """)) {
+      statement.setString(1, patientId);
+      try (ResultSet rs = statement.executeQuery()) {
+        List<Study> studies = new ArrayList<>();
+        while (rs.next()) studies.add(readStudy(rs));
+        return studies;
+      }
+    } catch (Exception ex) {
+      throw new IllegalStateException("Could not find studies by patient id", ex);
+    }
+  }
+
+  @Override
+  public Optional<Study> updatePatientIfExpected(
+      String caseId, String targetPatientId, String expectedPatientId) {
+    try (Connection connection = connection();
+        PreparedStatement statement =
+            connection.prepareStatement(
+                """
+                UPDATE domain_studies
+                SET patient_id = ?::uuid
+                WHERE case_id = ?
+                  AND patient_id IS NOT DISTINCT FROM ?::uuid
+                RETURNING id, case_id, status, patient_id, subject_ref, study_date,
+                          modality, description, review_priority, created_at, updated_at
+                """)) {
+      statement.setString(1, targetPatientId);
+      statement.setString(2, caseId);
+      statement.setString(3, expectedPatientId);
+      try (ResultSet rs = statement.executeQuery()) {
+        if (!rs.next()) return Optional.empty();
+        return Optional.of(readStudy(rs));
+      }
+    } catch (Exception ex) {
+      throw new IllegalStateException("Could not update study patient", ex);
+    }
+  }
+
+  @Override
   public List<StudyRun> findRunsByStudyId(String studyId) {
     try (Connection connection = connection();
         PreparedStatement statement =

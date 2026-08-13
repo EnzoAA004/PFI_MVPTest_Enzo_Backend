@@ -671,6 +671,17 @@ class AiMultiplanarRunTest {
     }
 
     @Override
+    public List<Study> findStudiesByPatientId(String patientId) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Optional<Study> updatePatientIfExpected(
+        String caseId, String targetPatientId, String expectedPatientId) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
     public List<InputResource> findInputsByStudyId(String studyId) {
       throw new UnsupportedOperationException();
     }

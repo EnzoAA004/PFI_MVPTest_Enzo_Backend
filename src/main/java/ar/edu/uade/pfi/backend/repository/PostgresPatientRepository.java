@@ -9,6 +9,9 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Timestamp;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,6 +57,7 @@ public class PostgresPatientRepository implements PatientRepository {
       statement.executeUpdate();
       return patient;
     } catch (Exception ex) {
+      if (hasSqlState(ex, "23505")) throw new DuplicatePatientReferenceException(ex);
       throw new IllegalStateException("Could not save patient", ex);
     }
   }
@@ -78,12 +82,75 @@ public class PostgresPatientRepository implements PatientRepository {
     }
   }
 
+  @Override
+  public List<Patient> searchByReferencePrefix(String query, int limit) {
+    try (Connection connection = connection();
+        PreparedStatement statement =
+            connection.prepareStatement(
+                """
+                SELECT id, patient_reference, created_at, updated_at
+                FROM domain_patients
+                WHERE lower(btrim(patient_reference)) LIKE lower(?) ESCAPE '\\'
+                ORDER BY lower(btrim(patient_reference)), id
+                LIMIT ?
+                """)) {
+      statement.setString(1, escapeLike(query.trim()) + "%");
+      statement.setInt(2, limit);
+      try (ResultSet rs = statement.executeQuery()) {
+        List<Patient> patients = new ArrayList<>();
+        while (rs.next()) patients.add(readPatient(rs));
+        return patients;
+      }
+    } catch (Exception ex) {
+      throw new IllegalStateException("Could not search patients", ex);
+    }
+  }
+
+  @Override
+  public Optional<Patient> updateReference(
+      String patientId, String patientReference, Instant updatedAt) {
+    try (Connection connection = connection();
+        PreparedStatement statement =
+            connection.prepareStatement(
+                """
+                UPDATE domain_patients
+                SET patient_reference = ?, updated_at = ?
+                WHERE id = ?::uuid
+                RETURNING id, patient_reference, created_at, updated_at
+                """)) {
+      statement.setString(1, patientReference);
+      statement.setTimestamp(2, Timestamp.from(updatedAt));
+      statement.setString(3, patientId);
+      try (ResultSet rs = statement.executeQuery()) {
+        if (!rs.next()) return Optional.empty();
+        return Optional.of(readPatient(rs));
+      }
+    } catch (Exception ex) {
+      if (hasSqlState(ex, "23505")) throw new DuplicatePatientReferenceException(ex);
+      throw new IllegalStateException("Could not update patient", ex);
+    }
+  }
+
   private Patient readPatient(ResultSet rs) throws Exception {
     return new Patient(
         rs.getObject("id", UUID.class).toString(),
         rs.getString("patient_reference"),
         rs.getTimestamp("created_at").toInstant(),
         rs.getTimestamp("updated_at").toInstant());
+  }
+
+  private String escapeLike(String value) {
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+  }
+
+  private boolean hasSqlState(Throwable failure, String sqlState) {
+    Throwable current = failure;
+    while (current != null) {
+      if (current instanceof java.sql.SQLException sqlException
+          && sqlState.equals(sqlException.getSQLState())) return true;
+      current = current.getCause();
+    }
+    return false;
   }
 
   private Connection connection() throws Exception {

@@ -34,6 +34,9 @@ public class AuditService {
           "email",
           "patient");
 
+  private static final Set<String> SAFE_PATIENT_ID_KEYS =
+      Set.of("patientid", "frompatientid", "topatientid");
+
   /** Defense-in-depth caps against accidental metadata growth — see P10-B §11. */
   private static final int MAX_METADATA_ENTRIES = 40;
 
@@ -171,6 +174,7 @@ public class AuditService {
 
   private boolean isSensitiveKey(String key) {
     String normalized = key.toLowerCase(Locale.ROOT);
+    if (SAFE_PATIENT_ID_KEYS.contains(normalized)) return false;
     return SENSITIVE_KEY_PARTS.stream().anyMatch(normalized::contains);
   }
 
